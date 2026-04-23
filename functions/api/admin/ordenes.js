@@ -30,7 +30,7 @@ export async function onRequest(context) {
 
 async function handleGet(request, DB) {
   const url = new URL(request.url);
-  const usuarioId = url.searchParams.get('usuario_id');
+  let usuarioId = url.searchParams.get('usuario_id');
   const estado = url.searchParams.get('estado');
   const tecnicoId = url.searchParams.get('tecnico_id');
   const clienteId = url.searchParams.get('cliente_id');
@@ -146,7 +146,7 @@ async function handleGet(request, DB) {
 async function handlePost(request, DB, env) {
   const data = await request.json();
 
-  const {
+  let {
     usuario_id, cliente_id, vehiculo_id, tipo, prioridad,
     titulo, descripcion, latitud_ubicacion, longitud_ubicacion, origen,
   } = data;

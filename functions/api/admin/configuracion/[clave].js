@@ -34,7 +34,7 @@ export async function onRequest(context) {
 
 async function handleGet(request, DB, clave) {
   const url = new URL(request.url);
-  const usuarioId = url.searchParams.get('usuario_id');
+  let usuarioId = url.searchParams.get('usuario_id');
 
   if (!usuarioId) {
     usuarioId = '1';
@@ -63,7 +63,7 @@ async function handleGet(request, DB, clave) {
 
 async function handlePut(request, DB, clave) {
   const url = new URL(request.url);
-  const usuarioId = url.searchParams.get('usuario_id');
+  let usuarioId = url.searchParams.get('usuario_id');
 
   if (!usuarioId) {
     usuarioId = '1';

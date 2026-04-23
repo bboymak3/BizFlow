@@ -29,7 +29,7 @@ export async function onRequest(context) {
 
 async function handleGet(request, DB) {
   const url = new URL(request.url);
-  const usuarioId = url.searchParams.get('usuario_id');
+  let usuarioId = url.searchParams.get('usuario_id');
   const fechaDesde = url.searchParams.get('fecha_desde');
   const fechaHasta = url.searchParams.get('fecha_hasta');
   const metodo = url.searchParams.get('metodo');

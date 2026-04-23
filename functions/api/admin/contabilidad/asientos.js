@@ -29,7 +29,7 @@ export async function onRequest(context) {
 
 async function handleGet(request, DB) {
   const url = new URL(request.url);
-  const usuarioId = url.searchParams.get('usuario_id');
+  let usuarioId = url.searchParams.get('usuario_id');
   const fechaDesde = url.searchParams.get('fecha_desde');
   const fechaHasta = url.searchParams.get('fecha_hasta');
   const page = parseInt(url.searchParams.get('page')) || 1;
@@ -97,7 +97,7 @@ async function handleGet(request, DB) {
 async function handlePost(request, DB) {
   const data = await request.json();
 
-  const { usuario_id, numero, fecha, concepto, tipo_fuente, fuente_id, movimientos } = data;
+  let { usuario_id, numero, fecha, concepto, tipo_fuente, fuente_id, movimientos } = data;
 
   if (!usuario_id) usuario_id = 1;
   if (!concepto || !concepto.trim()) return errorResponse('concepto es requerido');

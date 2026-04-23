@@ -29,7 +29,7 @@ export async function onRequest(context) {
 
 async function handleGet(request, DB) {
   const url = new URL(request.url);
-  const usuarioId = url.searchParams.get('usuario_id');
+  let usuarioId = url.searchParams.get('usuario_id');
   const categoria = url.searchParams.get('categoria');
 
   if (!usuarioId) {
@@ -59,7 +59,7 @@ async function handleGet(request, DB) {
 async function handlePost(request, DB) {
   const data = await request.json();
 
-  const { usuario_id, nombre, descripcion, precio, duracion_minutos, categoria } = data;
+  let { usuario_id, nombre, descripcion, precio, duracion_minutos, categoria } = data;
 
   if (!usuario_id) usuario_id = 1;
   if (!nombre || !nombre.trim()) return errorResponse('nombre es requerido');

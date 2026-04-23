@@ -18,7 +18,7 @@ export async function onRequest(context) {
 
   try {
     const url = new URL(request.url);
-    const usuarioId = url.searchParams.get('usuario_id');
+    let usuarioId = url.searchParams.get('usuario_id');
 
     if (!usuarioId) {
       usuarioId = '1';

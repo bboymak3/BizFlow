@@ -18,7 +18,7 @@ export async function onRequest(context) {
 
   try {
     const url = new URL(request.url);
-    const usuarioId = url.searchParams.get('usuario_id');
+    let usuarioId = url.searchParams.get('usuario_id');
     const tipo = url.searchParams.get('tipo') || 'ingresos';
     const fechaDesde = url.searchParams.get('fecha_desde');
     const fechaHasta = url.searchParams.get('fecha_hasta');

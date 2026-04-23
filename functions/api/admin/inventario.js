@@ -29,7 +29,7 @@ export async function onRequest(context) {
 
 async function handleGet(request, DB) {
   const url = new URL(request.url);
-  const usuarioId = url.searchParams.get('usuario_id');
+  let usuarioId = url.searchParams.get('usuario_id');
   const search = url.searchParams.get('search') || '';
   const categoria = url.searchParams.get('categoria');
   const page = parseInt(url.searchParams.get('page')) || 1;
@@ -88,7 +88,7 @@ async function handleGet(request, DB) {
 async function handlePost(request, DB) {
   const data = await request.json();
 
-  const {
+  let {
     usuario_id, codigo, nombre, descripcion, categoria,
     cantidad, cantidad_minima, precio_compra, precio_venta,
     proveedor, ubicacion,

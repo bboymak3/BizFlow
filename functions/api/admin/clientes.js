@@ -29,7 +29,7 @@ export async function onRequest(context) {
 
 async function handleGet(request, DB) {
   const url = new URL(request.url);
-  const usuarioId = url.searchParams.get('usuario_id');
+  let usuarioId = url.searchParams.get('usuario_id');
   const search = url.searchParams.get('search') || '';
   const page = parseInt(url.searchParams.get('page')) || 1;
   const limit = parseInt(url.searchParams.get('limit')) || 20;
@@ -84,7 +84,7 @@ async function handleGet(request, DB) {
 async function handlePost(request, DB) {
   const data = await request.json();
 
-  const {
+  let {
     usuario_id, empresa, nombre, apellido, cedula_rif,
     email, telefono, telefono2, direccion, ciudad,
     estado, codigo_postal, notas, origen,

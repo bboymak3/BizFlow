@@ -696,8 +696,9 @@ const App = {
                 metodo_pago: tieneAbono ? Utils.val('no-metodo-pago') : null,
             };
 
+            let btn;
             try {
-                const btn = document.querySelector('#form-nueva-orden button[type="submit"]');
+                btn = document.querySelector('#form-nueva-orden button[type="submit"]');
                 btn.disabled = true;
                 btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Creando...';
                 const data = await API.postPublic('/crear-orden', body);
@@ -729,8 +730,10 @@ const App = {
             } catch (err) {
                 Utils.toast(err.message, 'error');
             } finally {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="fa-solid fa-save"></i>Crear Orden';
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fa-solid fa-save"></i>Crear Orden';
+                }
             }
         },
 

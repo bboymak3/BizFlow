@@ -29,7 +29,7 @@ export async function onRequest(context) {
 
 async function handleGet(request, DB) {
   const url = new URL(request.url);
-  const usuarioId = url.searchParams.get('usuario_id');
+  let usuarioId = url.searchParams.get('usuario_id');
 
   if (!usuarioId) {
     // Default to usuario_id 1 when not provided
@@ -80,7 +80,7 @@ async function handleGet(request, DB) {
 
 async function handlePost(request, DB) {
   const data = await request.json();
-  const { usuario_id, codigo, nombre, tipo, descripcion } = data;
+  let { usuario_id, codigo, nombre, tipo, descripcion } = data;
 
   if (!usuario_id) usuario_id = 1;
   if (!codigo || !codigo.trim()) return errorResponse('codigo es requerido');
