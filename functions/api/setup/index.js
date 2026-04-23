@@ -4,7 +4,7 @@
 // Run once after deploy: https://your-domain.pages.dev/api/setup
 // ============================================================
 
-import { successRes, errorRes, simpleHash } from '../../../lib/db-helpers.js';
+import { successRes, errorRes, simpleHash } from '../../lib/db-helpers.js';
 
 export async function onRequestOptions() {
   return new Response(null, {
