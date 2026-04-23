@@ -65,12 +65,17 @@ export async function onRequestPost(context) {
       `UPDATE Usuarios SET ${tsCol} = ? WHERE id = ?`
     ).bind(now, usuario.id).run();
 
-    // Store session token
-    if (usuario.id) {
-      await env.DB.prepare(
-        `INSERT INTO Configuracion (usuario_id, clave, valor, actualizado_en)
-         VALUES (?, ?, ?, ?)`
-      ).bind(usuario.id, `session_token`, token, now).run();
+    // Store session token (INSERT OR REPLACE to handle existing entries)
+    try {
+      if (usuario.id) {
+        await env.DB.prepare(
+          `INSERT OR REPLACE INTO Configuracion (usuario_id, clave, valor, actualizado_en)
+           VALUES (?, ?, ?, ?)`
+        ).bind(usuario.id, 'session_token', token, now).run();
+      }
+    } catch (e) {
+      // Non-critical: continue without session storage
+      console.warn('Session storage error:', e.message);
     }
 
     // Return user data without password
