@@ -189,6 +189,7 @@ const Router = {
         'dashboard': 'page-dashboard',
         'nueva-orden': 'page-nueva-orden',
         'buscar-ordenes': 'page-buscar-ordenes',
+        'asignar-ordenes': 'page-asignar-ordenes',
         'tecnicos': 'page-tecnicos',
         'liquidar-tecnicos': 'page-liquidar-tecnicos',
         'servicios': 'page-servicios',
@@ -209,6 +210,7 @@ const Router = {
         'dashboard': 'Dashboard',
         'nueva-orden': 'Nueva Orden de Trabajo',
         'buscar-ordenes': 'Buscar Órdenes',
+        'asignar-ordenes': 'Asignar Órdenes',
         'tecnicos': 'Gestión Técnicos',
         'liquidar-tecnicos': 'Liquidar Técnicos',
         'servicios': 'Catálogo de Servicios',
@@ -260,6 +262,7 @@ const Router = {
             case 'dashboard': App.dashboard.load(); break;
             case 'nueva-orden': App.nuevaOrden.init(); break;
             case 'buscar-ordenes': App.buscarOrdenes.init(); break;
+            case 'asignar-ordenes': App.asignarOrdenes.load(); break;
             case 'tecnicos': App.tecnicos.load(); break;
             case 'liquidar-tecnicos': App.liquidarTecnicos.init(); break;
             case 'servicios': App.servicios.load(); break;
@@ -857,8 +860,218 @@ const App = {
     },
 
     // ========================================================
-    // TÉCNICOS - Enhanced with commission %
+    // ASIGNAR ÓRDENES A TÉCNICOS
     // ========================================================
+    asignarOrdenes: {
+        _disponibles: [],
+        _asignadas: [],
+        _tecnicos: [],
+
+        async load() {
+            try {
+                const [disponibles, tecnicos] = await Promise.all([
+                    API.get('/ordenes-disponibles'),
+                    API.get('/tecnicos')
+                ]);
+
+                this._disponibles = disponibles.ordenes || disponibles.data || [];
+                this._tecnicos = (tecnicos.data || tecnicos.tecnicos || tecnicos || []).filter(t => t.activo !== false);
+
+                // Load assigned orders (all aprobadas with tecnico)
+                try {
+                    const todas = await API.get('/todas-ordenes');
+                    const ordenes = todas.ordenes || todas.data || [];
+                    this._asignadas = ordenes.filter(o =>
+                        o.tecnico_asignado_id &&
+                        o.estado === 'Aprobada' &&
+                        o.estado_trabajo !== 'Cerrada'
+                    );
+                } catch (e) {
+                    this._asignadas = [];
+                }
+
+                this.renderStats();
+                this.renderDisponibles();
+                this.renderAsignadas();
+                this.populateTecnicoFilter();
+            } catch (err) {
+                Utils.toast('Error cargando datos: ' + err.message, 'error');
+            }
+        },
+
+        renderStats() {
+            const sinAsignar = this._disponibles.length;
+            const enProceso = this._asignadas.filter(o => o.estado_trabajo !== 'Cerrada').length;
+            const cerradas = this._asignadas.filter(o => o.estado_trabajo === 'Cerrada').length;
+
+            Utils.setText('stat-sin-asignar', sinAsignar);
+            Utils.setText('stat-en-proceso', enProceso);
+            Utils.setText('stat-cerradas', cerradas);
+            Utils.setText('stat-total-tecnicos', this._tecnicos.length);
+        },
+
+        renderDisponibles() {
+            const tbody = document.getElementById('tbl-ordenes-disponibles');
+            if (!tbody) return;
+
+            if (!this._disponibles.length) {
+                tbody.innerHTML = '<tr><td colspan="5" class="bf-empty"><i class="fa-solid fa-check-circle" style="color:#10b981;"></i>Todas las órdenes aprobadas están asignadas</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = this._disponibles.map(o => {
+                const num = String(o.numero_orden || o.id).padStart(5, '0');
+                const fecha = o.fecha_creacion || o.fecha_ingreso || '';
+                return `<tr>
+                    <td class="fw-600">#${Utils.escapeHTML(num)}</td>
+                    <td><span class="badge-st" style="background:#fef3c7;color:#92400e;font-weight:700;">${Utils.escapeHTML(o.patente_placa || '--')}</span></td>
+                    <td>${Utils.escapeHTML(o.cliente_nombre || '--')}</td>
+                    <td style="font-size:0.8rem;color:#6b7280;">${Utils.escapeHTML(fecha)}</td>
+                    <td><button class="btn-bf" style="font-size:0.78rem;" onclick="App.asignarOrdenes.openAssign(${o.id}, '#${num}', '${Utils.escapeHTML(o.patente_placa || '')}')"><i class="fa-solid fa-user-plus"></i>Asignar</button></td>
+                </tr>`;
+            }).join('');
+        },
+
+        renderAsignadas(data) {
+            const tbody = document.getElementById('tbl-ordenes-asignadas');
+            if (!tbody) return;
+
+            const list = data || this._asignadas;
+
+            if (!list.length) {
+                tbody.innerHTML = '<tr><td colspan="6" class="bf-empty"><i class="fa-solid fa-user-clock"></i>No hay órdenes asignadas en proceso</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = list.map(o => {
+                const num = String(o.numero_orden || o.id).padStart(5, '0');
+                const estado = o.estado_trabajo || 'Pendiente';
+                const fecha = o.fecha_creacion || o.fecha_ingreso || '';
+
+                const estadoColors = {
+                    'Pendiente Visita': '#f59e0b',
+                    'En camino': '#3b82f6',
+                    'En Sitio': '#8b5cf6',
+                    'En trabajo': '#06b6d4',
+                    'Cerrada': '#10b981',
+                };
+                const estadoColor = estadoColors[estado] || '#6b7280';
+
+                return `<tr>
+                    <td class="fw-600">#${Utils.escapeHTML(num)}</td>
+                    <td><span class="badge-st" style="background:#fef3c7;color:#92400e;font-weight:700;">${Utils.escapeHTML(o.patente_placa || '--')}</span></td>
+                    <td>${Utils.escapeHTML(o.tecnico_nombre || o.tecnico || '--')}</td>
+                    <td><span class="badge-st" style="background:${estadoColor}15;color:${estadoColor};font-weight:600;">${Utils.escapeHTML(estado)}</span></td>
+                    <td style="font-size:0.8rem;color:#6b7280;">${Utils.escapeHTML(fecha)}</td>
+                    <td><div class="d-flex gap-1">
+                        <button class="btn-bf-icon" onclick="App.asignarOrdenes.reassign(${o.id}, '#${num}', '${Utils.escapeHTML(o.patente_placa || '')}')" title="Reasignar"><i class="fa-solid fa-arrows-rotate"></i></button>
+                    </div></td>
+                </tr>`;
+            }).join('');
+        },
+
+        populateTecnicoFilter() {
+            const sel = document.getElementById('filter-tecnico-asignadas');
+            if (!sel) return;
+            const currentValue = sel.value;
+            sel.innerHTML = '<option value="">Todos los técnicos</option>' +
+                this._tecnicos.map(t => `<option value="${t.id}">${Utils.escapeHTML(t.nombre)} (${t.comision_porcentaje || 0}%)</option>`).join('');
+            sel.value = currentValue;
+        },
+
+        filterAsignadas() {
+            const filterId = (document.getElementById('filter-tecnico-asignadas')?.value || '');
+            if (!filterId) {
+                this.renderAsignadas(this._asignadas);
+                return;
+            }
+            const filtered = this._asignadas.filter(o => String(o.tecnico_asignado_id) === filterId);
+            this.renderAsignadas(filtered);
+        },
+
+        openAssign(ordenId, ordenNum, patente) {
+            if (!this._tecnicos.length) {
+                Utils.toast('No hay técnicos activos. Cree uno primero en Gestión Técnicos.', 'warning');
+                return;
+            }
+            const options = this._tecnicos.map(t =>
+                `<option value="${t.id}">${Utils.escapeHTML(t.nombre)} (Tel: ${t.telefono || '--'} | Comisión: ${t.comision_porcentaje || 0}%)</option>`
+            ).join('');
+
+            Swal.fire({
+                title: `Asignar Orden ${ordenNum}`,
+                html: `
+                    <div style="text-align:left;margin:10px 0;">
+                        <p style="font-weight:600;color:#6b7280;">Patente: <span style="color:#92400e;font-weight:700;">${patente}</span></p>
+                        <label style="display:block;margin-top:12px;font-weight:600;font-size:0.9rem;color:#374151;">Seleccionar Técnico:</label>
+                        <select id="swal-tecnico-select" class="swal2-select" style="width:100%;margin-top:6px;padding:8px;border:1px solid #d1d5db;border-radius:8px;font-size:0.9rem;">
+                            ${options}
+                        </select>
+                    </div>
+                `,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: '<i class="fa-solid fa-user-check"></i> Asignar',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#0d9488',
+            }).then(async (result) => {
+                if (result.isConfirmed) {
+                    const tecnicoId = document.getElementById('swal-tecnico-select').value;
+                    try {
+                        const res = await API.post('/asignar-orden', { orden_id: ordenId, tecnico_id: parseInt(tecnicoId) });
+                        if (res.success) {
+                            Utils.toast(res.mensaje || 'Orden asignada correctamente', 'success');
+                            await this.load();
+                        } else {
+                            Utils.toast(res.error || 'Error al asignar', 'error');
+                        }
+                    } catch (err) {
+                        Utils.toast(err.message, 'error');
+                    }
+                }
+            });
+        },
+
+        async reassign(ordenId, ordenNum, patente) {
+            const options = this._tecnicos.map(t =>
+                `<option value="${t.id}">${Utils.escapeHTML(t.nombre)} (${t.comision_porcentaje || 0}%)</option>`
+            ).join('');
+
+            Swal.fire({
+                title: `Reasignar Orden ${ordenNum}`,
+                html: `
+                    <div style="text-align:left;margin:10px 0;">
+                        <p style="font-weight:600;color:#6b7280;">Patente: <span style="color:#92400e;font-weight:700;">${patente}</span></p>
+                        <label style="display:block;margin-top:12px;font-weight:600;font-size:0.9rem;color:#374151;">Nuevo Técnico:</label>
+                        <select id="swal-tecnico-select" class="swal2-select" style="width:100%;margin-top:6px;padding:8px;border:1px solid #d1d5db;border-radius:8px;font-size:0.9rem;">
+                            ${options}
+                        </select>
+                    </div>
+                `,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: '<i class="fa-solid fa-arrows-rotate"></i> Reasignar',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#3b82f6',
+            }).then(async (result) => {
+                if (result.isConfirmed) {
+                    const tecnicoId = document.getElementById('swal-tecnico-select').value;
+                    try {
+                        const res = await API.post('/asignar-orden', { orden_id: ordenId, tecnico_id: parseInt(tecnicoId), force: true });
+                        if (res.success) {
+                            Utils.toast('Orden reasignada correctamente', 'success');
+                            await this.load();
+                        } else {
+                            Utils.toast(res.error || 'Error al reasignar', 'error');
+                        }
+                    } catch (err) {
+                        Utils.toast(err.message, 'error');
+                    }
+                }
+            });
+        },
+    },
+
     tecnicos: {
         _data: [],
 

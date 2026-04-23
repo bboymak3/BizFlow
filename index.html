@@ -318,6 +318,7 @@
             <div class="bf-sidebar-label">Operaciones Taller</div>
             <a class="bf-sidebar-item" data-route="nueva-orden"><i class="fa-solid fa-plus-circle"></i>Nueva Orden</a>
             <a class="bf-sidebar-item" data-route="buscar-ordenes"><i class="fa-solid fa-magnifying-glass"></i>Buscar Órdenes</a>
+            <a class="bf-sidebar-item" data-route="asignar-ordenes"><i class="fa-solid fa-user-check"></i>Asignar Órdenes</a>
             <a class="bf-sidebar-item" data-route="tecnicos"><i class="fa-solid fa-users-gear"></i>Gestión Técnicos</a>
             <a class="bf-sidebar-item" data-route="liquidar-tecnicos"><i class="fa-solid fa-calculator"></i>Liquidar Técnicos</a>
 
@@ -629,6 +630,75 @@
             <div id="bo-resultados">
                 <div class="bf-card">
                     <div class="bf-card-body"><div class="bf-empty"><i class="fa-solid fa-magnifying-glass"></i>Ingrese una patente para buscar órdenes</div></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- PAGE: ASIGNAR ÓRDENES A TÉCNICOS                -->
+        <!-- ============================================== -->
+        <div id="page-asignar-ordenes" class="bf-page">
+            <h5 class="fw-bold mb-3"><i class="fa-solid fa-user-check me-2" style="color:var(--bf-primary);"></i>Asignar Órdenes a Técnicos</h5>
+
+            <!-- Stats -->
+            <div class="row g-2 mb-3" id="asignar-stats">
+                <div class="col-6 col-md-3">
+                    <div class="bf-card" style="border-left:3px solid #f59e0b;">
+                        <div style="font-size:0.75rem;color:#6b7280;">Sin Asignar</div>
+                        <div style="font-size:1.4rem;font-weight:800;" id="stat-sin-asignar">0</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="bf-card" style="border-left:3px solid #3b82f6;">
+                        <div style="font-size:0.75rem;color:#6b7280;">En Proceso</div>
+                        <div style="font-size:1.4rem;font-weight:800;" id="stat-en-proceso">0</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="bf-card" style="border-left:3px solid #10b981;">
+                        <div style="font-size:0.75rem;color:#6b7280;">Cerradas</div>
+                        <div style="font-size:1.4rem;font-weight:800;" id="stat-cerradas">0</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="bf-card" style="border-left:3px solid #6366f1;">
+                        <div style="font-size:0.75rem;color:#6b7280;">Total Técnicos</div>
+                        <div style="font-size:1.4rem;font-weight:800;" id="stat-total-tecnicos">0</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabla de órdenes aprobadas sin asignar -->
+            <div class="bf-card mb-3">
+                <div class="bf-card-header">
+                    <span class="bf-card-title"><i class="fa-solid fa-clock me-2" style="color:#f59e0b;"></i>Órdenes Aprobadas Sin Asignar</span>
+                    <button class="btn-bf" style="font-size:0.8rem;" onclick="App.asignarOrdenes.load()"><i class="fa-solid fa-arrows-rotate"></i>Actualizar</button>
+                </div>
+                <div class="bf-card-body" style="padding:0;">
+                    <div class="table-responsive">
+                        <table class="bf-table">
+                            <thead><tr><th>N° Orden</th><th>Patente</th><th>Cliente</th><th>Fecha</th><th>Acciones</th></tr></thead>
+                            <tbody id="tbl-ordenes-disponibles"><tr><td colspan="5" class="bf-empty"><i class="fa-solid fa-hourglass"></i>Cargando...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Órdenes ya asignadas -->
+            <div class="bf-card">
+                <div class="bf-card-header">
+                    <span class="bf-card-title"><i class="fa-solid fa-user-gear me-2" style="color:#3b82f6;"></i>Órdenes Asignadas</span>
+                    <select class="bf-input bf-select" id="filter-tecnico-asignadas" onchange="App.asignarOrdenes.filterAsignadas()" style="width:auto;font-size:0.8rem;">
+                        <option value="">Todos los técnicos</option>
+                    </select>
+                </div>
+                <div class="bf-card-body" style="padding:0;">
+                    <div class="table-responsive">
+                        <table class="bf-table">
+                            <thead><tr><th>N° Orden</th><th>Patente</th><th>Técnico</th><th>Estado</th><th>Fecha</th><th>Acciones</th></tr></thead>
+                            <tbody id="tbl-ordenes-asignadas"><tr><td colspan="6" class="bf-empty"><i class="fa-solid fa-user-check"></i>Cargando...</td></tr></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>

@@ -51,19 +51,21 @@ export async function onRequestPost(context) {
       });
     }
 
-    // Verificar que la orden no esté ya asignada
-    const ordenActual = await env.DB.prepare(
-      "SELECT tecnico_asignado_id FROM OrdenesTrabajo WHERE id = ?"
-    ).bind(data.orden_id).first();
+    // Verificar que la orden no esté ya asignada (a menos que sea reasignación forzada)
+    if (!data.force) {
+      const ordenActual = await env.DB.prepare(
+        "SELECT tecnico_asignado_id FROM OrdenesTrabajo WHERE id = ?"
+      ).bind(data.orden_id).first();
 
-    if (ordenActual && ordenActual.tecnico_asignado_id) {
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'La orden ya está asignada a un técnico'
-      }), {
-        headers: { 'Content-Type': 'application/json' },
-        status: 400
-      });
+      if (ordenActual && ordenActual.tecnico_asignado_id) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'La orden ya está asignada a un técnico'
+        }), {
+          headers: { 'Content-Type': 'application/json' },
+          status: 400
+        });
+      }
     }
 
     // Asignar orden al técnico
