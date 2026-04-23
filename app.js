@@ -2127,22 +2127,23 @@ const App = {
 // INIT
 // ============================================================
 document.addEventListener('DOMContentLoaded', () => {
-    // Show splash screen, then transition
+    // Show splash screen, then transition directly to app (no login)
     setTimeout(() => {
         document.getElementById('splash-screen').classList.add('hidden');
 
-        // Check for existing session
-        const hasSession = Auth.checkSession();
-        if (!hasSession) {
-            document.getElementById('login-screen').classList.add('show');
-            document.getElementById('login-screen').style.display = 'flex';
-        }
+        // Skip login - go directly to app
+        currentUser = {
+            id: 1,
+            email: 'admin@bizflow.com',
+            nombre: 'Administrador',
+            rol: 'admin',
+            empresa: 'BizFlow',
+        };
+        localStorage.setItem('bizflow_user', JSON.stringify(currentUser));
+        Auth.showApp();
 
         // Init sidebar
         initSidebar();
-
-        // Init login form
-        Auth.init();
 
         // Logout button
         const logoutBtn = document.getElementById('btn-logout');
