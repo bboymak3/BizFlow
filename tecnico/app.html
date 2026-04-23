@@ -1,405 +1,573 @@
 <!DOCTYPE html>
-<html lang="es-MX">
+<html lang="es">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="theme-color" content="#0d9488" />
+  <meta name="theme-color" content="#2563eb" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>BizFlow Técnico</title>
   <link rel="manifest" href="manifest.json" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet" />
+  <link href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet" />
   <style>
-    /* ── RESET & BASE ─────────────────────────────────────── */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --primary-light: #3b82f6;
+      --bg: #0f172a;
+      --bg-card: #1e293b;
+      --bg-surface: #334155;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --info: #06b6d4;
+      --purple: #a855f7;
+      --orange: #f97316;
+      --border: rgba(255,255,255,0.08);
+      --glass: rgba(30,41,59,0.85);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     html { font-size: 16px; -webkit-tap-highlight-color: transparent; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      background: linear-gradient(135deg, #0f766e, #115e59);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
       min-height: 100dvh;
-      color: #f3f4f6;
       overflow-x: hidden;
       -webkit-font-smoothing: antialiased;
     }
-    input, button, textarea, select { font-family: inherit; }
 
-    /* ── LOGIN SCREEN ─────────────────────────────────────── */
-    #loginScreen {
-      display: flex; align-items: center; justify-content: center;
-      min-height: 100dvh; padding: 24px;
-    }
-    .login-card {
-      background: rgba(255,255,255,0.07); backdrop-filter: blur(20px);
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 24px; padding: 40px 28px; width: 100%; max-width: 380px;
-      box-shadow: 0 25px 50px rgba(0,0,0,0.4);
-    }
-    .login-logo { text-align: center; margin-bottom: 32px; }
-    .login-logo .icon-wrap {
-      width: 72px; height: 72px; border-radius: 20px;
-      background: linear-gradient(135deg, #facc15, #f59e0b);
-      display: inline-flex; align-items: center; justify-content: center;
-      box-shadow: 0 8px 24px rgba(245,158,11,0.3);
-    }
-    .login-logo .icon-wrap svg { width: 36px; height: 36px; color: #111827; }
-    .login-logo h1 { font-size: 1.5rem; font-weight: 700; margin-top: 16px; }
-    .login-logo p { font-size: 0.85rem; color: #94a3b8; margin-top: 4px; }
-    .form-group { margin-bottom: 18px; }
-    .form-group label { display: block; font-size: 0.8rem; font-weight: 600; color: #cbd5e1; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
-    .form-input {
-      width: 100%; padding: 14px 16px; border-radius: 14px;
-      border: 1.5px solid rgba(255,255,255,0.15);
-      background: rgba(255,255,255,0.08); color: #fff;
-      font-size: 1.05rem; outline: none; transition: border-color .2s, background .2s;
-    }
-    .form-input:focus { border-color: #facc15; background: rgba(255,255,255,0.12); }
-    .form-input::placeholder { color: #64748b; }
-    .btn-login {
-      width: 100%; padding: 16px; border: none; border-radius: 14px;
-      background: linear-gradient(135deg, #14b8a6, #0d9488);
-      color: #fff; font-size: 1rem; font-weight: 700; cursor: pointer;
-      text-transform: uppercase; letter-spacing: 0.04em;
-      box-shadow: 0 6px 20px rgba(13,148,136,0.4);
-      transition: transform .15s, box-shadow .15s; margin-top: 8px;
-    }
-    .btn-login:active { transform: scale(0.97); box-shadow: 0 3px 10px rgba(13,148,136,0.3); }
-    .login-error { color: #fca5a5; font-size: 0.85rem; text-align: center; margin-top: 12px; min-height: 20px; }
+    /* ── SCROLLBAR ──────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--text-dim); border-radius: 4px; }
 
-    /* ── APP SCREEN ───────────────────────────────────────── */
-    #appScreen { display: none; padding-bottom: 90px; }
+    /* ── OFFLINE BANNER ─────────────────────────────────── */
+    .offline-banner {
+      display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+      background: var(--danger); color: #fff; text-align: center;
+      padding: 6px 16px; font-size: 0.78rem; font-weight: 600;
+    }
+    .offline-banner.active { display: flex; align-items: center; justify-content: center; gap: 6px; }
 
-    /* Header */
-    .app-header {
-      position: sticky; top: 0; z-index: 40;
-      background: rgba(15,118,110,0.92); backdrop-filter: blur(16px);
-      border-bottom: 1px solid rgba(255,255,255,0.08);
-      padding: 14px 20px; display: flex; align-items: center; justify-content: space-between;
+    /* ── TOAST ──────────────────────────────────────────── */
+    .toast-container {
+      position: fixed; top: 60px; left: 12px; right: 12px; z-index: 9000;
+      pointer-events: none; display: flex; flex-direction: column; gap: 8px;
     }
-    .app-header .brand { display: flex; align-items: center; gap: 10px; }
-    .app-header .brand svg { width: 26px; height: 26px; color: #facc15; flex-shrink: 0; }
-    .app-header .brand h1 { font-size: 1.1rem; font-weight: 700; white-space: nowrap; }
-    .app-header .brand .tecnico-name { font-size: 0.75rem; color: #99f6e4; font-weight: 400; }
-    .btn-logout {
-      background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15);
-      border-radius: 12px; padding: 8px 14px; color: #f3f4f6;
-      font-size: 0.8rem; font-weight: 600; cursor: pointer;
-      display: flex; align-items: center; gap: 6px;
-      transition: background .2s;
-    }
-    .btn-logout:active { background: rgba(255,255,255,0.2); }
-    .btn-logout svg { width: 16px; height: 16px; }
-
-    /* Tabs */
-    .tabs-wrap {
-      position: sticky; top: 58px; z-index: 30;
-      background: rgba(15,118,110,0.88); backdrop-filter: blur(12px);
-      padding: 10px 16px; display: flex; gap: 6px;
-    }
-    .tab-pill {
-      flex: 1; padding: 10px 6px; border-radius: 12px;
-      border: 1.5px solid rgba(255,255,255,0.12);
-      background: transparent; color: #94a3b8;
-      font-size: 0.82rem; font-weight: 600; cursor: pointer;
-      text-align: center; transition: all .2s;
-    }
-    .tab-pill.active {
-      background: rgba(255,255,255,0.15); color: #fff;
-      border-color: rgba(255,255,255,0.3);
-    }
-    .tab-pill .badge {
-      display: inline-flex; align-items: center; justify-content: center;
-      min-width: 20px; height: 20px; border-radius: 10px;
-      background: #facc15; color: #111827; font-size: 0.7rem;
-      font-weight: 700; margin-left: 6px; padding: 0 6px;
-    }
-
-    /* Orders Container */
-    .orders-container { padding: 16px; max-width: 480px; margin: 0 auto; }
-    .tab-content { display: none; }
-    .tab-content.active { display: block; }
-    .empty-state {
-      text-align: center; padding: 48px 20px; color: #64748b;
-    }
-    .empty-state svg { width: 48px; height: 48px; margin-bottom: 12px; opacity: 0.5; }
-    .empty-state p { font-size: 0.95rem; }
-
-    /* Order Card */
-    .order-card {
-      background: rgba(255,255,255,0.07); backdrop-filter: blur(10px);
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 22px; padding: 20px; margin-bottom: 14px;
-      cursor: pointer; transition: transform .2s, box-shadow .2s;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.15);
-    }
-    .order-card:active { transform: scale(0.98); }
-    .order-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
-    .order-number { font-size: 1.15rem; font-weight: 800; }
-    .status-badge {
-      padding: 4px 12px; border-radius: 20px;
-      font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
-      letter-spacing: 0.03em; white-space: nowrap;
-    }
-    .status-pendiente { background: #fbbf24; color: #78350f; }
-    .status-asignada { background: #60a5fa; color: #1e3a5f; }
-    .status-en_sitio { background: #c084fc; color: #3b0764; }
-    .status-en_progreso { background: #f97316; color: #431407; }
-    .status-pedido_piezas { background: #94a3b8; color: #1e293b; }
-    .status-completada { background: #4ade80; color: #052e16; }
-    .status-no_completada { background: #f87171; color: #450a0a; }
-    .status-cerrada { background: #475569; color: #f8fafc; }
-    .status-firma_pendiente { background: #2dd4bf; color: #042f2e; }
-    .order-info { font-size: 0.88rem; line-height: 1.6; color: #d1d5db; }
-    .order-info .label { color: #94a3b8; font-size: 0.78rem; }
-    .order-info .row { display: flex; gap: 8px; align-items: baseline; margin-bottom: 2px; }
-    .order-vehicle { display: flex; gap: 12px; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); }
-    .order-vehicle .patente {
-      background: rgba(255,255,255,0.12); border-radius: 10px;
-      padding: 4px 10px; font-weight: 800; font-size: 0.95rem; letter-spacing: 0.04em;
-    }
-    .order-vehicle .vehiculo-info { font-size: 0.85rem; color: #cbd5e1; }
-    .order-domicilio {
-      margin-top: 10px; padding: 10px 14px; border-radius: 12px;
-      background: rgba(250,204,21,0.08); border: 1px solid rgba(250,204,21,0.15);
-      font-size: 0.82rem; color: #fde68a;
-    }
-    .cerrada-badge {
-      position: absolute; top: 12px; right: 12px;
-      padding: 3px 10px; border-radius: 8px;
-      background: #475569; color: #f8fafc;
-      font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
-    }
-
-    /* ── BOTTOM NAV ───────────────────────────────────────── */
-    .bottom-nav {
-      position: fixed; bottom: 0; left: 0; right: 0; z-index: 50;
-      background: rgba(17,24,39,0.95); backdrop-filter: blur(16px);
-      border-top: 1px solid rgba(255,255,255,0.08);
-      display: flex; padding: 8px 0 max(8px, env(safe-area-inset-bottom));
-    }
-    .nav-item {
-      flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
-      padding: 10px 4px; border: none; background: none; color: #64748b;
-      font-size: 0.7rem; font-weight: 600; cursor: pointer; transition: color .2s;
-    }
-    .nav-item.active { color: #facc15; }
-    .nav-item svg { width: 24px; height: 24px; }
-
-    /* ── MODALS ───────────────────────────────────────────── */
-    .modal-overlay {
-      display: none; position: fixed; inset: 0; z-index: 100;
-      background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
-      align-items: flex-end; justify-content: center;
-    }
-    .modal-overlay.active { display: flex; }
-    .modal-sheet {
-      background: #111827; border-radius: 28px 28px 0 0;
-      width: 100%; max-width: 480px; max-height: 92dvh;
-      overflow-y: auto; padding: 20px 20px 40px;
-      animation: slideUp .3s ease-out;
-    }
-    .modal-sheet::-webkit-scrollbar { width: 4px; }
-    .modal-sheet::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
-    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-    .modal-handle {
-      width: 40px; height: 4px; border-radius: 4px;
-      background: rgba(255,255,255,0.2); margin: 0 auto 16px;
-    }
-    .modal-title { font-size: 1.2rem; font-weight: 800; margin-bottom: 4px; }
-    .modal-subtitle { font-size: 0.85rem; color: #94a3b8; margin-bottom: 18px; }
-    .modal-close {
-      position: absolute; top: 20px; right: 20px;
-      background: rgba(255,255,255,0.1); border: none;
-      border-radius: 50%; width: 36px; height: 36px;
-      color: #fff; font-size: 1.2rem; cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-    }
-
-    /* Detail Sections */
-    .detail-section {
-      background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 16px; padding: 16px; margin-bottom: 14px;
-    }
-    .detail-section-title {
-      font-size: 0.78rem; font-weight: 700; text-transform: uppercase;
-      letter-spacing: 0.05em; color: #facc15; margin-bottom: 12px;
-      display: flex; align-items: center; gap: 8px;
-    }
-    .detail-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 0.88rem; }
-    .detail-row .label { color: #94a3b8; }
-    .detail-row .value { font-weight: 600; text-align: right; max-width: 60%; }
-    .service-item {
-      display: flex; justify-content: space-between; align-items: baseline;
-      padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
-      font-size: 0.88rem;
-    }
-    .service-item:last-child { border-bottom: none; }
-    .service-item .price { color: #4ade80; font-weight: 700; }
-
-    /* Checklist */
-    .checklist-item { display: flex; align-items: center; gap: 10px; padding: 6px 0; font-size: 0.88rem; }
-    .check-icon { font-size: 1rem; }
-    .check-ok { color: #4ade80; }
-    .check-no { color: #f87171; }
-    .check-na { color: #64748b; }
-
-    /* Photos Grid */
-    .photos-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
-    .photo-thumb {
-      aspect-ratio: 1; border-radius: 12px; object-fit: cover;
-      width: 100%; cursor: pointer; border: 2px solid transparent;
-      transition: border-color .2s;
-    }
-    .photo-thumb:active { border-color: #facc15; }
-    .photo-label { font-size: 0.7rem; color: #94a3b8; text-align: center; margin-top: 4px; }
-
-    /* Notes */
-    .note-item {
-      background: rgba(255,255,255,0.04); border-radius: 12px;
-      padding: 12px; margin-bottom: 8px;
-    }
-    .note-text { font-size: 0.88rem; color: #e2e8f0; line-height: 1.5; }
-    .note-meta { font-size: 0.72rem; color: #64748b; margin-top: 4px; }
-
-    /* Timeline */
-    .timeline-item { display: flex; gap: 12px; padding-bottom: 16px; position: relative; }
-    .timeline-item:not(:last-child)::after {
-      content: ''; position: absolute; left: 15px; top: 32px; bottom: 0;
-      width: 2px; background: rgba(255,255,255,0.1);
-    }
-    .timeline-dot {
-      width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 0.8rem; background: rgba(255,255,255,0.08);
-    }
-    .timeline-content { flex: 1; }
-    .timeline-status { font-size: 0.88rem; font-weight: 600; }
-    .timeline-meta { font-size: 0.75rem; color: #64748b; margin-top: 2px; }
-
-    /* ── ACTION BUTTONS ───────────────────────────────────── */
-    .actions-area { padding: 16px 20px; max-width: 480px; margin: 0 auto; }
-    .action-btn {
-      width: 100%; padding: 16px; border-radius: 14px;
-      font-size: 0.95rem; font-weight: 700; cursor: pointer;
-      display: flex; align-items: center; justify-content: center; gap: 8px;
-      margin-bottom: 10px; transition: transform .15s, opacity .15s;
-      border: 2px solid transparent; min-height: 52px;
-    }
-    .action-btn:active { transform: scale(0.97); }
-    .action-btn:disabled { opacity: 0.4; pointer-events: none; }
-    .btn-gps { background: #111827; color: #fff; border-color: #facc15; }
-    .btn-primary { background: #111827; color: #fff; border-color: #facc15; }
-    .btn-pause { background: #374151; color: #d1d5db; }
-    .btn-complete { background: #facc15; color: #111827; border-color: #ef4444; }
-    .btn-green { background: #059669; color: #fff; }
-    .btn-red { background: #dc2626; color: #fff; }
-    .btn-dark { background: #1e293b; color: #f3f4f6; }
-    .btn-note { background: #374151; color: #e2e8f0; }
-
-    /* ── SIGNATURE MODAL ──────────────────────────────────── */
-    .share-link-box {
-      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 12px; padding: 14px; margin: 12px 0;
+    .toast-msg {
+      pointer-events: auto; padding: 12px 16px; border-radius: 12px;
+      font-size: 0.85rem; font-weight: 500;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
       display: flex; align-items: center; gap: 10px;
+      animation: toastSlideIn 0.3s ease-out;
+      border-left: 4px solid var(--primary);
+      background: var(--bg-card);
     }
-    .share-link-box input {
-      flex: 1; background: none; border: none; color: #facc15;
-      font-size: 0.82rem; font-weight: 600; outline: none;
-    }
-    .share-link-box button {
-      background: rgba(255,255,255,0.1); border: none; border-radius: 8px;
-      padding: 8px 12px; color: #fff; font-size: 0.78rem; font-weight: 600;
-      cursor: pointer; white-space: nowrap;
-    }
-
-    /* ── CLOSE ORDER MODAL ────────────────────────────────── */
-    .close-field { margin-bottom: 16px; }
-    .close-field label { display: block; font-size: 0.8rem; font-weight: 600; color: #cbd5e1; margin-bottom: 6px; }
-    .close-field textarea, .close-field select {
-      width: 100%; padding: 12px 14px; border-radius: 12px;
-      border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.06);
-      color: #fff; font-size: 0.9rem; outline: none;
-    }
-    .close-field textarea:focus, .close-field select:focus { border-color: #facc15; }
-    .close-field textarea { min-height: 100px; resize: vertical; }
-    .close-field select { -webkit-appearance: none; appearance: none; }
-    .radio-group { display: flex; gap: 8px; flex-wrap: wrap; }
-    .radio-option {
-      flex: 1; min-width: 80px; padding: 12px 10px; border-radius: 12px;
-      border: 1.5px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04);
-      text-align: center; font-size: 0.82rem; font-weight: 600; color: #94a3b8;
-      cursor: pointer; transition: all .2s;
-    }
-    .radio-option.selected {
-      border-color: #facc15; color: #facc15; background: rgba(250,204,21,0.08);
+    .toast-msg.success { border-left-color: var(--success); }
+    .toast-msg.error { border-left-color: var(--danger); }
+    .toast-msg.warning { border-left-color: var(--warning); }
+    .toast-msg.info { border-left-color: var(--info); }
+    @keyframes toastSlideIn {
+      from { opacity: 0; transform: translateY(-20px); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
-    /* ── PHOTO MODAL ──────────────────────────────────────── */
-    .photo-type-selector { display: flex; gap: 8px; margin-bottom: 16px; }
-    .photo-type-btn {
-      flex: 1; padding: 12px; border-radius: 12px;
-      border: 1.5px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04);
-      color: #94a3b8; font-size: 0.82rem; font-weight: 600;
-      cursor: pointer; text-align: center; transition: all .2s;
-    }
-    .photo-type-btn.selected { border-color: #facc15; color: #facc15; background: rgba(250,204,21,0.08); }
-    .photo-actions { display: flex; gap: 10px; margin-bottom: 16px; }
-    .photo-action-btn {
-      flex: 1; padding: 14px; border-radius: 14px; border: none;
-      font-size: 0.9rem; font-weight: 700; cursor: pointer;
-      display: flex; align-items: center; justify-content: center; gap: 8px;
-    }
-    .photo-action-btn.camera { background: #111827; color: #facc15; border: 2px solid #facc15; }
-    .photo-action-btn.gallery { background: #374151; color: #e2e8f0; }
-
-    /* ── NOTE MODAL ───────────────────────────────────────── */
-    .note-modal-area { position: relative; }
-    .note-modal-area textarea {
-      width: 100%; min-height: 120px; padding: 14px; border-radius: 14px;
-      border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.06);
-      color: #fff; font-size: 0.95rem; outline: none; resize: vertical;
-    }
-    .note-modal-area textarea:focus { border-color: #facc15; }
-
-    /* ── NOT COMPLETED MODAL ──────────────────────────────── */
-    .reason-options { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
-    .reason-option {
-      padding: 14px; border-radius: 12px;
-      border: 1.5px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04);
-      color: #d1d5db; font-size: 0.9rem; cursor: pointer; transition: all .2s;
-    }
-    .reason-option.selected { border-color: #f87171; color: #fca5a5; background: rgba(248,113,113,0.08); }
-
-    /* ── TOAST ────────────────────────────────────────────── */
-    .toast-container { position: fixed; top: 16px; left: 16px; right: 16px; z-index: 200; pointer-events: none; }
-    .toast {
-      background: #1e293b; color: #f3f4f6; padding: 14px 18px; border-radius: 14px;
-      font-size: 0.88rem; font-weight: 500; margin-bottom: 8px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.3); pointer-events: auto;
-      display: flex; align-items: center; gap: 10px;
-      animation: toastIn .3s ease-out;
-      border-left: 4px solid #0d9488;
-    }
-    .toast.error { border-left-color: #ef4444; }
-    .toast.success { border-left-color: #22c55e; }
-    .toast.warning { border-left-color: #f59e0b; }
-    @keyframes toastIn { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
-
-    /* ── LOADING ──────────────────────────────────────────── */
+    /* ── LOADING OVERLAY ────────────────────────────────── */
     .loading-overlay {
-      display: none; position: fixed; inset: 0; z-index: 300;
+      display: none; position: fixed; inset: 0; z-index: 8000;
       background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
       align-items: center; justify-content: center;
     }
     .loading-overlay.active { display: flex; }
     .spinner {
-      width: 48px; height: 48px; border: 4px solid rgba(255,255,255,0.15);
-      border-top-color: #facc15; border-radius: 50%;
-      animation: spin .8s linear infinite;
+      width: 48px; height: 48px;
+      border: 4px solid rgba(255,255,255,0.15);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* ── FULLSCREEN PHOTO ─────────────────────────────────── */
+    /* ── SPLASH SCREEN ──────────────────────────────────── */
+    #splashScreen {
+      position: fixed; inset: 0; z-index: 7000;
+      background: var(--bg);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 20px;
+      transition: opacity 0.4s ease-out;
+    }
+    #splashScreen.fade-out { opacity: 0; pointer-events: none; }
+    .splash-logo {
+      width: 90px; height: 90px; border-radius: 24px;
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 12px 40px rgba(37,99,235,0.4);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    .splash-logo i { font-size: 42px; color: #fff; }
+    .splash-title { font-size: 1.6rem; font-weight: 800; color: var(--text); }
+    .splash-subtitle { font-size: 0.85rem; color: var(--text-muted); }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+
+    /* ── LOGIN SCREEN ───────────────────────────────────── */
+    #loginScreen {
+      display: none; align-items: center; justify-content: center;
+      min-height: 100dvh; padding: 24px;
+    }
+    .login-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 24px; padding: 40px 28px;
+      width: 100%; max-width: 380px;
+      box-shadow: 0 25px 50px rgba(0,0,0,0.4);
+    }
+    .login-logo { text-align: center; margin-bottom: 32px; }
+    .login-logo .icon-wrap {
+      width: 72px; height: 72px; border-radius: 20px;
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      display: inline-flex; align-items: center; justify-content: center;
+      box-shadow: 0 8px 24px rgba(37,99,235,0.3);
+    }
+    .login-logo .icon-wrap i { font-size: 32px; color: #fff; }
+    .login-logo h1 { font-size: 1.5rem; font-weight: 700; margin-top: 16px; }
+    .login-logo p { font-size: 0.85rem; color: var(--text-muted); margin-top: 4px; }
+    .form-group { margin-bottom: 18px; }
+    .form-group label {
+      display: block; font-size: 0.78rem; font-weight: 600;
+      color: var(--text-muted); margin-bottom: 6px;
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .form-input {
+      width: 100%; padding: 14px 16px; border-radius: 14px;
+      border: 1.5px solid var(--border);
+      background: rgba(255,255,255,0.06); color: var(--text);
+      font-size: 1rem; outline: none;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .form-input:focus {
+      border-color: var(--primary);
+      background: rgba(37,99,235,0.08);
+    }
+    .form-input::placeholder { color: var(--text-dim); }
+    .btn-login {
+      width: 100%; padding: 16px; border: none; border-radius: 14px;
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      color: #fff; font-size: 1rem; font-weight: 700; cursor: pointer;
+      text-transform: uppercase; letter-spacing: 0.04em;
+      box-shadow: 0 6px 20px rgba(37,99,235,0.4);
+      transition: transform 0.15s, box-shadow 0.15s; margin-top: 8px;
+    }
+    .btn-login:active { transform: scale(0.97); }
+    .btn-login:disabled { opacity: 0.5; cursor: not-allowed; }
+    .login-error {
+      color: #fca5a5; font-size: 0.85rem;
+      text-align: center; margin-top: 12px; min-height: 20px;
+    }
+
+    /* ── APP SHELL ──────────────────────────────────────── */
+    #appScreen { display: none; padding-bottom: 80px; }
+
+    /* Header */
+    .app-header {
+      position: sticky; top: 0; z-index: 100;
+      background: var(--glass); backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 16px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .app-header .brand { display: flex; align-items: center; gap: 10px; }
+    .app-header .brand i { font-size: 22px; color: var(--primary); }
+    .app-header .brand h1 { font-size: 1.05rem; font-weight: 700; white-space: nowrap; }
+    .app-header .brand .sub { font-size: 0.72rem; color: var(--text-muted); font-weight: 400; }
+    .header-actions { display: flex; gap: 8px; }
+    .header-btn {
+      width: 36px; height: 36px; border-radius: 10px;
+      border: 1px solid var(--border); background: rgba(255,255,255,0.05);
+      color: var(--text-muted); font-size: 0.9rem;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .header-btn:active { background: rgba(255,255,255,0.1); color: var(--text); }
+
+    /* ── PAGE VIEWS ─────────────────────────────────────── */
+    .page-view { display: none; }
+    .page-view.active { display: block; }
+
+    /* ── ORDENES TAB (Mis Órdenes) ──────────────────────── */
+    .status-filters {
+      position: sticky; top: 60px; z-index: 90;
+      background: var(--glass); backdrop-filter: blur(12px);
+      padding: 10px 16px; display: flex; gap: 6px; overflow-x: auto;
+    }
+    .status-filter {
+      flex-shrink: 0; padding: 8px 14px; border-radius: 20px;
+      border: 1.5px solid var(--border); background: transparent;
+      color: var(--text-muted); font-size: 0.78rem; font-weight: 600;
+      cursor: pointer; transition: all 0.2s; white-space: nowrap;
+    }
+    .status-filter.active {
+      background: var(--primary); color: #fff;
+      border-color: var(--primary);
+    }
+    .status-filter .count {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 18px; height: 18px; border-radius: 9px;
+      background: rgba(255,255,255,0.2); font-size: 0.68rem;
+      margin-left: 5px; padding: 0 4px;
+    }
+    .status-filter:not(.active) .count {
+      background: rgba(255,255,255,0.08);
+    }
+
+    .orders-list { padding: 12px 16px; max-width: 480px; margin: 0 auto; }
+
+    /* Order Card */
+    .ot-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 16px; margin-bottom: 12px;
+      cursor: pointer; transition: transform 0.15s;
+    }
+    .ot-card:active { transform: scale(0.98); }
+    .ot-card-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 10px;
+    }
+    .ot-number { font-size: 1.1rem; font-weight: 800; }
+    .ot-badges { display: flex; gap: 6px; }
+    .badge-estado, .badge-prioridad {
+      padding: 3px 10px; border-radius: 20px;
+      font-size: 0.68rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.03em;
+    }
+    .badge-estado.pendiente { background: #fbbf24; color: #78350f; }
+    .badge-estado.asignada { background: #60a5fa; color: #1e3a5f; }
+    .badge-estado.en_proceso { background: var(--orange); color: #431407; }
+    .badge-estado.pausada { background: #94a3b8; color: #1e293b; }
+    .badge-estado.completada { background: var(--success); color: #052e16; }
+    .badge-estado.cancelada { background: var(--danger); color: #fff; }
+    .badge-estado.aprobada { background: var(--info); color: #083344; }
+    .badge-estado.cerrada { background: #475569; color: #f8fafc; }
+    .badge-prioridad.alta { background: var(--danger); color: #fff; }
+    .badge-prioridad.urgente { background: #dc2626; color: #fff; animation: urgentPulse 1.5s infinite; }
+    .badge-prioridad.normal { background: rgba(255,255,255,0.1); color: var(--text-muted); }
+    .badge-prioridad.baja { background: rgba(255,255,255,0.05); color: var(--text-dim); }
+    @keyframes urgentPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+
+    .ot-info { font-size: 0.85rem; line-height: 1.6; color: var(--text-muted); }
+    .ot-info .row { display: flex; gap: 6px; margin-bottom: 1px; }
+    .ot-info .label { color: var(--text-dim); font-size: 0.76rem; min-width: 52px; }
+    .ot-vehicle {
+      display: flex; gap: 10px; margin-top: 10px; padding-top: 10px;
+      border-top: 1px solid var(--border);
+    }
+    .ot-plate {
+      background: rgba(37,99,235,0.15); border: 1px solid rgba(37,99,235,0.3);
+      border-radius: 8px; padding: 4px 10px;
+      font-weight: 800; font-size: 0.9rem; letter-spacing: 0.04em;
+      color: var(--primary-light);
+    }
+    .ot-vehicle-info { font-size: 0.82rem; color: var(--text-muted); }
+
+    .empty-state {
+      text-align: center; padding: 48px 20px; color: var(--text-dim);
+    }
+    .empty-state i { font-size: 48px; margin-bottom: 12px; opacity: 0.4; }
+    .empty-state p { font-size: 0.9rem; }
+
+    /* ── FAB (Floating Action Button) ───────────────────── */
+    .fab-refresh {
+      position: fixed; bottom: 96px; right: 16px; z-index: 200;
+      width: 52px; height: 52px; border-radius: 50%;
+      background: var(--primary); color: #fff;
+      border: none; font-size: 1.1rem; cursor: pointer;
+      box-shadow: 0 6px 20px rgba(37,99,235,0.4);
+      display: flex; align-items: center; justify-content: center;
+      transition: transform 0.2s;
+    }
+    .fab-refresh:active { transform: scale(0.9); }
+    .fab-refresh.spinning i { animation: spin 0.8s linear infinite; }
+
+    /* ── PULL TO REFRESH ────────────────────────────────── */
+    .pull-indicator {
+      text-align: center; padding: 12px; color: var(--text-dim);
+      font-size: 0.82rem; display: none;
+    }
+    .pull-indicator.active { display: block; }
+
+    /* ═══════════════════════════════════════════════════════
+       ORDEN DETAIL VIEW (Tab 2 - Órdenes Abiertas)
+       ═══════════════════════════════════════════════════════ */
+    .detail-header {
+      background: var(--bg-card); border-bottom: 1px solid var(--border);
+      padding: 16px; position: relative;
+    }
+    .detail-header .back-btn {
+      position: absolute; top: 12px; left: 12px;
+      width: 36px; height: 36px; border-radius: 50%;
+      border: none; background: rgba(255,255,255,0.08);
+      color: var(--text); font-size: 1rem;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+    }
+    .detail-header .ot-title {
+      text-align: center; padding: 0 40px;
+    }
+    .detail-header .ot-title h2 { font-size: 1.2rem; font-weight: 800; }
+    .detail-header .ot-meta {
+      display: flex; justify-content: center; gap: 8px; margin-top: 6px; flex-wrap: wrap;
+    }
+
+    .detail-content { padding: 16px; max-width: 480px; margin: 0 auto; }
+
+    .detail-section {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 16px; margin-bottom: 14px;
+    }
+    .detail-section-title {
+      font-size: 0.78rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--primary-light); margin-bottom: 12px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .detail-row {
+      display: flex; justify-content: space-between; padding: 5px 0;
+      font-size: 0.86rem;
+    }
+    .detail-row .label { color: var(--text-muted); }
+    .detail-row .value { font-weight: 600; text-align: right; max-width: 60%; }
+
+    /* Status change buttons */
+    .status-actions {
+      display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;
+    }
+    .status-btn {
+      flex: 1; min-width: 100px; padding: 12px 10px; border-radius: 12px;
+      border: 2px solid; font-size: 0.82rem; font-weight: 700;
+      cursor: pointer; display: flex; align-items: center;
+      justify-content: center; gap: 6px; transition: all 0.15s;
+      background: transparent;
+    }
+    .status-btn:active { transform: scale(0.96); }
+    .status-btn.btn-start { border-color: var(--primary); color: var(--primary); }
+    .status-btn.btn-start:active { background: var(--primary); color: #fff; }
+    .status-btn.btn-pause { border-color: var(--warning); color: var(--warning); }
+    .status-btn.btn-pause:active { background: var(--warning); color: #000; }
+    .status-btn.btn-complete { border-color: var(--success); color: var(--success); }
+    .status-btn.btn-complete:active { background: var(--success); color: #fff; }
+
+    /* Photo section */
+    .photo-type-selector { display: flex; gap: 6px; margin-bottom: 12px; }
+    .photo-type-btn {
+      flex: 1; padding: 8px; border-radius: 10px;
+      border: 1.5px solid var(--border); background: transparent;
+      color: var(--text-muted); font-size: 0.75rem; font-weight: 600;
+      cursor: pointer; text-align: center; transition: all 0.2s;
+    }
+    .photo-type-btn.selected { border-color: var(--primary); color: var(--primary); background: rgba(37,99,235,0.08); }
+    .photo-actions { display: flex; gap: 8px; margin-bottom: 12px; }
+    .photo-action-btn {
+      flex: 1; padding: 12px; border-radius: 12px; border: none;
+      font-size: 0.85rem; font-weight: 700; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .photo-action-btn.camera { background: var(--primary); color: #fff; }
+    .photo-action-btn.gallery { background: var(--bg-surface); color: var(--text); }
+
+    .photos-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .photo-thumb {
+      aspect-ratio: 1; border-radius: 10px; object-fit: cover;
+      width: 100%; cursor: pointer; border: 2px solid transparent;
+      transition: border-color 0.2s;
+    }
+    .photo-thumb:active { border-color: var(--primary); }
+    .photo-label { font-size: 0.68rem; color: var(--text-dim); text-align: center; margin-top: 2px; }
+
+    /* Notes section */
+    .note-item {
+      background: rgba(255,255,255,0.04); border-radius: 10px;
+      padding: 10px 12px; margin-bottom: 6px;
+    }
+    .note-text { font-size: 0.85rem; color: var(--text); line-height: 1.5; }
+    .note-meta { font-size: 0.7rem; color: var(--text-dim); margin-top: 3px; }
+
+    /* Costs section */
+    .cost-item {
+      display: flex; justify-content: space-between; padding: 6px 0;
+      border-bottom: 1px solid var(--border); font-size: 0.85rem;
+    }
+    .cost-item:last-child { border-bottom: none; }
+    .cost-item .price { color: var(--success); font-weight: 700; }
+
+    /* GPS Section */
+    .gps-coords {
+      font-family: 'Courier New', monospace; font-size: 0.82rem;
+      color: var(--info); padding: 8px 12px;
+      background: rgba(6,182,212,0.08); border-radius: 8px;
+      word-break: break-all;
+    }
+
+    /* Signature Canvas */
+    .signature-area {
+      position: relative; border: 2px dashed var(--border);
+      border-radius: 12px; overflow: hidden; background: #fff;
+    }
+    .signature-area canvas { display: block; width: 100%; height: 200px; touch-action: none; }
+    .signature-area .placeholder-text {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      color: #cbd5e1; font-size: 0.9rem; pointer-events: none;
+    }
+    .signature-actions { display: flex; gap: 8px; margin-top: 10px; }
+
+    /* Timeline */
+    .timeline-item { display: flex; gap: 12px; padding-bottom: 14px; position: relative; }
+    .timeline-item:not(:last-child)::after {
+      content: ''; position: absolute; left: 15px; top: 32px; bottom: 0;
+      width: 2px; background: var(--border);
+    }
+    .timeline-dot {
+      width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.8rem; background: var(--bg-surface);
+    }
+    .timeline-content { flex: 1; }
+    .timeline-status { font-size: 0.86rem; font-weight: 600; }
+    .timeline-meta { font-size: 0.72rem; color: var(--text-dim); margin-top: 2px; }
+
+    /* ── GENERIC BUTTONS ────────────────────────────────── */
+    .btn-action {
+      width: 100%; padding: 14px; border-radius: 12px;
+      font-size: 0.9rem; font-weight: 700; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      margin-bottom: 8px; border: none; transition: transform 0.15s;
+    }
+    .btn-action:active { transform: scale(0.97); }
+    .btn-action:disabled { opacity: 0.4; pointer-events: none; }
+    .btn-primary-action { background: var(--primary); color: #fff; }
+    .btn-success-action { background: var(--success); color: #fff; }
+    .btn-dark-action { background: var(--bg-surface); color: var(--text); }
+    .btn-danger-action { background: var(--danger); color: #fff; }
+    .btn-warning-action { background: var(--warning); color: #000; }
+
+    /* ── TEXTAREA & INPUT ───────────────────────────────── */
+    .field-textarea {
+      width: 100%; min-height: 100px; padding: 12px; border-radius: 12px;
+      border: 1px solid var(--border); background: rgba(255,255,255,0.05);
+      color: var(--text); font-size: 0.9rem; outline: none; resize: vertical;
+    }
+    .field-textarea:focus { border-color: var(--primary); }
+    .field-input {
+      width: 100%; padding: 10px 12px; border-radius: 10px;
+      border: 1px solid var(--border); background: rgba(255,255,255,0.05);
+      color: var(--text); font-size: 0.88rem; outline: none;
+    }
+    .field-input:focus { border-color: var(--primary); }
+    .field-label {
+      display: block; font-size: 0.78rem; font-weight: 600;
+      color: var(--text-muted); margin-bottom: 6px;
+    }
+    .field-group { margin-bottom: 12px; }
+
+    /* ── BOTTOM NAV ─────────────────────────────────────── */
+    .bottom-nav {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 500;
+      background: var(--bg-card); border-top: 1px solid var(--border);
+      display: flex; padding: 6px 0 max(6px, env(safe-area-inset-bottom));
+    }
+    .nav-item {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; gap: 2px;
+      padding: 8px 4px; border: none; background: none;
+      color: var(--text-dim); font-size: 0.68rem; font-weight: 600;
+      cursor: pointer; transition: color 0.2s;
+    }
+    .nav-item.active { color: var(--primary); }
+    .nav-item i { font-size: 20px; }
+    .nav-item .nav-badge {
+      position: absolute; top: 2px; right: 50%; transform: translateX(14px);
+      min-width: 16px; height: 16px; border-radius: 8px;
+      background: var(--danger); color: #fff;
+      font-size: 0.6rem; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      padding: 0 4px;
+    }
+    .nav-item { position: relative; }
+
+    /* ── PROFILE VIEW ───────────────────────────────────── */
+    .profile-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 20px; padding: 24px; margin: 16px;
+      text-align: center;
+    }
+    .profile-avatar {
+      width: 80px; height: 80px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 14px; font-size: 32px; color: #fff;
+      box-shadow: 0 8px 24px rgba(37,99,235,0.3);
+    }
+    .profile-name { font-size: 1.2rem; font-weight: 700; }
+    .profile-code { font-size: 0.82rem; color: var(--text-muted); margin-top: 2px; }
+    .profile-specialty {
+      display: inline-block; padding: 4px 12px; border-radius: 20px;
+      background: rgba(37,99,235,0.1); color: var(--primary-light);
+      font-size: 0.78rem; font-weight: 600; margin-top: 8px;
+    }
+    .profile-stats {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 12px; margin-top: 20px; padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+    .stat-item { text-align: center; }
+    .stat-value { font-size: 1.4rem; font-weight: 800; color: var(--primary-light); }
+    .stat-label { font-size: 0.7rem; color: var(--text-dim); margin-top: 2px; }
+    .profile-info-list { margin-top: 16px; text-align: left; }
+    .profile-info-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 0; border-bottom: 1px solid var(--border);
+      font-size: 0.88rem;
+    }
+    .profile-info-item i { color: var(--text-dim); width: 20px; text-align: center; }
+    .profile-info-item a { color: var(--primary-light); text-decoration: none; }
+    .profile-location {
+      margin-top: 14px; padding: 10px 14px; border-radius: 12px;
+      background: rgba(6,182,212,0.08); border: 1px solid rgba(6,182,212,0.2);
+      font-size: 0.8rem; color: var(--info);
+    }
+
+    /* ── MODALS ─────────────────────────────────────────── */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; z-index: 600;
+      background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+      align-items: flex-end; justify-content: center;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal-sheet {
+      background: var(--bg-card); border-radius: 24px 24px 0 0;
+      width: 100%; max-width: 480px; max-height: 90dvh;
+      overflow-y: auto; padding: 16px 20px 32px;
+      animation: slideUp 0.3s ease-out;
+    }
+    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    .modal-handle {
+      width: 40px; height: 4px; border-radius: 4px;
+      background: rgba(255,255,255,0.2); margin: 0 auto 14px;
+    }
+    .modal-title { font-size: 1.15rem; font-weight: 800; margin-bottom: 4px; }
+    .modal-subtitle { font-size: 0.82rem; color: var(--text-muted); margin-bottom: 16px; }
+
+    /* ── FULLSCREEN PHOTO VIEWER ────────────────────────── */
     .fullscreen-photo {
-      display: none; position: fixed; inset: 0; z-index: 400;
+      display: none; position: fixed; inset: 0; z-index: 5000;
       background: rgba(0,0,0,0.95); align-items: center; justify-content: center;
     }
     .fullscreen-photo.active { display: flex; }
@@ -411,25 +579,23 @@
       cursor: pointer; display: flex; align-items: center; justify-content: center;
     }
 
-    /* ── PULL TO REFRESH ──────────────────────────────────── */
-    .pull-indicator {
-      text-align: center; padding: 12px; color: #94a3b8;
-      font-size: 0.82rem; display: none;
+    /* ── COST FORM ROW ──────────────────────────────────── */
+    .cost-form-row {
+      display: grid; grid-template-columns: 2fr 1fr 1fr 1fr;
+      gap: 6px; margin-bottom: 8px; align-items: end;
     }
-    .pull-indicator.active { display: block; }
+    .cost-form-row .field-input { font-size: 0.8rem; padding: 8px 10px; }
 
-    /* ── OFFLINE BANNER ───────────────────────────────────── */
-    .offline-banner {
-      display: none; background: #dc2626; color: #fff;
-      text-align: center; padding: 6px; font-size: 0.78rem; font-weight: 600;
-    }
-    .offline-banner.active { display: block; }
+    /* Leaflet fix */
+    #gpsMap { height: 200px; border-radius: 12px; z-index: 1; }
   </style>
 </head>
 <body>
 
   <!-- Offline Banner -->
-  <div id="offlineBanner" class="offline-banner">📶 Sin conexión – Modo offline activo</div>
+  <div id="offlineBanner" class="offline-banner">
+    <i class="fas fa-wifi-slash"></i> Sin conexión – Modo offline activo
+  </div>
 
   <!-- Toast Container -->
   <div id="toastContainer" class="toast-container"></div>
@@ -445,368 +611,153 @@
     <img id="fullscreenImg" src="" alt="Foto" />
   </div>
 
-  <!-- ==================== LOGIN SCREEN ==================== -->
+  <!-- ═══════════════════ SPLASH SCREEN ═══════════════════ -->
+  <div id="splashScreen">
+    <div class="splash-logo"><i class="fas fa-bolt"></i></div>
+    <div class="splash-title">BizFlow</div>
+    <div class="splash-subtitle">Portal del Técnico</div>
+  </div>
+
+  <!-- ═══════════════════ LOGIN SCREEN ═══════════════════ -->
   <div id="loginScreen">
     <div class="login-card">
       <div class="login-logo">
-        <div class="icon-wrap">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17l-5.1 3.026a.75.75 0 01-1.07-.82l1.68-5.68-4.33-3.68a.75.75 0 01.42-1.32l5.7-.33 2.22-5.3a.75.75 0 011.39 0l2.22 5.3 5.7.33a.75.75 0 01.42 1.32l-4.33 3.68 1.68 5.68a.75.75 0 01-1.07.82L12 15.17z"/>
-          </svg>
-        </div>
+        <div class="icon-wrap"><i class="fas fa-bolt"></i></div>
         <h1>BizFlow</h1>
         <p>Portal del Técnico</p>
       </div>
       <div class="form-group">
-        <label for="phoneInput">Teléfono</label>
-        <input id="phoneInput" type="tel" class="form-input" placeholder="+56 9 1234 5678" inputmode="tel" autocomplete="tel" />
+        <label for="codigoInput">Código de Técnico</label>
+        <input id="codigoInput" type="text" class="form-input" placeholder="Ej: TEC-001" autocomplete="username" />
       </div>
       <div class="form-group">
-        <label for="pinInput">PIN</label>
-        <input id="pinInput" type="password" class="form-input" placeholder="• • • •" inputmode="numeric" maxlength="4" autocomplete="current-password" />
+        <label for="passwordInput">Contraseña</label>
+        <input id="passwordInput" type="password" class="form-input" placeholder="••••••••" autocomplete="current-password" />
       </div>
-      <button class="btn-login" onclick="login()">Iniciar Sesión</button>
+      <button class="btn-login" id="btnLogin" onclick="App.login()">
+        <i class="fas fa-sign-in-alt"></i> Iniciar Sesión
+      </button>
       <div id="loginError" class="login-error"></div>
     </div>
   </div>
 
-  <!-- ==================== APP SCREEN ==================== -->
+  <!-- ═══════════════════ APP SCREEN ═══════════════════ -->
   <div id="appScreen">
     <!-- Header -->
     <header class="app-header">
       <div class="brand">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17l-5.1 3.026a.75.75 0 01-1.07-.82l1.68-5.68-4.33-3.68a.75.75 0 01.42-1.32l5.7-.33 2.22-5.3a.75.75 0 011.39 0l2.22 5.3 5.7.33a.75.75 0 01.42 1.32l-4.33 3.68 1.68 5.68a.75.75 0 01-1.07.82L12 15.17z"/>
-        </svg>
+        <i class="fas fa-bolt"></i>
         <div>
           <h1>BizFlow Técnico</h1>
-          <div id="tecnicoName" class="tecnico-name"></div>
+          <div id="headerTecnicoName" class="sub"></div>
         </div>
       </div>
-      <button class="btn-logout" onclick="logout()">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9"/>
-        </svg>
-        Salir
-      </button>
+      <div class="header-actions">
+        <button class="header-btn" onclick="App.loadOrdenes()" title="Refrescar">
+          <i class="fas fa-sync-alt"></i>
+        </button>
+        <button class="header-btn" onclick="App.logout()" title="Cerrar sesión">
+          <i class="fas fa-sign-out-alt"></i>
+        </button>
+      </div>
     </header>
 
-    <!-- Tabs -->
-    <div class="tabs-wrap">
-      <button class="tab-pill active" onclick="switchTab('pendientes')" id="tabPendientes">
-        Pendientes <span class="badge" id="badgePendientes">0</span>
-      </button>
-      <button class="tab-pill" onclick="switchTab('en_curso')" id="tabEnCurso">
-        En Curso <span class="badge" id="badgeEnCurso">0</span>
-      </button>
-      <button class="tab-pill" onclick="switchTab('completadas')" id="tabCompletadas">
-        Completadas <span class="badge" id="badgeCompletadas">0</span>
-      </button>
-    </div>
-
-    <!-- Pull to refresh indicator -->
-    <div id="pullIndicator" class="pull-indicator">↻ Actualizando órdenes...</div>
-
-    <!-- Orders Content -->
-    <main class="orders-container">
-      <div id="tabPendientesContent" class="tab-content active"></div>
-      <div id="tabEnCursoContent" class="tab-content"></div>
-      <div id="tabCompletadasContent" class="tab-content"></div>
-    </main>
-
-    <!-- Bottom Navigation -->
-    <nav class="bottom-nav">
-      <button class="nav-item active" id="navPendientes" onclick="switchTab('pendientes')">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/>
-        </svg>
-        Pendientes
-      </button>
-      <button class="nav-item" id="navEnCurso" onclick="switchTab('en_curso')">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17l-5.1 3.026a.75.75 0 01-1.07-.82l1.68-5.68-4.33-3.68a.75.75 0 01.42-1.32l5.7-.33 2.22-5.3a.75.75 0 011.39 0l2.22 5.3 5.7.33a.75.75 0 01.42 1.32l-4.33 3.68 1.68 5.68a.75.75 0 01-1.07.82L12 15.17z"/>
-        </svg>
-        En Curso
-      </button>
-      <button class="nav-item" id="navCompletadas" onclick="switchTab('completadas')">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-        </svg>
-        Completadas
-      </button>
-    </nav>
-  </div>
-
-  <!-- ==================== DETAIL MODAL ==================== -->
-  <div id="detailModal" class="modal-overlay" onclick="closeDetailModal(event)">
-    <div class="modal-sheet" onclick="event.stopPropagation()">
-      <div class="modal-handle"></div>
-      <div style="position:relative;">
-        <button class="modal-close" onclick="closeDetailModal()">&times;</button>
-        <div class="modal-title" id="detailTitle">Orden #000</div>
-        <div class="modal-subtitle" id="detailSubtitle"></div>
-        <button class="action-btn btn-primary" style="margin-top:14px;" onclick="showActionButtons()">
-          ⚡ Acciones
+    <!-- ═══ PAGE: Mis Órdenes (Tab 1) ═══ -->
+    <div id="pageOrdenes" class="page-view active">
+      <div class="status-filters" id="statusFilters">
+        <button class="status-filter active" data-filter="todas" onclick="App.filterOrdenes('todas', this)">
+          Todas <span class="count" id="countTodas">0</span>
+        </button>
+        <button class="status-filter" data-filter="en_proceso" onclick="App.filterOrdenes('en_proceso', this)">
+          En Proceso <span class="count" id="countEnProceso">0</span>
+        </button>
+        <button class="status-filter" data-filter="completada" onclick="App.filterOrdenes('completada', this)">
+          Completadas <span class="count" id="countCompletada">0</span>
+        </button>
+        <button class="status-filter" data-filter="pendiente" onclick="App.filterOrdenes('pendiente', this)">
+          Pendientes <span class="count" id="countPendiente">0</span>
         </button>
       </div>
-
-      <!-- Client Info -->
-      <div class="detail-section">
-        <div class="detail-section-title">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:18px;height:18px;">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/>
-          </svg>
-          Datos del Cliente
-        </div>
-        <div id="detailCliente"></div>
-      </div>
-
-      <!-- Vehicle Info -->
-      <div class="detail-section">
-        <div class="detail-section-title">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:18px;height:18px;">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12"/>
-          </svg>
-          Vehículo
-        </div>
-        <div id="detailVehiculo"></div>
-      </div>
-
-      <!-- Services / Diagnosis -->
-      <div class="detail-section">
-        <div class="detail-section-title">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:18px;height:18px;">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z"/>
-            <path stroke-linecap="round" stroke-linejoin="round" d="M6 6h.008v.008H6V6z"/>
-          </svg>
-          Servicios y Diagnóstico
-        </div>
-        <div id="detailServicios"></div>
-      </div>
-
-      <!-- Vehicle Checklist -->
-      <div class="detail-section" id="checklistSection" style="display:none;">
-        <div class="detail-section-title">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:18px;height:18px;">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-          </svg>
-          Checklist Vehículo
-        </div>
-        <div id="detailChecklist"></div>
-      </div>
-
-      <!-- Domicilio -->
-      <div class="detail-section" id="domicilioSection" style="display:none;">
-        <div class="detail-section-title">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:18px;height:18px;">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/>
-            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"/>
-          </svg>
-          Domicilio
-        </div>
-        <div id="detailDomicilio"></div>
-      </div>
-
-      <!-- Photos -->
-      <div class="detail-section">
-        <div class="detail-section-title">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:18px;height:18px;">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z"/>
-            <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z"/>
-          </svg>
-          Fotos del Trabajo
-        </div>
-        <div id="detailFotos" class="photos-grid"></div>
-        <div id="detailFotosEmpty" style="display:none;">
-          <p style="font-size:0.85rem;color:#64748b;text-align:center;padding:12px;">Sin fotos registradas</p>
-        </div>
-      </div>
-
-      <!-- Notes -->
-      <div class="detail-section">
-        <div class="detail-section-title">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:18px;height:18px;">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"/>
-          </svg>
-          Notas
-        </div>
-        <div id="detailNotas"></div>
-        <div id="detailNotasEmpty" style="display:none;">
-          <p style="font-size:0.85rem;color:#64748b;text-align:center;padding:12px;">Sin notas registradas</p>
-        </div>
-      </div>
-
-      <!-- Timeline -->
-      <div class="detail-section">
-        <div class="detail-section-title">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:18px;height:18px;">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/>
-          </svg>
-          Historial de Seguimiento
-        </div>
-        <div id="detailHistorial"></div>
-      </div>
+      <div class="pull-indicator" id="pullIndicator"><i class="fas fa-sync-alt fa-spin"></i> Actualizando...</div>
+      <div class="orders-list" id="ordersList"></div>
     </div>
+
+    <!-- ═══ PAGE: Detalle Orden (Tab 2) ═══ -->
+    <div id="pageDetalle" class="page-view">
+      <!-- Populated dynamically by JS -->
+    </div>
+
+    <!-- ═══ PAGE: Mi Perfil (Tab 3) ═══ -->
+    <div id="pagePerfil" class="page-view">
+      <!-- Populated dynamically by JS -->
+    </div>
+
+    <!-- FAB Refresh (only on orders tab) -->
+    <button class="fab-refresh" id="fabRefresh" onclick="App.loadOrdenes()">
+      <i class="fas fa-sync-alt"></i>
+    </button>
   </div>
 
-  <!-- ==================== ACTION BUTTONS (DETAIL) ==================== -->
-  <div id="actionButtons" class="modal-overlay" onclick="closeActions(event)" style="align-items:flex-end;">
-    <div class="modal-sheet" onclick="event.stopPropagation()" style="padding-bottom: max(24px, env(safe-area-inset-bottom));">
-      <div class="modal-handle"></div>
-      <div id="actionButtonsContent"></div>
-    </div>
-  </div>
+  <!-- ═══════════════════ BOTTOM NAV ═══════════════════ -->
+  <nav class="bottom-nav" id="bottomNav">
+    <button class="nav-item active" data-tab="ordenes" onclick="App.switchTab('ordenes')">
+      <i class="fas fa-clipboard-list"></i>
+      <span>Mis Órdenes</span>
+    </button>
+    <button class="nav-item" data-tab="detalle" onclick="App.switchTab('detalle')">
+      <i class="fas fa-tools"></i>
+      <span>Órdenes Abiertas</span>
+    </button>
+    <button class="nav-item" data-tab="perfil" onclick="App.switchTab('perfil')">
+      <i class="fas fa-user-cog"></i>
+      <span>Mi Perfil</span>
+    </button>
+  </nav>
 
-  <!-- ==================== PHOTO MODAL ==================== -->
-  <div id="photoModal" class="modal-overlay" onclick="closePhotoModal(event)">
+  <!-- ═══════════════════ COST MODAL ═══════════════════ -->
+  <div id="costModal" class="modal-overlay" onclick="App.closeModal('costModal')">
     <div class="modal-sheet" onclick="event.stopPropagation()">
       <div class="modal-handle"></div>
-      <div class="modal-title">📸 Subir Fotos</div>
-      <div class="modal-subtitle" id="photoModalSubtitle">Selecciona el tipo y fuente</div>
-
-      <div class="photo-type-selector">
-        <button class="photo-type-btn selected" onclick="selectPhotoType('antes', this)">🔸 Antes</button>
-        <button class="photo-type-btn" onclick="selectPhotoType('durante', this)">🔹 Durante</button>
-        <button class="photo-type-btn" onclick="selectPhotoType('despues', this)">🔻 Después</button>
+      <div class="modal-title"><i class="fas fa-dollar-sign"></i> Agregar Costo</div>
+      <div class="modal-subtitle">Registra un costo adicional para esta orden</div>
+      <div class="field-group">
+        <label class="field-label">Concepto</label>
+        <input type="text" class="field-input" id="costConcepto" placeholder="Ej: Repuesto frenos" />
       </div>
-
-      <div class="photo-actions">
-        <button class="photo-action-btn camera" onclick="capturePhoto('camera')">
-          📷 Cámara
-        </button>
-        <button class="photo-action-btn gallery" onclick="capturePhoto('gallery')">
-          🖼️ Galería
-        </button>
-      </div>
-
-      <input type="file" id="photoInput" accept="image/*" style="display:none;" />
-      <div id="photoPreviewGrid" class="photos-grid"></div>
-    </div>
-  </div>
-
-  <!-- ==================== SIGNATURE MODAL ==================== -->
-  <div id="signatureModal" class="modal-overlay" onclick="closeSignatureModal(event)">
-    <div class="modal-sheet" onclick="event.stopPropagation()">
-      <div class="modal-handle"></div>
-      <div class="modal-title">✍️ Solicitar Firma</div>
-      <div class="modal-subtitle">Genera un enlace para que el cliente firme</div>
-
-      <div class="share-link-box">
-        <input type="text" id="signatureLink" readonly />
-        <button onclick="copySignatureLink()">Copiar</button>
-      </div>
-
-      <div style="display:flex;gap:10px;margin-bottom:16px;">
-        <button class="photo-action-btn camera" style="flex:1;" onclick="shareWhatsApp()">
-          💬 WhatsApp
-        </button>
-        <button class="photo-action-btn gallery" style="flex:1;" onclick="shareLinkGeneric()">
-          🔗 Compartir
-        </button>
-      </div>
-
-      <div class="close-field">
-        <label>Notas adicionales</label>
-        <textarea id="signatureNotes" placeholder="Observaciones para el cliente..."></textarea>
-      </div>
-
-      <div class="close-field">
-        <label>Estado de Pago</label>
-        <div class="radio-group" id="sigPagoEstado">
-          <button class="radio-option selected" onclick="selectRadio(this,'sigPagoEstado')">Pagado</button>
-          <button class="radio-option" onclick="selectRadio(this,'sigPagoEstado')">Parcial</button>
-          <button class="radio-option" onclick="selectRadio(this,'sigPagoEstado')">Pendiente</button>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div class="field-group">
+          <label class="field-label">Cantidad</label>
+          <input type="number" class="field-input" id="costCantidad" value="1" min="1" />
+        </div>
+        <div class="field-group">
+          <label class="field-label">Precio Unitario</label>
+          <input type="number" class="field-input" id="costPrecio" value="0" step="0.01" />
         </div>
       </div>
-
-      <div class="close-field">
-        <label>Método de Pago</label>
-        <div class="radio-group" id="sigPagoMetodo">
-          <button class="radio-option" onclick="selectRadio(this,'sigPagoMetodo')">Efectivo</button>
-          <button class="radio-option selected" onclick="selectRadio(this,'sigPagoMetodo')">Transferencia</button>
-          <button class="radio-option" onclick="selectRadio(this,'sigPagoMetodo')">Tarjeta</button>
-          <button class="radio-option" onclick="selectRadio(this,'sigPagoMetodo')">Cheque</button>
+      <div class="field-group">
+        <label class="field-label">Tipo</label>
+        <div style="display:flex;gap:6px;">
+          <button class="photo-type-btn selected" onclick="App.selectCostType('repuesto',this)">Repuesto</button>
+          <button class="photo-type-btn" onclick="App.selectCostType('servicio',this)">Servicio</button>
+          <button class="photo-type-btn" onclick="App.selectCostType('mano_obra',this)">Mano Obra</button>
+          <button class="photo-type-btn" onclick="App.selectCostType('otro',this)">Otro</button>
         </div>
       </div>
-
-      <button class="action-btn btn-dark" onclick="cerrarOrdenDesdeFirma()">
-        🔒 Cerrar Orden
+      <button class="btn-action btn-primary-action" onclick="App.addCost()">
+        <i class="fas fa-plus"></i> Agregar Costo
       </button>
     </div>
   </div>
 
-  <!-- ==================== CLOSE ORDER MODAL ==================== -->
-  <div id="closeModal" class="modal-overlay" onclick="closeCloseModal(event)">
+  <!-- ═══════════════════ NOTE MODAL ═══════════════════ -->
+  <div id="noteModal" class="modal-overlay" onclick="App.closeModal('noteModal')">
     <div class="modal-sheet" onclick="event.stopPropagation()">
       <div class="modal-handle"></div>
-      <div class="modal-title">🔒 Cerrar Orden</div>
-      <div class="modal-subtitle">Confirma el cierre de esta orden</div>
-
-      <div class="close-field">
-        <label>Notas de cierre</label>
-        <textarea id="closeNotes" placeholder="Detalles del trabajo realizado, observaciones..."></textarea>
-      </div>
-
-      <div class="close-field">
-        <label>Estado de Pago</label>
-        <div class="radio-group" id="closePagoEstado">
-          <button class="radio-option" onclick="selectRadio(this,'closePagoEstado')">Pagado</button>
-          <button class="radio-option" onclick="selectRadio(this,'closePagoEstado')">Parcial</button>
-          <button class="radio-option selected" onclick="selectRadio(this,'closePagoEstado')">Pendiente</button>
-        </div>
-      </div>
-
-      <div class="close-field">
-        <label>Método de Pago</label>
-        <div class="radio-group" id="closePagoMetodo">
-          <button class="radio-option selected" onclick="selectRadio(this,'closePagoMetodo')">Efectivo</button>
-          <button class="radio-option" onclick="selectRadio(this,'closePagoMetodo')">Transferencia</button>
-          <button class="radio-option" onclick="selectRadio(this,'closePagoMetodo')">Tarjeta</button>
-          <button class="radio-option" onclick="selectRadio(this,'closePagoMetodo')">Cheque</button>
-        </div>
-      </div>
-
-      <button class="action-btn btn-dark" onclick="confirmCloseOrder()">
-        🔒 Confirmar Cierre
-      </button>
-    </div>
-  </div>
-
-  <!-- ==================== NOTE MODAL ==================== -->
-  <div id="noteModal" class="modal-overlay" onclick="closeNoteModal(event)">
-    <div class="modal-sheet" onclick="event.stopPropagation()">
-      <div class="modal-handle"></div>
-      <div class="modal-title">📝 Agregar Nota</div>
+      <div class="modal-title"><i class="fas fa-sticky-note"></i> Agregar Nota</div>
       <div class="modal-subtitle">Escribe una nota para esta orden</div>
-      <div class="note-modal-area">
-        <textarea id="noteText" placeholder="Escribe tu nota aquí..."></textarea>
-      </div>
-      <button class="action-btn btn-dark" style="margin-top:12px;" onclick="confirmAddNote()">
-        💾 Guardar Nota
-      </button>
-    </div>
-  </div>
-
-  <!-- ==================== NO COMPLETADA MODAL ==================== -->
-  <div id="noCompletadaModal" class="modal-overlay" onclick="closeNoCompletadaModal(event)">
-    <div class="modal-sheet" onclick="event.stopPropagation()">
-      <div class="modal-handle"></div>
-      <div class="modal-title">❌ No Completada</div>
-      <div class="modal-subtitle">Selecciona el motivo</div>
-      <div class="reason-options">
-        <button class="reason-option" onclick="selectReason(this, 'cliente_no_presente')">👤 Cliente no presente</button>
-        <button class="reason-option" onclick="selectReason(this, 'vehiculo_no_corresponde')">🚗 Vehículo no corresponde</button>
-        <button class="reason-option" onclick="selectReason(this, 'sin_piezas')">🔧 Sin piezas disponibles</button>
-        <button class="reason-option" onclick="selectReason(this, 'fuera_de_rango')">📍 Fuera de rango</button>
-        <button class="reason-option" onclick="selectReason(this, 'cliente_rechaza')">⛔ Cliente rechaza servicio</button>
-        <button class="reason-option" onclick="selectReason(this, 'otro')">📋 Otro motivo</button>
-      </div>
-      <div class="close-field" id="noCompletadaNotesField" style="display:none;">
-        <label>Detalles adicionales</label>
-        <textarea id="noCompletadaNotes" placeholder="Describe el motivo..."></textarea>
-      </div>
-      <button class="action-btn btn-red" onclick="confirmNoCompletada()">
-        ❌ Confirmar No Completada
+      <textarea class="field-textarea" id="noteContenido" placeholder="Describe observaciones, diagnóstico, etc."></textarea>
+      <button class="btn-action btn-primary-action" style="margin-top:12px;" onclick="App.addNote()">
+        <i class="fas fa-save"></i> Guardar Nota
       </button>
     </div>
   </div>

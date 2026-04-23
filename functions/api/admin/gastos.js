@@ -1,229 +1,159 @@
 // ============================================================
-// BizFlow - Gastos CRUD API
-// GET: list gastos with filters ?categoria, ?desde, ?hasta
-// POST: create gasto
-// PUT: update gasto
-// DELETE: delete by ?id
+// BizFlow - Admin Gastos API
+// GET: List expenses with filters
+// POST: Create expense (optional R2 receipt upload)
 // ============================================================
 
-import {
-  handleOptions,
-  parseBody,
-  successRes,
-  errorRes,
-  chileDate,
-  chileNowISO,
-  asegurarColumnasFaltantes,
-  validateRequired,
-} from '../../lib/db-helpers.js';
+import { jsonResponse, errorResponse, handleCors, hoyISO } from '../../lib/db-helpers.js';
+import { subirArchivoR2, generarRutaDocumento, base64ToArrayBuffer } from '../../lib/r2-helpers.js';
 
-export async function onRequestOptions() {
-  return handleOptions();
+export async function onRequest(context) {
+  const cors = handleCors(context.request);
+  if (cors) return cors;
+
+  const { request, env } = context;
+  const { DB, MEDIA } = env;
+
+  try {
+    if (request.method === 'GET') {
+      return await handleGet(request, DB);
+    } else if (request.method === 'POST') {
+      return await handlePost(request, DB, MEDIA);
+    } else {
+      return errorResponse('Método no permitido', 405);
+    }
+  } catch (error) {
+    console.error('Gastos error:', error);
+    return errorResponse('Error en gastos: ' + error.message, 500);
+  }
 }
 
-// GET - List gastos
-export async function onRequestGet(context) {
-  const { env, request } = context;
+async function handleGet(request, DB) {
   const url = new URL(request.url);
+  const usuarioId = url.searchParams.get('usuario_id');
+  const fechaDesde = url.searchParams.get('fecha_desde');
+  const fechaHasta = url.searchParams.get('fecha_hasta');
   const categoria = url.searchParams.get('categoria');
-  const desde = url.searchParams.get('desde');
-  const hasta = url.searchParams.get('hasta');
   const page = parseInt(url.searchParams.get('page')) || 1;
-  const limit = Math.min(parseInt(url.searchParams.get('limit')) || 50, 200);
+  const limit = parseInt(url.searchParams.get('limit')) || 20;
+
+  if (!usuarioId) {
+    return errorResponse('usuario_id es requerido');
+  }
+
+  let whereClause = 'WHERE usuario_id = ?';
+  const params = [usuarioId];
+
+  if (fechaDesde) {
+    whereClause += ' AND fecha >= ?';
+    params.push(fechaDesde);
+  }
+
+  if (fechaHasta) {
+    whereClause += ' AND fecha <= ?';
+    params.push(fechaHasta);
+  }
+
+  if (categoria) {
+    whereClause += ' AND categoria = ?';
+    params.push(categoria);
+  }
+
+  // Count
+  const countResult = await DB.prepare(
+    `SELECT COUNT(*) as total FROM GastosNegocio ${whereClause}`
+  ).bind(...params).first();
+
+  // Total sum
+  const sumResult = await DB.prepare(
+    `SELECT COALESCE(SUM(monto), 0) as total_gastos FROM GastosNegocio ${whereClause}`
+  ).bind(...params).first();
+
+  // Results
   const offset = (page - 1) * limit;
+  const { results } = await DB.prepare(`
+    SELECT * FROM GastosNegocio
+    ${whereClause}
+    ORDER BY fecha DESC, creado_en DESC
+    LIMIT ? OFFSET ?
+  `).bind(...params, limit, offset).all();
 
-  try {
-    await asegurarColumnasFaltantes(env);
+  // Category breakdown
+  const { results: porCategoria } = await DB.prepare(`
+    SELECT categoria, COUNT(*) as cantidad, SUM(monto) as total
+    FROM GastosNegocio
+    ${whereClause}
+    GROUP BY categoria
+    ORDER BY total DESC
+  `).bind(...params).all();
 
-    let query = `SELECT * FROM GastosNegocio WHERE (negocio_id = 1 OR negocio_id IS NULL)`;
-    const countQuery = `SELECT COUNT(*) as total FROM GastosNegocio WHERE (negocio_id = 1 OR negocio_id IS NULL)`;
-    const params = [];
-    const countParams = [];
-
-    if (categoria) {
-      query += ` AND categoria = ?`;
-      countQuery += ` AND categoria = ?`;
-      params.push(categoria);
-      countParams.push(categoria);
+  return jsonResponse({
+    gastos: results || [],
+    total_gastos: sumResult?.total_gastos || 0,
+    por_categoria: porCategoria || [],
+    paginacion: {
+      page,
+      limit,
+      total: countResult?.total || 0,
+      total_pages: Math.ceil((countResult?.total || 0) / limit),
     }
-    if (desde) {
-      query += ` AND fecha_gasto >= ?`;
-      countQuery += ` AND fecha_gasto >= ?`;
-      params.push(desde);
-      countParams.push(desde);
-    }
-    if (hasta) {
-      query += ` AND fecha_gasto <= ?`;
-      countQuery += ` AND fecha_gasto <= ?`;
-      params.push(hasta);
-      countParams.push(hasta);
-    }
-
-    query += ` ORDER BY fecha_gasto DESC, id DESC LIMIT ? OFFSET ?`;
-    params.push(limit, offset);
-
-    const [result, countResult] = await Promise.all([
-      env.DB.prepare(query).bind(...params).all(),
-      env.DB.prepare(countQuery).bind(...countParams).first(),
-    ]);
-
-    // Get totals by category
-    let totalQuery = `
-      SELECT categoria, COUNT(*) as cantidad, COALESCE(SUM(monto), 0) as total
-      FROM GastosNegocio WHERE (negocio_id = 1 OR negocio_id IS NULL)
-    `;
-    const totalParams = [];
-    if (categoria) {
-      totalQuery += ` AND categoria = ?`;
-      totalParams.push(categoria);
-    }
-    if (desde) {
-      totalQuery += ` AND fecha_gasto >= ?`;
-      totalParams.push(desde);
-    }
-    if (hasta) {
-      totalQuery += ` AND fecha_gasto <= ?`;
-      totalParams.push(hasta);
-    }
-    totalQuery += ` GROUP BY categoria ORDER BY total DESC`;
-
-    const totales = await env.DB.prepare(totalQuery).bind(...totalParams).all();
-
-    return successRes({
-      gastos: result.results || [],
-      totales_por_categoria: totales.results || [],
-      paginacion: {
-        total: countResult?.total || 0,
-        page,
-        limit,
-        total_pages: Math.ceil((countResult?.total || 0) / limit),
-      },
-    });
-  } catch (error) {
-    console.error('Gastos list error:', error);
-    return errorRes('Error listando gastos: ' + error.message, 500);
-  }
+  });
 }
 
-// POST - Create gasto
-export async function onRequestPost(context) {
-  const { env, request } = context;
-  const data = await parseBody(request);
-  const { concepto, categoria, monto, fecha_gasto, observaciones, registrado_por } = data;
+async function handlePost(request, DB, MEDIA) {
+  const data = await request.json();
 
-  const validation = validateRequired(data, ['concepto', 'monto']);
-  if (!validation.valid) {
-    return errorRes(`Campos requeridos faltantes: ${validation.missing.join(', ')}`);
-  }
+  const {
+    usuario_id, concepto, monto, categoria, fecha, descripcion, comprobante_base64,
+  } = data;
 
-  const montoNum = parseFloat(monto);
-  if (isNaN(montoNum) || montoNum < 0) {
-    return errorRes('Monto debe ser un número positivo');
-  }
+  if (!usuario_id) return errorResponse('usuario_id es requerido');
+  if (!concepto || !concepto.trim()) return errorResponse('concepto es requerido');
+  if (!monto || parseFloat(monto) <= 0) return errorResponse('monto debe ser positivo');
 
-  try {
-    await asegurarColumnasFaltantes(env);
+  // Handle receipt upload if provided
+  let comprobante = '';
+  if (comprobante_base64) {
+    try {
+      const buffer = base64ToArrayBuffer(comprobante_base64);
+      const ruta = generarRutaDocumento('comprobante', `${concepto.trim().substring(0, 30)}_${Date.now()}.jpg`);
 
-    const result = await env.DB.prepare(`
-      INSERT INTO GastosNegocio (concepto, categoria, monto, fecha_gasto, observaciones, registrado_por, negocio_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, 1, ?)
-    `).bind(
-      concepto.trim(),
-      categoria?.trim() || 'Otros',
-      montoNum,
-      fecha_gasto || chileDate(),
-      observaciones?.trim() || null,
-      registrado_por || null,
-      chileNowISO()
-    ).run();
+      await subirArchivoR2(MEDIA, ruta, buffer, {
+        contentType: 'image/jpeg',
+        metadata: { tipo: 'comprobante_gasto', concepto: concepto.trim() },
+      });
 
-    const gasto = await env.DB.prepare(
-      `SELECT * FROM GastosNegocio WHERE id = ?`
-    ).bind(result.meta.last_row_id).first();
+      comprobante = ruta;
 
-    return successRes(gasto, 201);
-  } catch (error) {
-    console.error('Gasto create error:', error);
-    return errorRes('Error creando gasto: ' + error.message, 500);
-  }
-}
-
-// PUT - Update gasto
-export async function onRequestPut(context) {
-  const { env, request } = context;
-  const data = await parseBody(request);
-  const { id, ...fields } = data;
-
-  if (!id) {
-    return errorRes('ID es requerido');
-  }
-
-  try {
-    await asegurarColumnasFaltantes(env);
-
-    const existing = await env.DB.prepare(
-      `SELECT id FROM GastosNegocio WHERE id = ?`
-    ).bind(id).first();
-
-    if (!existing) {
-      return errorRes('Gasto no encontrado', 404);
+      // Register in MediosR2
+      await DB.prepare(`
+        INSERT INTO MediosR2 (usuario_id, ruta, nombre_original, mime_type, tamano_bytes, tipo_recurso)
+        VALUES (?, ?, ?, ?, ?, 'comprobante')
+      `).bind(usuario_id, ruta, `comprobante_${Date.now()}.jpg`, 'image/jpeg', buffer.byteLength || 0).run();
+    } catch (err) {
+      console.error('Error subiendo comprobante:', err);
+      // Non-critical, continue without receipt
     }
-
-    const allowedFields = ['concepto', 'categoria', 'monto', 'fecha_gasto', 'observaciones', 'registrado_por'];
-    const updates = [];
-    const params = [];
-
-    for (const [key, value] of Object.entries(fields)) {
-      if (!allowedFields.includes(key)) continue;
-      updates.push(`${key} = ?`);
-      params.push(key === 'monto' ? (parseFloat(value) || 0) : (value?.trim?.() || value || null));
-    }
-
-    if (updates.length === 0) {
-      return errorRes('No hay campos para actualizar');
-    }
-
-    params.push(id);
-
-    await env.DB.prepare(
-      `UPDATE GastosNegocio SET ${updates.join(', ')} WHERE id = ?`
-    ).bind(...params).run();
-
-    const gasto = await env.DB.prepare(
-      `SELECT * FROM GastosNegocio WHERE id = ?`
-    ).bind(id).first();
-
-    return successRes(gasto);
-  } catch (error) {
-    console.error('Gasto update error:', error);
-    return errorRes('Error actualizando gasto: ' + error.message, 500);
-  }
-}
-
-// DELETE - Delete gasto
-export async function onRequestDelete(context) {
-  const { env, request } = context;
-  const url = new URL(request.url);
-  const id = url.searchParams.get('id');
-
-  if (!id) {
-    return errorRes('ID es requerido');
   }
 
-  try {
-    const existing = await env.DB.prepare(
-      `SELECT id FROM GastosNegocio WHERE id = ?`
-    ).bind(id).first();
+  const now = hoyISO();
 
-    if (!existing) {
-      return errorRes('Gasto no encontrado', 404);
-    }
+  const result = await DB.prepare(`
+    INSERT INTO GastosNegocio (usuario_id, concepto, monto, categoria, fecha, descripcion, comprobante)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    usuario_id,
+    concepto.trim(),
+    parseFloat(monto),
+    categoria?.trim() || 'operativo',
+    fecha || now,
+    descripcion?.trim() || '',
+    comprobante
+  ).run();
 
-    await env.DB.prepare(`DELETE FROM GastosNegocio WHERE id = ?`).bind(id).run();
+  const gasto = await DB.prepare(
+    'SELECT * FROM GastosNegocio WHERE id = ?'
+  ).bind(result.meta.last_row_id).first();
 
-    return successRes({ deleted: true, id: parseInt(id) });
-  } catch (error) {
-    console.error('Gasto delete error:', error);
-    return errorRes('Error eliminando gasto: ' + error.message, 500);
-  }
+  return jsonResponse({ gasto }, 201);
 }

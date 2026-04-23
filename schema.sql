@@ -1,345 +1,495 @@
--- ============================================
--- BIZFLOW - Schema completo de base de datos
--- Cloudflare D1 (SQLite)
--- ============================================
+-- ============================================================
+-- BizFlow - Schema D1 (SQLite)
+-- CRM SaaS + Gestor de Ordenes de Trabajo + Landing Pages
+-- ============================================================
 
--- Configuracion global del sistema
-CREATE TABLE IF NOT EXISTS Configuracion (
-  id INTEGER PRIMARY KEY DEFAULT 1,
-  ultimo_numero_orden INTEGER DEFAULT 0,
-  whatsapp_ultramsg_instance TEXT,
-  whatsapp_ultramsg_token TEXT,
-  domicilio_habilitado INTEGER DEFAULT 0,
-  domicilio_taller_lat REAL DEFAULT 0,
-  domicilio_taller_lng REAL DEFAULT 0,
-  domicilio_radio_gratis_km REAL DEFAULT 5,
-  domicilio_tarifa_por_km REAL DEFAULT 500,
-  domicilio_cargo_minimo REAL DEFAULT 1000,
-  domicilio_cobertura_maxima_km REAL DEFAULT 50,
-  domicilio_modo_cobro TEXT DEFAULT 'no_cobrar',
-  negocio_nombre TEXT DEFAULT 'Mi Negocio',
-  negocio_direccion TEXT DEFAULT '',
-  negocio_telefono TEXT DEFAULT '',
-  negocio_email TEXT DEFAULT '',
-  negocio_logo TEXT DEFAULT '',
-  created_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now'))
+-- ============================================================
+-- 1. USUARIOS / ADMINISTRADORES
+-- ============================================================
+CREATE TABLE IF NOT EXISTS Usuarios (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  nombre TEXT NOT NULL,
+  rol TEXT DEFAULT 'admin' CHECK(rol IN ('admin', 'manager', 'user')),
+  empresa TEXT DEFAULT '',
+  telefono TEXT DEFAULT '',
+  avatar TEXT DEFAULT '',
+  activo INTEGER DEFAULT 1,
+  creado_en TEXT DEFAULT (datetime('now')),
+  actualizado_en TEXT DEFAULT (datetime('now'))
 );
 
--- Insert config por defecto
-INSERT OR IGNORE INTO Configuracion (id) VALUES (1);
-
--- Clientes
+-- ============================================================
+-- 2. CLIENTES (CRM)
+-- ============================================================
 CREATE TABLE IF NOT EXISTS Clientes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  usuario_id INTEGER,
+  empresa TEXT DEFAULT '',
   nombre TEXT NOT NULL,
-  rut TEXT,
-  telefono TEXT NOT NULL,
-  email TEXT,
-  direccion TEXT,
-  negocio_id TEXT DEFAULT 'default',
-  fecha_registro TEXT DEFAULT (datetime('now'))
+  apellido TEXT DEFAULT '',
+  cedula_rif TEXT DEFAULT '',
+  email TEXT DEFAULT '',
+  telefono TEXT DEFAULT '',
+  telefono2 TEXT DEFAULT '',
+  direccion TEXT DEFAULT '',
+  ciudad TEXT DEFAULT '',
+  estado TEXT DEFAULT '',
+  codigo_postal TEXT DEFAULT '',
+  notas TEXT DEFAULT '',
+  origen TEXT DEFAULT 'manual' CHECK(origen IN ('manual', 'landing', 'whatsapp', 'referido')),
+  landing_page_id INTEGER,
+  activo INTEGER DEFAULT 1,
+  creado_en TEXT DEFAULT (datetime('now')),
+  actualizado_en TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (usuario_id) REFERENCES Usuarios(id) ON DELETE SET NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_clientes_telefono ON Clientes(telefono);
-CREATE INDEX IF NOT EXISTS idx_clientes_negocio ON Clientes(negocio_id);
-
--- Vehiculos
+-- ============================================================
+-- 3. VEHICULOS
+-- ============================================================
 CREATE TABLE IF NOT EXISTS Vehiculos (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  cliente_id INTEGER,
-  patente_placa TEXT NOT NULL UNIQUE,
-  marca TEXT,
-  modelo TEXT,
-  anio INTEGER,
-  cilindrada TEXT,
-  combustible TEXT,
-  kilometraje INTEGER,
-  negocio_id TEXT DEFAULT 'default',
-  fecha_registro TEXT DEFAULT (datetime('now')),
-  FOREIGN KEY (cliente_id) REFERENCES Clientes(id) ON DELETE SET NULL
+  cliente_id INTEGER NOT NULL,
+  placa TEXT NOT NULL,
+  marca TEXT DEFAULT '',
+  modelo TEXT DEFAULT '',
+  anio INTEGER DEFAULT 0,
+  color TEXT DEFAULT '',
+  vin TEXT DEFAULT '',
+  kilometraje INTEGER DEFAULT 0,
+  notas TEXT DEFAULT '',
+  activo INTEGER DEFAULT 1,
+  creado_en TEXT DEFAULT (datetime('now')),
+  actualizado_en TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (cliente_id) REFERENCES Clientes(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_vehiculos_patente ON Vehiculos(patente_placa);
-CREATE INDEX IF NOT EXISTS idx_vehiculos_negocio ON Vehiculos(negocio_id);
+-- ============================================================
+-- 4. CATALOGO DE SERVICIOS
+-- ============================================================
+CREATE TABLE IF NOT EXISTS ServiciosCatalogo (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  usuario_id INTEGER,
+  nombre TEXT NOT NULL,
+  descripcion TEXT DEFAULT '',
+  precio REAL DEFAULT 0,
+  duracion_minutos INTEGER DEFAULT 60,
+  categoria TEXT DEFAULT 'general',
+  activo INTEGER DEFAULT 1,
+  creado_en TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (usuario_id) REFERENCES Usuarios(id) ON DELETE SET NULL
+);
 
--- Tecnicos / Operarios
+-- ============================================================
+-- 5. TECNICOS / OPERARIOS
+-- ============================================================
 CREATE TABLE IF NOT EXISTS Tecnicos (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  usuario_id INTEGER NOT NULL,
+  codigo TEXT UNIQUE NOT NULL,
   nombre TEXT NOT NULL,
-  telefono TEXT NOT NULL UNIQUE,
-  email TEXT,
-  pin TEXT NOT NULL,
+  especialidad TEXT DEFAULT 'general',
+  telefono TEXT DEFAULT '',
+  email TEXT DEFAULT '',
+  latitud REAL DEFAULT 0,
+  longitud REAL DEFAULT 0,
+  ubicacion_actual TEXT DEFAULT '',
   activo INTEGER DEFAULT 1,
-  comision_porcentaje REAL NOT NULL DEFAULT 40,
-  especialidad TEXT,
-  negocio_id TEXT DEFAULT 'default',
-  fecha_registro TEXT DEFAULT (datetime('now'))
+  creado_en TEXT DEFAULT (datetime('now')),
+  actualizado_en TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (usuario_id) REFERENCES Usuarios(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_tecnicos_negocio ON Tecnicos(negocio_id);
-
--- Ordenes de Trabajo (core)
+-- ============================================================
+-- 6. ORDENES DE TRABAJO (CORE)
+-- ============================================================
 CREATE TABLE IF NOT EXISTS OrdenesTrabajo (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  numero_orden INTEGER NOT NULL,
-  token TEXT NOT NULL UNIQUE,
+  usuario_id INTEGER NOT NULL,
+  numero INTEGER NOT NULL,
   cliente_id INTEGER,
   vehiculo_id INTEGER,
-  tecnico_asignado_id INTEGER,
-  patente_placa TEXT,
-  fecha_ingreso TEXT,
-  hora_ingreso TEXT,
-  recepcionista TEXT,
-  marca TEXT,
-  modelo TEXT,
-  anio INTEGER,
-  cilindrada TEXT,
-  combustible TEXT,
-  kilometraje TEXT,
-  direccion TEXT,
-  referencia_direccion TEXT,
-  trabajo_frenos INTEGER DEFAULT 0,
-  detalle_frenos TEXT,
-  trabajo_luces INTEGER DEFAULT 0,
-  detalle_luces TEXT,
-  trabajo_tren_delantero INTEGER DEFAULT 0,
-  detalle_tren_delantero TEXT,
-  trabajo_correas INTEGER DEFAULT 0,
-  detalle_correas TEXT,
-  trabajo_componentes INTEGER DEFAULT 0,
-  detalle_componentes TEXT,
-  nivel_combustible TEXT,
-  check_paragolfe_delantero_der INTEGER DEFAULT 0,
-  check_puerta_delantera_der INTEGER DEFAULT 0,
-  check_puerta_trasera_der INTEGER DEFAULT 0,
-  check_paragolfe_trasero_izq INTEGER DEFAULT 0,
-  check_otros_carroceria TEXT,
-  monto_total REAL DEFAULT 0,
-  monto_abono REAL DEFAULT 0,
-  monto_restante REAL DEFAULT 0,
-  metodo_pago TEXT,
-  diagnostico_checks TEXT,
-  diagnostico_observaciones TEXT,
-  servicios_seleccionados TEXT,
-  estado TEXT DEFAULT 'Enviada',
-  estado_trabajo TEXT,
-  firma_imagen TEXT,
-  fecha_aprobacion TEXT,
+  tecnico_id INTEGER,
+  estado TEXT DEFAULT 'pendiente' CHECK(estado IN (
+    'pendiente', 'asignada', 'en_proceso', 'pausada',
+    'completada', 'cancelada', 'aprobada', 'cerrada'
+  )),
+  tipo TEXT DEFAULT 'mantenimiento',
+  prioridad TEXT DEFAULT 'normal' CHECK(prioridad IN ('baja', 'normal', 'alta', 'urgente')),
+  titulo TEXT DEFAULT '',
+  descripcion TEXT DEFAULT '',
+  diagnostico TEXT DEFAULT '',
+  trabajo_realizado TEXT DEFAULT '',
+  recomendaciones TEXT DEFAULT '',
   fecha_creacion TEXT DEFAULT (datetime('now')),
-  fecha_completado TEXT,
-  distancia_km REAL DEFAULT 0,
-  cargo_domicilio REAL DEFAULT 0,
-  domicilio_modo_cobro TEXT DEFAULT 'no_cobrar',
-  es_express INTEGER DEFAULT 0,
-  notas TEXT,
-  prioridad TEXT DEFAULT 'normal',
-  negocio_id TEXT DEFAULT 'default',
+  fecha_asignacion TEXT DEFAULT '',
+  fecha_inicio TEXT DEFAULT '',
+  fecha_fin TEXT DEFAULT '',
+  fecha_aprobacion_cliente TEXT DEFAULT '',
+  latitud_ubicacion REAL DEFAULT 0,
+  longitud_ubicacion REAL DEFAULT 0,
+  subtotal REAL DEFAULT 0,
+  impuesto REAL DEFAULT 0,
+  total REAL DEFAULT 0,
+  metodo_pago TEXT DEFAULT '' CHECK(metodo_pago IN ('efectivo', 'transferencia', 'tarjeta', 'punto_venta', 'mixto', '')),
+  token_aprobacion TEXT UNIQUE,
+  token_aprobacion_tecnico TEXT UNIQUE,
+  firma_cliente TEXT DEFAULT '',
+  firma_tecnico TEXT DEFAULT '',
+  aprobada_por_cliente INTEGER DEFAULT 0,
+  aprobada_por_tecnico INTEGER DEFAULT 0,
+  calificacion INTEGER DEFAULT 0,
+  comentario_calificacion TEXT DEFAULT '',
+  origen TEXT DEFAULT 'manual' CHECK(origen IN ('manual', 'landing', 'whatsapp', 'web')),
+  notas_internas TEXT DEFAULT '',
+  creado_en TEXT DEFAULT (datetime('now')),
+  actualizado_en TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (usuario_id) REFERENCES Usuarios(id) ON DELETE CASCADE,
   FOREIGN KEY (cliente_id) REFERENCES Clientes(id) ON DELETE SET NULL,
   FOREIGN KEY (vehiculo_id) REFERENCES Vehiculos(id) ON DELETE SET NULL,
-  FOREIGN KEY (tecnico_asignado_id) REFERENCES Tecnicos(id) ON DELETE SET NULL
+  FOREIGN KEY (tecnico_id) REFERENCES Tecnicos(id) ON DELETE SET NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_ot_estado ON OrdenesTrabajo(estado);
-CREATE INDEX IF NOT EXISTS idx_ot_estado_trabajo ON OrdenesTrabajo(estado_trabajo);
-CREATE INDEX IF NOT EXISTS idx_ot_patente ON OrdenesTrabajo(patente_placa);
-CREATE INDEX IF NOT EXISTS idx_ot_tecnico ON OrdenesTrabajo(tecnico_asignado_id);
-CREATE INDEX IF NOT EXISTS idx_ot_fecha ON OrdenesTrabajo(fecha_creacion);
-CREATE INDEX IF NOT EXISTS idx_ot_negocio ON OrdenesTrabajo(negocio_id);
-
--- Costos adicionales por orden
+-- ============================================================
+-- 7. COSTOS ADICIONALES DE OT
+-- ============================================================
 CREATE TABLE IF NOT EXISTS CostosAdicionales (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   orden_id INTEGER NOT NULL,
   concepto TEXT NOT NULL,
-  monto REAL NOT NULL,
-  categoria TEXT NOT NULL DEFAULT 'Mano de Obra',
-  fecha_registro TEXT DEFAULT (datetime('now')),
-  registrado_por TEXT,
-  negocio_id TEXT DEFAULT 'default',
+  cantidad INTEGER DEFAULT 1,
+  precio_unitario REAL DEFAULT 0,
+  total REAL DEFAULT 0,
+  tipo TEXT DEFAULT 'repuesto' CHECK(tipo IN ('repuesto', 'servicio', 'mano_obra', 'otro')),
+  creado_en TEXT DEFAULT (datetime('now')),
   FOREIGN KEY (orden_id) REFERENCES OrdenesTrabajo(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_costos_orden ON CostosAdicionales(orden_id);
-
--- Gastos del negocio
+-- ============================================================
+-- 8. GASTOS DEL NEGOCIO
+-- ============================================================
 CREATE TABLE IF NOT EXISTS GastosNegocio (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  usuario_id INTEGER NOT NULL,
   concepto TEXT NOT NULL,
-  categoria TEXT NOT NULL DEFAULT 'Otros',
   monto REAL NOT NULL,
-  fecha_gasto TEXT NOT NULL,
-  observaciones TEXT,
-  registrado_por TEXT,
-  negocio_id TEXT DEFAULT 'default',
-  fecha_registro TEXT DEFAULT (datetime('now'))
+  categoria TEXT DEFAULT 'operativo',
+  fecha TEXT DEFAULT (datetime('now')),
+  descripcion TEXT DEFAULT '',
+  comprobante TEXT DEFAULT '',
+  creado_en TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (usuario_id) REFERENCES Usuarios(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_gastos_categoria ON GastosNegocio(categoria);
-CREATE INDEX IF NOT EXISTS idx_gastos_fecha ON GastosNegocio(fecha_gasto);
-
--- Catalogo de servicios
-CREATE TABLE IF NOT EXISTS ServiciosCatalogo (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  nombre TEXT NOT NULL UNIQUE,
-  precio_sugerido REAL NOT NULL DEFAULT 0,
-  categoria TEXT NOT NULL DEFAULT 'Mantenimiento',
-  tipo_comision TEXT NOT NULL DEFAULT 'mano_obra',
-  activo INTEGER DEFAULT 1,
-  negocio_id TEXT DEFAULT 'default',
-  fecha_registro TEXT DEFAULT (datetime('now'))
-);
-
--- Modelos de vehiculos
+-- ============================================================
+-- 9. MODELOS DE VEHICULO (CATALOGO)
+-- ============================================================
 CREATE TABLE IF NOT EXISTS ModelosVehiculo (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  nombre TEXT NOT NULL UNIQUE,
-  negocio_id TEXT DEFAULT 'default',
-  fecha_registro TEXT DEFAULT (datetime('now'))
+  marca TEXT NOT NULL,
+  modelo TEXT NOT NULL,
+  anio_desde INTEGER DEFAULT 2000,
+  anio_hasta INTEGER DEFAULT 2025,
+  UNIQUE(marca, modelo)
 );
 
--- Notificaciones WhatsApp
+-- ============================================================
+-- 10. NOTIFICACIONES WHATSAPP
+-- ============================================================
 CREATE TABLE IF NOT EXISTS NotificacionesWhatsApp (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  orden_id INTEGER NOT NULL,
-  telefono TEXT NOT NULL,
+  orden_id INTEGER,
+  destinatario TEXT NOT NULL,
+  tipo TEXT NOT NULL CHECK(tipo IN (
+    'nueva_orden', 'asignada_tecnico', 'cambio_estado',
+    'completada', 'aprobacion_pendiente', 'aprobada',
+    'cancelada', 'recordatorio', 'encuesta'
+  )),
   mensaje TEXT NOT NULL,
-  tipo_evento TEXT NOT NULL,
-  enviada INTEGER DEFAULT 0,
-  negocio_id TEXT DEFAULT 'default',
-  fecha_creacion TEXT DEFAULT (datetime('now'))
+  estado_envio TEXT DEFAULT 'pendiente' CHECK(estado_envio IN ('pendiente', 'enviada', 'fallida', 'leida')),
+  respuesta TEXT DEFAULT '',
+  error TEXT DEFAULT '',
+  enviado_en TEXT,
+  creado_en TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (orden_id) REFERENCES OrdenesTrabajo(id) ON DELETE SET NULL
 );
 
--- Fotos de trabajo
+-- ============================================================
+-- 11. FOTOS DE TRABAJO (metadata en D1, archivo en R2)
+-- ============================================================
 CREATE TABLE IF NOT EXISTS FotosTrabajo (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   orden_id INTEGER NOT NULL,
-  tecnico_id INTEGER,
-  foto_base64 TEXT NOT NULL,
-  tipo TEXT DEFAULT 'antes',
-  fecha_subida TEXT DEFAULT (datetime('now')),
-  negocio_id TEXT DEFAULT 'default',
+  tipo TEXT DEFAULT 'evidencia' CHECK(tipo IN (
+    'antes', 'durante', 'despues', 'evidencia', 'diagnostico', 'firma'
+  )),
+  descripcion TEXT DEFAULT '',
+  ruta_r2 TEXT NOT NULL,
+  url_publica TEXT DEFAULT '',
+  subida_por TEXT DEFAULT '',
+  mime_type TEXT DEFAULT 'image/jpeg',
+  tamano_bytes INTEGER DEFAULT 0,
+  creado_en TEXT DEFAULT (datetime('now')),
   FOREIGN KEY (orden_id) REFERENCES OrdenesTrabajo(id) ON DELETE CASCADE
 );
 
--- Notas de trabajo
+-- ============================================================
+-- 12. NOTAS DE TRABAJO (bitacora de la OT)
+-- ============================================================
 CREATE TABLE IF NOT EXISTS NotasTrabajo (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   orden_id INTEGER NOT NULL,
-  tecnico_id INTEGER,
-  nota TEXT NOT NULL,
-  fecha_nota TEXT DEFAULT (datetime('now')),
-  negocio_id TEXT DEFAULT 'default',
+  autor TEXT NOT NULL,
+  autor_tipo TEXT DEFAULT 'admin' CHECK(autor_tipo IN ('admin', 'tecnico', 'sistema', 'cliente')),
+  contenido TEXT NOT NULL,
+  creado_en TEXT DEFAULT (datetime('now')),
   FOREIGN KEY (orden_id) REFERENCES OrdenesTrabajo(id) ON DELETE CASCADE
 );
 
--- Seguimiento de OT (historial de estados)
+-- ============================================================
+-- 13. SEGUIMIENTO DE OT (historial de cambios de estado)
+-- ============================================================
 CREATE TABLE IF NOT EXISTS SeguimientoOT (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   orden_id INTEGER NOT NULL,
-  tecnico_id INTEGER,
-  estado_anterior TEXT,
-  estado_nuevo TEXT,
-  latitud REAL,
-  longitud REAL,
-  observaciones TEXT,
-  fecha_evento TEXT DEFAULT (datetime('now')),
-  negocio_id TEXT DEFAULT 'default',
+  estado_anterior TEXT DEFAULT '',
+  estado_nuevo TEXT NOT NULL,
+  realizado_por TEXT NOT NULL,
+  realizado_por_tipo TEXT DEFAULT 'admin',
+  notas TEXT DEFAULT '',
+  latitud REAL DEFAULT 0,
+  longitud REAL DEFAULT 0,
+  creado_en TEXT DEFAULT (datetime('now')),
   FOREIGN KEY (orden_id) REFERENCES OrdenesTrabajo(id) ON DELETE CASCADE
 );
 
--- Pagos
+-- ============================================================
+-- 14. PAGOS
+-- ============================================================
 CREATE TABLE IF NOT EXISTS Pagos (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   orden_id INTEGER NOT NULL,
   monto REAL NOT NULL,
-  metodo_pago TEXT NOT NULL,
-  observaciones TEXT,
+  metodo TEXT DEFAULT 'efectivo' CHECK(metodo IN ('efectivo', 'transferencia', 'tarjeta', 'punto_venta', 'mixto')),
+  referencia TEXT DEFAULT '',
   fecha_pago TEXT DEFAULT (datetime('now')),
-  negocio_id TEXT DEFAULT 'default',
+  notas TEXT DEFAULT '',
+  creado_en TEXT DEFAULT (datetime('now')),
   FOREIGN KEY (orden_id) REFERENCES OrdenesTrabajo(id) ON DELETE CASCADE
 );
 
--- ============================================
--- SaaS CRM / Landing Pages
--- ============================================
-
--- Usuarios del sistema SaaS (admin de cada negocio)
-CREATE TABLE IF NOT EXISTS Usuarios (
+-- ============================================================
+-- 15. CONFIGURACION (por usuario)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS Configuracion (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  email TEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,
-  nombre TEXT,
-  rol TEXT DEFAULT 'admin',
-  negocio_id TEXT NOT NULL,
-  activo INTEGER DEFAULT 1,
-  fecha_registro TEXT DEFAULT (datetime('now'))
+  usuario_id INTEGER NOT NULL,
+  clave TEXT NOT NULL,
+  valor TEXT NOT NULL,
+  actualizado_en TEXT DEFAULT (datetime('now')),
+  UNIQUE(usuario_id, clave),
+  FOREIGN KEY (usuario_id) REFERENCES Usuarios(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_usuarios_email ON Usuarios(email);
-CREATE INDEX IF NOT EXISTS idx_usuarios_negocio ON Usuarios(negocio_id);
+-- ============================================================
+-- 16. CONTABILIDAD PARTIDA DOBLE
+-- ============================================================
+CREATE TABLE IF NOT EXISTS CuentasContables (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  usuario_id INTEGER NOT NULL,
+  codigo TEXT NOT NULL,
+  nombre TEXT NOT NULL,
+  tipo TEXT NOT NULL CHECK(tipo IN ('activo', 'pasivo', 'patrimonio', 'ingreso', 'gasto')),
+  descripcion TEXT DEFAULT '',
+  activa INTEGER DEFAULT 1,
+  UNIQUE(usuario_id, codigo),
+  FOREIGN KEY (usuario_id) REFERENCES Usuarios(id) ON DELETE CASCADE
+);
 
--- Landing Pages creadas por usuarios
+CREATE TABLE IF NOT EXISTS AsientosContables (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  usuario_id INTEGER NOT NULL,
+  numero TEXT NOT NULL,
+  fecha TEXT DEFAULT (datetime('now')),
+  concepto TEXT NOT NULL,
+  tipo_fuente TEXT DEFAULT 'manual' CHECK(tipo_fuente IN ('manual', 'ot', 'gasto', 'pago', 'factura')),
+  fuente_id INTEGER DEFAULT NULL,
+  creado_en TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (usuario_id) REFERENCES Usuarios(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS MovimientosContables (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  asiento_id INTEGER NOT NULL,
+  cuenta_id INTEGER NOT NULL,
+  debe REAL DEFAULT 0,
+  haber REAL DEFAULT 0,
+  descripcion TEXT DEFAULT '',
+  FOREIGN KEY (asiento_id) REFERENCES AsientosContables(id) ON DELETE CASCADE,
+  FOREIGN KEY (cuenta_id) REFERENCES CuentasContables(id) ON DELETE CASCADE
+);
+
+-- ============================================================
+-- 17. INVENTARIO
+-- ============================================================
+CREATE TABLE IF NOT EXISTS Inventario (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  usuario_id INTEGER NOT NULL,
+  codigo TEXT DEFAULT '',
+  nombre TEXT NOT NULL,
+  descripcion TEXT DEFAULT '',
+  categoria TEXT DEFAULT 'general',
+  cantidad INTEGER DEFAULT 0,
+  cantidad_minima INTEGER DEFAULT 5,
+  precio_compra REAL DEFAULT 0,
+  precio_venta REAL DEFAULT 0,
+  proveedor TEXT DEFAULT '',
+  ubicacion TEXT DEFAULT '',
+  activo INTEGER DEFAULT 1,
+  creado_en TEXT DEFAULT (datetime('now')),
+  actualizado_en TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (usuario_id) REFERENCES Usuarios(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS MovimientosInventario (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  inventario_id INTEGER NOT NULL,
+  tipo TEXT NOT NULL CHECK(tipo IN ('entrada', 'salida', 'ajuste')),
+  cantidad INTEGER NOT NULL,
+  orden_id INTEGER,
+  concepto TEXT DEFAULT '',
+  creado_en TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (inventario_id) REFERENCES Inventario(id) ON DELETE CASCADE,
+  FOREIGN KEY (orden_id) REFERENCES OrdenesTrabajo(id) ON DELETE SET NULL
+);
+
+-- ============================================================
+-- 18. LANDING PAGES
+-- ============================================================
 CREATE TABLE IF NOT EXISTS LandingPages (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  usuario_id INTEGER,
-  negocio_id TEXT NOT NULL,
+  usuario_id INTEGER NOT NULL,
   titulo TEXT NOT NULL,
-  slug TEXT NOT NULL UNIQUE,
-  descripcion TEXT,
-  contenido TEXT,
-  secciones TEXT,
-  colores TEXT,
-  logo_url TEXT,
-  favicon_url TEXT,
-  meta_title TEXT,
-  meta_description TEXT,
-  publicado INTEGER DEFAULT 0,
+  slug TEXT UNIQUE NOT NULL,
+  descripcion TEXT DEFAULT '',
+  contenido_json TEXT NOT NULL DEFAULT '{}',
+  html_personalizado TEXT DEFAULT '',
+  css_personalizado TEXT DEFAULT '',
+  logo_r2 TEXT DEFAULT '',
+  favicon_r2 TEXT DEFAULT '',
+  bg_image_r2 TEXT DEFAULT '',
+  color_principal TEXT DEFAULT '#2563eb',
+  color_secundario TEXT DEFAULT '#1e40af',
+  fuente TEXT DEFAULT 'Inter',
+  formulario_activo INTEGER DEFAULT 1,
+  campos_formulario TEXT DEFAULT '["nombre","email","telefono","mensaje"]',
+  boton_cta_texto TEXT DEFAULT 'Contáctanos',
+  boton_cta_url TEXT DEFAULT '#contacto',
+  seo_titulo TEXT DEFAULT '',
+  seo_descripcion TEXT DEFAULT '',
+  seo_keywords TEXT DEFAULT '',
+  google_analytics TEXT DEFAULT '',
+  facebook_pixel TEXT DEFAULT '',
+  publica INTEGER DEFAULT 1,
   visitas INTEGER DEFAULT 0,
-  fecha_creacion TEXT DEFAULT (datetime('now')),
-  fecha_actualizacion TEXT DEFAULT (datetime('now')),
+  conversiones INTEGER DEFAULT 0,
+  creado_en TEXT DEFAULT (datetime('now')),
+  actualizado_en TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (usuario_id) REFERENCES Usuarios(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS LandingPageConversiones (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  landing_page_id INTEGER NOT NULL,
+  nombre TEXT DEFAULT '',
+  email TEXT DEFAULT '',
+  telefono TEXT DEFAULT '',
+  mensaje TEXT DEFAULT '',
+  ip TEXT DEFAULT '',
+  user_agent TEXT DEFAULT '',
+  creado_en TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (landing_page_id) REFERENCES LandingPages(id) ON DELETE CASCADE
+);
+
+-- ============================================================
+-- 19. MEDIOS R2 (Registro centralizado de archivos en R2)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS MediosR2 (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  usuario_id INTEGER,
+  ruta TEXT NOT NULL,
+  nombre_original TEXT DEFAULT '',
+  mime_type TEXT DEFAULT '',
+  tamano_bytes INTEGER DEFAULT 0,
+  tipo_recurso TEXT DEFAULT 'otro' CHECK(tipo_recurso IN (
+    'foto_ot', 'firma', 'avatar', 'logo', 'landing_bg', 'landing_image',
+    'documento', 'comprobante', 'otro'
+  )),
+  recurso_id INTEGER DEFAULT NULL,
+  creado_en TEXT DEFAULT (datetime('now')),
   FOREIGN KEY (usuario_id) REFERENCES Usuarios(id) ON DELETE SET NULL
 );
 
+-- ============================================================
+-- INDICES
+-- ============================================================
+CREATE INDEX IF NOT EXISTS idx_clientes_usuario ON Clientes(usuario_id);
+CREATE INDEX IF NOT EXISTS idx_clientes_email ON Clientes(email);
+CREATE INDEX IF NOT EXISTS idx_vehiculos_cliente ON Vehiculos(cliente_id);
+CREATE INDEX IF NOT EXISTS idx_vehiculos_placa ON Vehiculos(placa);
+CREATE INDEX IF NOT EXISTS idx_ot_usuario ON OrdenesTrabajo(usuario_id);
+CREATE INDEX IF NOT EXISTS idx_ot_numero ON OrdenesTrabajo(usuario_id, numero);
+CREATE INDEX IF NOT EXISTS idx_ot_estado ON OrdenesTrabajo(estado);
+CREATE INDEX IF NOT EXISTS idx_ot_tecnico ON OrdenesTrabajo(tecnico_id);
+CREATE INDEX IF NOT EXISTS idx_ot_cliente ON OrdenesTrabajo(cliente_id);
+CREATE INDEX IF NOT EXISTS idx_ot_token ON OrdenesTrabajo(token_aprobacion);
+CREATE INDEX IF NOT EXISTS idx_costos_orden ON CostosAdicionales(orden_id);
+CREATE INDEX IF NOT EXISTS idx_fotos_orden ON FotosTrabajo(orden_id);
+CREATE INDEX IF NOT EXISTS idx_notas_orden ON NotasTrabajo(orden_id);
+CREATE INDEX IF NOT EXISTS idx_seguimiento_orden ON SeguimientoOT(orden_id);
+CREATE INDEX IF NOT EXISTS idx_pagos_orden ON Pagos(orden_id);
+CREATE INDEX IF NOT EXISTS idx_whatsapp_orden ON NotificacionesWhatsApp(orden_id);
+CREATE INDEX IF NOT EXISTS idx_whatsapp_estado ON NotificacionesWhatsApp(estado_envio);
 CREATE INDEX IF NOT EXISTS idx_landing_slug ON LandingPages(slug);
-CREATE INDEX IF NOT EXISTS idx_landing_negocio ON LandingPages(negocio_id);
+CREATE INDEX IF NOT EXISTS idx_landing_usuario ON LandingPages(usuario_id);
+CREATE INDEX IF NOT EXISTS idx_medios_tipo ON MediosR2(tipo_recurso);
+CREATE INDEX IF NOT EXISTS idx_medios_recurso ON MediosR2(tipo_recurso, recurso_id);
+CREATE INDEX IF NOT EXISTS idx_inventario_usuario ON Inventario(usuario_id);
+CREATE INDEX IF NOT EXISTS idx_cuentas_usuario ON CuentasContables(usuario_id);
+CREATE INDEX IF NOT EXISTS idx_asientos_usuario ON AsientosContables(usuario_id);
+CREATE INDEX IF NOT EXISTS idx_movimientos_asiento ON MovimientosContables(asiento_id);
 
--- ============================================
--- DATOS SEMILLA
--- ============================================
+-- ============================================================
+-- DATOS INICIALES
+-- ============================================================
+INSERT OR IGNORE INTO Usuarios (email, password_hash, nombre, rol, empresa) VALUES
+('admin@bizflow.com', 'admin123', 'Administrador', 'admin', 'BizFlow');
 
--- Servicios pre-cargados
-INSERT OR IGNORE INTO ServiciosCatalogo (nombre, precio_sugerido, categoria, tipo_comision) VALUES
-('Frenos - Pastillas y Discos', 45000, 'Reparacion', 'mano_obra'),
-('Luces - Cambio de focos/bombillas', 8000, 'Mantenimiento', 'mano_obra'),
-('Tren Delantero - Suspension y Direccion', 55000, 'Reparacion', 'mano_obra'),
-('Correas - Distribucion y Accesorios', 65000, 'Reparacion', 'mano_obra'),
-('Componentes - Revision general', 15000, 'Diagnostico', 'mano_obra'),
-('Motor - Diagnostico computarizado', 20000, 'Diagnostico', 'mano_obra'),
-('Motor - Reparacion general', 80000, 'Reparacion', 'mano_obra'),
-('Culatas - Rectificacion', 120000, 'Reparacion', 'mano_obra'),
-('Embrague - Kit completo', 90000, 'Reparacion', 'mano_obra'),
-('Aire Acondicionado - Recarga y Reparacion', 35000, 'Reparacion', 'mano_obra'),
-('Scanner - Diagnostico electronico', 15000, 'Diagnostico', 'mano_obra'),
-('Suspension - Amortiguadores', 50000, 'Reparacion', 'mano_obra'),
-('Direccion - Cajas y cremalleras', 70000, 'Reparacion', 'mano_obra'),
-('Electricidad - Alternador y Motor de arranque', 45000, 'Reparacion', 'mano_obra'),
-('Transmision - Caja de cambios', 100000, 'Reparacion', 'mano_obra'),
-('Escape - Mofle y catalitico', 40000, 'Reparacion', 'mano_obra'),
-('Refrigeracion - Radiador y ventilador', 35000, 'Reparacion', 'mano_obra'),
-('Turbo - Revision y reparacion', 80000, 'Reparacion', 'repuestos'),
-('Inyeccion - Limpieza de inyectores', 25000, 'Mantenimiento', 'mano_obra'),
-('Timing - Cambio de kit', 60000, 'Reparacion', 'mano_obra'),
-('Diferencial - Servicio', 50000, 'Reparacion', 'mano_obra'),
-('Alternador - Reconstruccion', 40000, 'Reparacion', 'repuestos'),
-('Motor de Arranque - Reconstruccion', 35000, 'Reparacion', 'repuestos'),
-('Alineacion y Balanceo', 20000, 'Mantenimiento', 'mano_obra'),
-('Revision General Preventiva', 25000, 'Mantenimiento', 'mano_obra'),
-('Cambio de Aceite y Filtros', 18000, 'Mantenimiento', 'mano_obra');
-
--- Modelos de vehiculos pre-cargados
-INSERT OR IGNORE INTO ModelosVehiculo (nombre) VALUES
-('Toyota'),('Nissan'),('Honda'),('Hyundai'),('Kia'),('Chevrolet'),('Ford'),
-('Mazda'),('Volkswagen'),('BMW'),('Mercedes-Benz'),('Peugeot'),('Renault'),
-('Fiat'),('Suzuki'),('Mitsubishi'),('Subaru'),('Audi'),('Jeep'),('Dodge'),
-('Chery'),('Great Wall'),('Lifan'),('Jac'),('Zhongxing'),('Haval');
+INSERT OR IGNORE INTO ModelosVehiculo (marca, modelo, anio_desde, anio_hasta) VALUES
+('Toyota', 'Corolla', 2015, 2025),
+('Toyota', 'Hilux', 2016, 2025),
+('Toyota', 'Camry', 2017, 2025),
+('Honda', 'Civic', 2016, 2025),
+('Honda', 'CR-V', 2018, 2025),
+('Chevrolet', 'Spark', 2015, 2025),
+('Chevrolet', 'Tracker', 2019, 2025),
+('Mazda', '3', 2017, 2025),
+('Mazda', 'CX-5', 2018, 2025),
+('Kia', 'Rio', 2018, 2025),
+('Kia', 'Sportage', 2019, 2025),
+('Hyundai', 'Accent', 2017, 2025),
+('Hyundai', 'Tucson', 2019, 2025),
+('Nissan', 'Sentra', 2016, 2025),
+('Nissan', 'Kicks', 2018, 2025),
+('Volkswagen', 'Polo', 2018, 2025),
+('Volkswagen', 'Golf', 2017, 2025),
+('Ford', 'EcoSport', 2018, 2025),
+('Ford', 'Ranger', 2019, 2025),
+('Renault', 'Kwid', 2019, 2025),
+('Renault', 'Duster', 2018, 2025),
+('BYD', 'Dolphin', 2023, 2025),
+('BYD', 'Atto 3', 2023, 2025),
+('Tesla', 'Model 3', 2020, 2025),
+('Tesla', 'Model Y', 2021, 2025);

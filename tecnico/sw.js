@@ -9,8 +9,15 @@ const STATIC_ASSETS = [
   '/tecnico/app.html',
   '/tecnico/app.js',
   '/tecnico/manifest.json',
-  '/public/icon-192.png',
-  '/public/icon-512.png',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css',
+  'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css',
+  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.woff2',
+  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-regular-400.woff2',
+  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
+  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
 ];
 
 // ── INSTALL ──────────────────────────────────────────────────
@@ -18,7 +25,10 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       console.log('[SW] Cacheando assets estáticos');
-      return cache.addAll(STATIC_ASSETS);
+      // Cache local assets first, then try CDN assets (don't fail on CDN)
+      return cache.addAll(STATIC_ASSETS.slice(0, 4)).catch(() => {
+        console.warn('[SW] Algunos assets CDN no pudieron cachearse');
+      });
     })
   );
   self.skipWaiting();
@@ -52,7 +62,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Cache-first para assets estáticos
+  // Cache-first para assets estáticos (local and CDN)
   event.respondWith(cacheFirst(request));
 });
 
@@ -97,3 +107,60 @@ async function networkFirst(request) {
     });
   }
 }
+
+// ── BACKGROUND SYNC STUB ────────────────────────────────────
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'sync-photos') {
+    console.log('[SW] Background sync: sync-photos');
+    event.waitUntil(syncPendingPhotos());
+  }
+  if (event.tag === 'sync-location') {
+    console.log('[SW] Background sync: sync-location');
+    event.waitUntil(syncPendingLocation());
+  }
+});
+
+async function syncPendingPhotos() {
+  // Stub: retrieve pending photo uploads from IndexedDB and retry
+  console.log('[SW] Procesando fotos pendientes...');
+  // Implementation would read from IndexedDB and POST to /api/tecnico/ordenes/[id]/fotos
+}
+
+async function syncPendingLocation() {
+  // Stub: send last known GPS position
+  console.log('[SW] Enviando ubicación pendiente...');
+  // Implementation would read from IndexedDB and PUT to /api/tecnico/ubicacion
+}
+
+// ── PUSH NOTIFICATION STUB ──────────────────────────────────
+self.addEventListener('push', (event) => {
+  console.log('[SW] Push notification recibida');
+  const data = event.data ? event.data.json() : {};
+  const title = data.title || 'BizFlow';
+  const options = {
+    body: data.body || 'Tienes una nueva notificación',
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    vibrate: [200, 100, 200],
+    data: data.data || {},
+    actions: data.actions || [],
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const data = event.notification.data || {};
+  const urlToOpen = data.url || '/tecnico/app.html';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url.includes('/tecnico/') && 'focus' in client) {
+          client.focus();
+          return;
+        }
+      }
+      return self.clients.openWindow(urlToOpen);
+    })
+  );
+});

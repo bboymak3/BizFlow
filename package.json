@@ -1,11 +1,16 @@
 {
   "name": "bizflow",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
+  "description": "BizFlow - CRM SaaS + Gestor de Ordenes de Trabajo",
   "scripts": {
-    "dev": "npx wrangler pages dev . --d1=bizflow_db",
-    "deploy": "npx wrangler pages deploy .",
-    "db:migrate": "npx wrangler d1 execute bizflow_db --file=./schema.sql"
+    "dev": "wrangler pages dev . --d1=bizflow_db --r2=bizflow_media",
+    "deploy": "wrangler pages deploy .",
+    "db:migrate": "wrangler d1 execute bizflow_db --file=./schema.sql",
+    "db:migrate:local": "wrangler d1 execute bizflow_db --local --file=./schema.sql"
   },
-  "dependencies": {}
+  "dependencies": {},
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
 }

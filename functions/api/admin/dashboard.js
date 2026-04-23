@@ -1,183 +1,184 @@
 // ============================================================
 // BizFlow - Admin Dashboard API
-// GET: Full dashboard KPIs with period filtering
+// GET: Dashboard stats, KPIs, charts data
 // ============================================================
 
-import {
-  corsHeaders,
-  handleOptions,
-  successRes,
-  errorRes,
-  chileDate,
-  getFechaColumn,
-  buildFechaWhere,
-  asegurarColumnasFaltantes,
-} from '../../lib/db-helpers.js';
+import { jsonResponse, errorResponse, handleCors } from '../../lib/db-helpers.js';
 
-export async function onRequestOptions() {
-  return handleOptions();
-}
+export async function onRequest(context) {
+  const cors = handleCors(context.request);
+  if (cors) return cors;
 
-export async function onRequestGet(context) {
-  const { env, request } = context;
-  const url = new URL(request.url);
-  const periodo = url.searchParams.get('periodo') || 'mes';
-  const valor = url.searchParams.get('valor') || chileDate();
+  const { request, env } = context;
+  const { DB } = env;
+
+  if (request.method !== 'GET') {
+    return errorResponse('Método no permitido', 405);
+  }
 
   try {
-    await asegurarColumnasFaltantes(env);
-    const fechaCol = await getFechaColumn(env);
-    const fechaWhere = buildFechaWhere(fechaCol, periodo, valor);
-    const whereClause = fechaWhere.where || '';
-    const params = fechaWhere.params || [];
+    const url = new URL(request.url);
+    const usuarioId = url.searchParams.get('usuario_id');
 
-    const whereBase = `WHERE ot.estado != 'Eliminada' AND (ot.negocio_id = 1 OR ot.negocio_id IS NULL)${whereClause}`;
+    if (!usuarioId) {
+      return errorResponse('usuario_id es requerido');
+    }
 
-    // Run all KPI queries in parallel
+    // Run all dashboard queries in parallel
     const [
-      ordenesCount,
-      totalGenerado,
-      totalAbonos,
-      servicios,
-      rendimiento,
-      metodoPago,
-      gastos,
+      totalOTs,
+      otsByStatus,
+      totalRevenue,
+      recentOTs,
+      recentClients,
+      monthlyRevenue,
+      topTecnicos,
+      otsByPriority,
     ] = await Promise.all([
-      // Order status counts
-      env.DB.prepare(`
-        SELECT
-          COUNT(*) as total_ordenes,
-          SUM(CASE WHEN ot.estado = 'Aprobada' THEN 1 ELSE 0 END) as ordenes_aprobadas,
-          SUM(CASE WHEN ot.estado = 'Cancelada' THEN 1 ELSE 0 END) as canceladas,
-          SUM(CASE WHEN ot.estado = 'Cerrada' OR ot.estado = 'cerrada' THEN 1 ELSE 0 END) as cerradas,
-          SUM(CASE WHEN ot.estado_trabajo = 'En Proceso' OR ot.estado_trabajo = 'en_progreso' THEN 1 ELSE 0 END) as en_proceso,
-          SUM(CASE WHEN ot.estado = 'Enviada' THEN 1 ELSE 0 END) as pendientes
-        FROM OrdenesTrabajo ot
-        ${whereBase}
-      `).bind(...params).first(),
+      // Total OTs count
+      DB.prepare(`
+        SELECT COUNT(*) as total FROM OrdenesTrabajo
+        WHERE usuario_id = ?
+      `).bind(usuarioId).first(),
 
-      // Total revenue
-      env.DB.prepare(`
-        SELECT
-          COALESCE(SUM(COALESCE(ot.monto_final, ot.monto_base, 0)), 0) as total_generado,
-          COALESCE(AVG(COALESCE(ot.monto_final, ot.monto_base, 0)), 0) as promedio_orden
-        FROM OrdenesTrabajo ot
-        ${whereBase} AND (ot.estado = 'Cerrada' OR ot.estado = 'cerrada' OR ot.estado = 'Aprobada')
-      `).bind(...params).first(),
-
-      // Total payments received
-      env.DB.prepare(`
-        SELECT COALESCE(SUM(COALESCE(abono, 0)), 0) as total_abonos
-        FROM OrdenesTrabajo ot
-        ${whereBase} AND (ot.estado != 'Cancelada' AND ot.estado != 'Eliminada')
-      `).bind(...params).first(),
-
-      // Top 5 most requested services
-      env.DB.prepare(`
-        SELECT
-          so.nombre_servicio as servicio,
-          COUNT(*) as cantidad,
-          AVG(so.precio) as promedio_precio
-        FROM ServiciosOrden so
-        JOIN OrdenesTrabajo ot ON so.orden_id = ot.id
-        ${whereBase}
-        GROUP BY so.nombre_servicio
+      // OTs grouped by status
+      DB.prepare(`
+        SELECT estado, COUNT(*) as cantidad
+        FROM OrdenesTrabajo
+        WHERE usuario_id = ?
+        GROUP BY estado
         ORDER BY cantidad DESC
-        LIMIT 5
-      `).bind(...params).all(),
+      `).bind(usuarioId).all(),
 
-      // Performance by technician
-      env.DB.prepare(`
+      // Total revenue from completed/closed orders
+      DB.prepare(`
         SELECT
-          t.id,
-          t.nombre,
-          COUNT(ot.id) as ordenes,
-          COALESCE(SUM(COALESCE(ot.monto_final, ot.monto_base, 0)), 0) as facturado,
-          SUM(CASE WHEN ot.estado = 'Cerrada' OR ot.estado = 'cerrada' THEN 1 ELSE 0 END) as cerradas
-        FROM Tecnicos t
-        LEFT JOIN OrdenesTrabajo ot ON ot.tecnico_asignado_id = t.id
-        WHERE (t.negocio_id = 1 OR t.negocio_id IS NULL)
-        ${whereClause.replace('AND', 'AND (ot.estado != \'Eliminada\') AND')}
-        GROUP BY t.id, t.nombre
-        HAVING ordenes > 0
-        ORDER BY facturado DESC
-      `).bind(...params).all(),
+          COALESCE(SUM(total), 0) as total_ingresos,
+          COALESCE(SUM(subtotal), 0) as total_subtotal,
+          COALESCE(SUM(impuesto), 0) as total_impuesto,
+          COUNT(*) as ordenes_facturadas
+        FROM OrdenesTrabajo
+        WHERE usuario_id = ?
+          AND estado IN ('completada', 'aprobada', 'cerrada')
+      `).bind(usuarioId).first(),
 
-      // Payment method distribution
-      env.DB.prepare(`
+      // Recent 10 OTs
+      DB.prepare(`
         SELECT
-          COALESCE(metodo_pago, 'efectivo') as metodo,
-          COUNT(*) as cantidad,
-          SUM(COALESCE(monto_final, monto_base, 0)) as total
+          ot.id, ot.numero, ot.estado, ot.titulo, ot.total,
+          ot.fecha_creacion, ot.prioridad,
+          c.nombre as cliente_nombre, c.empresa as cliente_empresa,
+          v.placa,
+          t.nombre as tecnico_nombre
         FROM OrdenesTrabajo ot
-        ${whereBase}
-        GROUP BY metodo_pago
-        ORDER BY total DESC
-      `).bind(...params).all(),
+        LEFT JOIN Clientes c ON ot.cliente_id = c.id
+        LEFT JOIN Vehiculos v ON ot.vehiculo_id = v.id
+        LEFT JOIN Tecnicos t ON ot.tecnico_id = t.id
+        WHERE ot.usuario_id = ?
+        ORDER BY ot.fecha_creacion DESC
+        LIMIT 10
+      `).bind(usuarioId).all(),
 
-      // Expenses by category
-      env.DB.prepare(`
+      // Recent 5 clients
+      DB.prepare(`
+        SELECT id, nombre, apellido, empresa, email, telefono, creado_en
+        FROM Clientes
+        WHERE usuario_id = ? AND activo = 1
+        ORDER BY creado_en DESC
+        LIMIT 5
+      `).bind(usuarioId).all(),
+
+      // Monthly revenue last 12 months
+      DB.prepare(`
         SELECT
-          COALESCE(categoria, 'otro') as categoria,
-          COUNT(*) as cantidad,
-          COALESCE(SUM(monto), 0) as total
-        FROM GastosNegocio
-        WHERE (negocio_id = 1 OR negocio_id IS NULL)
-        ${fechaWhere.where ? fechaWhere.where.replace('fecha_creacion', 'fecha_gasto') : ''}
-        GROUP BY categoria
-        ORDER BY total DESC
-      `).bind(...fechaWhere.params || []).all(),
+          strftime('%Y-%m', fecha_creacion) as mes,
+          COALESCE(SUM(CASE WHEN estado IN ('completada', 'aprobada', 'cerrada') THEN total ELSE 0 END), 0) as ingresos,
+          COUNT(*) as total_ot,
+          COUNT(CASE WHEN estado IN ('completada', 'aprobada', 'cerrada') THEN 1 END) as ot_completadas
+        FROM OrdenesTrabajo
+        WHERE usuario_id = ?
+          AND fecha_creacion >= datetime('now', '-12 months')
+        GROUP BY strftime('%Y-%m', fecha_creacion)
+        ORDER BY mes ASC
+      `).bind(usuarioId).all(),
+
+      // Top technicians by completed OTs
+      DB.prepare(`
+        SELECT
+          t.id, t.nombre, t.especialidad,
+          COUNT(ot.id) as total_ot,
+          SUM(CASE WHEN ot.estado IN ('completada', 'cerrada') THEN 1 ELSE 0 END) as completadas,
+          COALESCE(SUM(CASE WHEN ot.estado IN ('completada', 'cerrada') THEN ot.total ELSE 0 END), 0) as facturado
+        FROM Tecnicos t
+        LEFT JOIN OrdenesTrabajo ot ON ot.tecnico_id = t.id AND ot.usuario_id = ?
+        WHERE t.usuario_id = ? AND t.activo = 1
+        GROUP BY t.id, t.nombre, t.especialidad
+        ORDER BY completadas DESC
+        LIMIT 10
+      `).bind(usuarioId, usuarioId).all(),
+
+      // OTs by priority
+      DB.prepare(`
+        SELECT prioridad, COUNT(*) as cantidad
+        FROM OrdenesTrabajo
+        WHERE usuario_id = ?
+        GROUP BY prioridad
+      `).bind(usuarioId).all(),
     ]);
 
-    // Calculate remaining (total - abonos)
-    const totalGasto = gastos.results.reduce((sum, g) => sum + (g.total || 0), 0);
+    // Build status map from results
+    const statusMap = {};
+    for (const row of (otsByStatus.results || [])) {
+      statusMap[row.estado] = row.cantidad;
+    }
 
-    // Calculate technician commissions (rough estimate)
-    const comisiones = rendimiento.results.reduce((sum, t) => {
-      const comision = await getTecComision(env, t.id);
-      return sum + (t.facturado * comision / 100);
-    }, 0);
+    const priorityMap = {};
+    for (const row of (otsByPriority.results || [])) {
+      priorityMap[row.prioridad] = row.cantidad;
+    }
 
-    const totalGeneradoNum = ordenesCount?.total_generado || 0;
-    const totalAbonosNum = totalAbonos?.total_abonos || 0;
+    // Total payments received
+    const pagosResult = await DB.prepare(`
+      SELECT COALESCE(SUM(monto), 0) as total_pagado
+      FROM Pagos p
+      JOIN OrdenesTrabajo ot ON p.orden_id = ot.id
+      WHERE ot.usuario_id = ?
+    `).bind(usuarioId).first();
 
-    return successRes({
+    // Total expenses
+    const gastosResult = await DB.prepare(`
+      SELECT COALESCE(SUM(monto), 0) as total_gastos
+      FROM GastosNegocio
+      WHERE usuario_id = ?
+    `).bind(usuarioId).first();
+
+    return jsonResponse({
       kpis: {
-        total_ordenes: ordenesCount?.total_ordenes || 0,
-        ordenes_aprobadas: ordenesCount?.ordenes_aprobadas || 0,
-        canceladas: ordenesCount?.canceladas || 0,
-        cerradas: ordenesCount?.cerradas || 0,
-        en_proceso: ordenesCount?.en_proceso || 0,
-        pendientes: ordenesCount?.pendientes || 0,
+        total_ots: totalOTs?.total || 0,
+        por_estado: statusMap,
+        por_prioridad: priorityMap,
+        pendientes: statusMap['pendiente'] || 0,
+        asignadas: statusMap['asignada'] || 0,
+        en_proceso: statusMap['en_proceso'] || 0,
+        completadas: statusMap['completada'] || 0,
+        canceladas: statusMap['cancelada'] || 0,
       },
       finanzas: {
-        total_generado: totalGeneradoNum,
-        total_abonos: totalAbonosNum,
-        total_restante: totalGeneradoNum - totalAbonosNum,
-        promedio_orden: totalGenerado?.promedio_orden || 0,
-        total_gastos: totalGasto,
-        balance_neto: totalGeneradoNum - totalGasto - comisiones,
-        comisiones_estimadas: comisiones,
+        total_ingresos: totalRevenue?.total_ingresos || 0,
+        total_subtotal: totalRevenue?.total_subtotal || 0,
+        total_impuesto: totalRevenue?.total_impuesto || 0,
+        total_pagado: pagosResult?.total_pagado || 0,
+        total_gastos: gastosResult?.total_gastos || 0,
+        balance_neto: ((totalRevenue?.total_ingresos || 0) - (gastosResult?.total_gastos || 0)),
+        ordenes_facturadas: totalRevenue?.ordenes_facturadas || 0,
       },
-      servicios_mas_solicitados: servicios.results || [],
-      rendimiento_por_tecnico: rendimiento.results || [],
-      distribucion_metodo_pago: metodoPago.results || [],
-      gastos_por_categoria: gastos.results || [],
-      periodo: {
-        tipo: periodo,
-        valor,
-        fecha: chileDate(),
-      },
+      ordenes_recientes: recentOTs.results || [],
+      clientes_recientes: recentClients.results || [],
+      ingresos_mensuales: monthlyRevenue.results || [],
+      top_tecnicos: topTecnicos.results || [],
     });
   } catch (error) {
     console.error('Dashboard error:', error);
-    return errorRes('Error cargando dashboard: ' + error.message, 500);
+    return errorResponse('Error cargando dashboard: ' + error.message, 500);
   }
-}
-
-async function getTecComision(env, tecId) {
-  const tec = await env.DB.prepare(
-    `SELECT comision_porcentaje FROM Tecnicos WHERE id = ?`
-  ).bind(tecId).first();
-  return tec?.comision_porcentaje || 10;
 }

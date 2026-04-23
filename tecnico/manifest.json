@@ -1,14 +1,14 @@
 {
   "name": "BizFlow Técnico",
   "short_name": "BizFlow",
-  "description": "App para técnicos y operarios de BizFlow",
+  "description": "Gestión de Órdenes de Trabajo",
   "start_url": "/tecnico/app.html",
   "display": "standalone",
-  "background_color": "#111827",
-  "theme_color": "#0d9488",
+  "background_color": "#1e293b",
+  "theme_color": "#2563eb",
   "orientation": "portrait",
   "icons": [
-    { "src": "/public/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/public/icon-512.png", "sizes": "512x512", "type": "image/png" }
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
   ]
 }

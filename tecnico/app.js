@@ -5,1186 +5,1431 @@
 
 'use strict';
 
-// ── STATE ───────────────────────────────────────────────────
-let session = null;
-let ordenes = { pendientes: [], en_curso: [], completadas: [] };
-let currentOrden = null;
-let currentTab = 'pendientes';
-let currentPhotoType = 'antes';
-let currentPhotoOrdenId = null;
-let selectedReason = null;
-let refreshTimer = null;
-
-// ── API BASE ────────────────────────────────────────────────
-const API = '/api/tecnico';
-
-// ── INIT ────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-  registerServiceWorker();
-  restoreSession();
-  setupOnlineOffline();
-  setupPullToRefresh();
-  setupEnterKeyLogin();
-});
-
-// ── SERVICE WORKER ──────────────────────────────────────────
-function registerServiceWorker() {
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/tecnico/sw.js')
-      .then((reg) => console.log('[SW] Registrado:', reg.scope))
-      .catch((err) => console.warn('[SW] Error:', err));
-  }
-}
-
-// ── ONLINE / OFFLINE ────────────────────────────────────────
-function setupOnlineOffline() {
-  const banner = document.getElementById('offlineBanner');
-  function update() {
-    if (navigator.onLine) {
-      banner.classList.remove('active');
-    } else {
-      banner.classList.add('active');
-      showToast('Sin conexión – Modo offline activo', 'warning');
-    }
-  }
-  window.addEventListener('online', () => { update(); loadOrdenes(); });
-  window.addEventListener('offline', update);
-  update();
-}
-
-// ── PULL TO REFRESH ─────────────────────────────────────────
-function setupPullToRefresh() {
-  let startY = 0;
-  let pulling = false;
-  const indicator = document.getElementById('pullIndicator');
-  const container = document.querySelector('.orders-container');
-
-  container.addEventListener('touchstart', (e) => {
-    if (window.scrollY === 0) {
-      startY = e.touches[0].clientY;
-      pulling = true;
-    }
-  }, { passive: true });
-
-  container.addEventListener('touchmove', (e) => {
-    if (!pulling) return;
-    const diff = e.touches[0].clientY - startY;
-    if (diff > 80) {
-      indicator.classList.add('active');
-    }
-  }, { passive: true });
-
-  container.addEventListener('touchend', () => {
-    if (indicator.classList.contains('active')) {
-      indicator.classList.remove('active');
-      loadOrdenes();
-    }
-    pulling = false;
-  }, { passive: true });
-}
-
-// ── ENTER KEY LOGIN ─────────────────────────────────────────
-function setupEnterKeyLogin() {
-  document.getElementById('pinInput').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') login();
-  });
-  document.getElementById('phoneInput').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') document.getElementById('pinInput').focus();
-  });
-}
-
 // ═══════════════════════════════════════════════════════════
-// AUTH
+// APP NAMESPACE
 // ═══════════════════════════════════════════════════════════
 
-async function login() {
-  const phone = document.getElementById('phoneInput').value.trim();
-  const pin = document.getElementById('pinInput').value.trim();
-  const errorEl = document.getElementById('loginError');
-  errorEl.textContent = '';
+const App = {
+  // ── STATE ───────────────────────────────────────────────
+  session: null,
+  ordenes: [],
+  filteredOrdenes: [],
+  currentFilter: 'todas',
+  currentOrden: null,
+  currentTab: 'ordenes',
+  currentPhotoType: 'antes',
+  currentCostType: 'repuesto',
+  refreshTimer: null,
+  gpsTimer: null,
+  signatureCanvas: null,
+  signatureCtx: null,
+  signatureDrawing: false,
+  profile: null,
+  isOnline: true,
 
-  if (!phone || !pin) {
-    errorEl.textContent = 'Ingresa teléfono y PIN';
-    return;
-  }
+  // ── API BASE ────────────────────────────────────────────
+  API: '/api/tecnico',
 
-  showLoading();
-  try {
-    const res = await fetch(`${API}/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ telefono: phone, pin }),
-    });
-    const data = await res.json();
+  // ═══════════════════════════════════════════════════════════
+  // INITIALIZATION
+  // ═══════════════════════════════════════════════════════════
 
-    if (!res.ok || data.error) {
-      errorEl.textContent = data.error || 'Credenciales incorrectas';
-      hideLoading();
+  init() {
+    this.registerServiceWorker();
+    this.setupOnlineOffline();
+    this.setupPullToRefresh();
+    this.setupEnterKeyLogin();
+
+    // Show splash, then check session
+    setTimeout(() => {
+      this.restoreSession();
+    }, 1200);
+  },
+
+  registerServiceWorker() {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/tecnico/sw.js')
+        .then((reg) => console.log('[SW] Registered:', reg.scope))
+        .catch((err) => console.warn('[SW] Error:', err));
+    }
+  },
+
+  // ═══════════════════════════════════════════════════════════
+  // AUTH
+  // ═══════════════════════════════════════════════════════════
+
+  async login() {
+    const codigo = document.getElementById('codigoInput').value.trim();
+    const password = document.getElementById('passwordInput').value.trim();
+    const errorEl = document.getElementById('loginError');
+    const btn = document.getElementById('btnLogin');
+    errorEl.textContent = '';
+
+    if (!codigo || !password) {
+      errorEl.textContent = 'Ingresa código y contraseña';
       return;
     }
 
-    session = {
-      tecnico_id: data.tecnico_id,
-      nombre: data.nombre,
-      comision: data.comision || 0,
-    };
-    localStorage.setItem('bizflow_session', JSON.stringify(session));
-    hideLoading();
-    enterApp();
-  } catch (err) {
-    errorEl.textContent = 'Error de conexión. Intenta de nuevo.';
-    hideLoading();
-  }
-}
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Ingresando...';
+    this.showLoading();
 
-function logout() {
-  session = null;
-  localStorage.removeItem('bizflow_session');
-  if (refreshTimer) clearInterval(refreshTimer);
-  document.getElementById('appScreen').style.display = 'none';
-  document.getElementById('loginScreen').style.display = 'flex';
-  document.getElementById('phoneInput').value = '';
-  document.getElementById('pinInput').value = '';
-  document.getElementById('loginError').textContent = '';
-}
+    try {
+      const res = await fetch(`${this.API}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ codigo, password }),
+      });
+      const data = await res.json();
 
-function restoreSession() {
-  try {
-    const saved = localStorage.getItem('bizflow_session');
-    if (saved) {
-      session = JSON.parse(saved);
-      if (session && session.tecnico_id) {
-        enterApp();
+      if (!res.ok || data.error) {
+        errorEl.textContent = data.error || 'Credenciales incorrectas';
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Iniciar Sesión';
+        this.hideLoading();
         return;
       }
+
+      this.session = {
+        tecnico_id: data.token || data.tecnico_id || data.id,
+        nombre: data.nombre,
+        codigo: data.codigo,
+        especialidad: data.especialidad,
+        telefono: data.telefono,
+        email: data.email || '',
+      };
+      localStorage.setItem('bizflow_session', JSON.stringify(this.session));
+      this.hideLoading();
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Iniciar Sesión';
+      this.enterApp();
+    } catch (err) {
+      errorEl.textContent = 'Error de conexión. Intenta de nuevo.';
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Iniciar Sesión';
+      this.hideLoading();
     }
-  } catch (_) { /* ignore */ }
-  // Show login
-  document.getElementById('loginScreen').style.display = 'flex';
-}
+  },
 
-function enterApp() {
-  document.getElementById('loginScreen').style.display = 'none';
-  document.getElementById('appScreen').style.display = 'block';
-  document.getElementById('tecnicoName').textContent = session.nombre;
-  loadOrdenes();
-  // Auto-refresh every 30 seconds
-  refreshTimer = setInterval(loadOrdenes, 30000);
-}
+  logout() {
+    this.session = null;
+    this.currentOrden = null;
+    this.ordenes = [];
+    localStorage.removeItem('bizflow_session');
+    if (this.refreshTimer) clearInterval(this.refreshTimer);
+    if (this.gpsTimer) clearInterval(this.gpsTimer);
 
-// ═══════════════════════════════════════════════════════════
-// ORDERS
-// ═══════════════════════════════════════════════════════════
+    document.getElementById('appScreen').style.display = 'none';
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('codigoInput').value = '';
+    document.getElementById('passwordInput').value = '';
+    document.getElementById('loginError').textContent = '';
 
-async function loadOrdenes() {
-  if (!session) return;
-  try {
-    const res = await fetch(`${API}/ordenes?tecnico_id=${session.tecnico_id}`);
-    const data = await res.json();
+    this.switchTab('ordenes');
+  },
 
-    if (!res.ok || data.error) {
-      showToast(data.error || 'Error al cargar órdenes', 'error');
-      return;
+  restoreSession() {
+    try {
+      const saved = localStorage.getItem('bizflow_session');
+      if (saved) {
+        this.session = JSON.parse(saved);
+        if (this.session && this.session.tecnico_id) {
+          this.hideSplash();
+          this.enterApp();
+          return;
+        }
+      }
+    } catch (_) { /* ignore */ }
+    this.hideSplash();
+    document.getElementById('loginScreen').style.display = 'flex';
+  },
+
+  hideSplash() {
+    const splash = document.getElementById('splashScreen');
+    if (splash) {
+      splash.classList.add('fade-out');
+      setTimeout(() => { splash.style.display = 'none'; }, 400);
     }
+  },
 
-    const all = Array.isArray(data) ? data : (data.ordenes || []);
-    categorizeOrdenes(all);
-    renderOrdenes();
-  } catch (err) {
-    // Silent fail for background refresh
-    console.warn('[ORDENES] Error:', err.message);
-  }
-}
+  enterApp() {
+    document.getElementById('splashScreen').style.display = 'none';
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('appScreen').style.display = 'block';
+    document.getElementById('headerTecnicoName').textContent =
+      `${this.session.nombre} · ${this.session.codigo}`;
 
-function categorizeOrdenes(all) {
-  ordenes.pendientes = all.filter((o) =>
-    ['pendiente', 'asignada'].includes(o.estado)
-  );
-  ordenes.en_curso = all.filter((o) =>
-    ['en_sitio', 'en_progreso', 'pedido_piezas', 'firma_pendiente'].includes(o.estado)
-  );
-  ordenes.completadas = all.filter((o) =>
-    ['completada', 'no_completada', 'cerrada'].includes(o.estado)
-  );
-}
+    this.loadOrdenes();
+    this.loadProfile();
+    this.startGPSTracking();
 
-function renderOrdenes() {
-  // Update badges
-  document.getElementById('badgePendientes').textContent = ordenes.pendientes.length;
-  document.getElementById('badgeEnCurso').textContent = ordenes.en_curso.length;
-  document.getElementById('badgeCompletadas').textContent = ordenes.completadas.length;
+    // Auto-refresh orders every 30 seconds
+    if (this.refreshTimer) clearInterval(this.refreshTimer);
+    this.refreshTimer = setInterval(() => this.loadOrdenes(), 30000);
+  },
 
-  // Render each tab
-  renderTabContent('pendientes', ordenes.pendientes);
-  renderTabContent('en_curso', ordenes.en_curso);
-  renderTabContent('completadas', ordenes.completadas);
-}
+  // ═══════════════════════════════════════════════════════════
+  // ORDERS
+  // ═══════════════════════════════════════════════════════════
 
-function renderTabContent(tab, items) {
-  const container = document.getElementById(`tab${capitalizeTab(tab)}Content`);
+  async loadOrdenes() {
+    if (!this.session) return;
 
-  if (items.length === 0) {
-    const icons = {
-      pendientes: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`,
-      en_curso: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17l-5.1 3.026a.75.75 0 01-1.07-.82l1.68-5.68-4.33-3.68a.75.75 0 01.42-1.32l5.7-.33 2.22-5.3a.75.75 0 011.39 0l2.22 5.3 5.7.33a.75.75 0 01.42 1.32l-4.33 3.68 1.68 5.68a.75.75 0 01-1.07.82L12 15.17z"/></svg>`,
-      completadas: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`,
-    };
-    const msgs = {
-      pendientes: 'No hay órdenes pendientes',
-      en_curso: 'No hay órdenes en curso',
-      completadas: 'No hay órdenes completadas',
-    };
-    container.innerHTML = `<div class="empty-state">${icons[tab]}<p>${msgs[tab]}</p></div>`;
-    return;
-  }
+    const fab = document.getElementById('fabRefresh');
+    if (fab) fab.classList.add('spinning');
 
-  container.innerHTML = items.map(renderOrdenCard).join('');
-}
+    try {
+      const res = await fetch(`${this.API}/ordenes?tecnico_id=${this.session.tecnico_id}`);
+      const data = await res.json();
 
-function renderOrdenCard(orden) {
-  const estadoLabel = formatEstado(orden.estado);
-  const statusClass = `status-${orden.estado}`;
-  const direccion = orden.direccion || orden.direccion_cliente || '';
-  const patente = orden.patente || '';
-  const marca = orden.marca || '';
-  const modelo = orden.modelo || '';
-  const cliente = orden.nombre_cliente || orden.cliente || '';
-  const domicilio = orden.es_domicilio || orden.domicilio;
+      if (!res.ok && data.error) {
+        if (this.ordenes.length === 0) {
+          this.showToast(data.error, 'error');
+        }
+        return;
+      }
 
-  let domicilioHTML = '';
-  if (domicilio && (domicilio.distancia || domicilio.cargo)) {
-    domicilioHTML = `
-      <div class="order-domicilio">
-        🏠 Domicilio${domicilio.distancia ? ` · ${domicilio.distancia} km` : ''}${domicilio.cargo ? ` · $${Number(domicilio.cargo).toLocaleString('es-CL')}` : ''}
-      </div>`;
-  }
-
-  return `
-    <div class="order-card" onclick="showOrdenDetail('${orden.id}')">
-      <div class="order-header">
-        <span class="order-number">#${orden.numero || orden.id}</span>
-        <span class="status-badge ${statusClass}">${estadoLabel}</span>
-      </div>
-      <div class="order-info">
-        <div class="row"><span class="label">Cliente:</span> <span>${cliente}</span></div>
-        ${orden.telefono_cliente ? `<div class="row"><span class="label">Tel:</span> <span><a href="tel:${orden.telefono_cliente}" style="color:#93c5fd;" onclick="event.stopPropagation()">${orden.telefono_cliente}</a></span></div>` : ''}
-        ${direccion ? `<div class="row"><span class="label">Dir:</span> <span>${direccion}</span></div>` : ''}
-      </div>
-      ${patente || marca || modelo ? `
-        <div class="order-vehicle">
-          ${patente ? `<span class="patente">${patente}</span>` : ''}
-          <span class="vehiculo-info">${[marca, modelo].filter(Boolean).join(' ') || '—'}</span>
-        </div>` : ''}
-      ${domicilioHTML}
-    </div>`;
-}
-
-function capitalizeTab(tab) {
-  const map = { pendientes: 'Pendientes', en_curso: 'EnCurso', completadas: 'Completadas' };
-  return map[tab] || tab;
-}
-
-function formatEstado(estado) {
-  const map = {
-    pendiente: 'Pendiente',
-    asignada: 'Asignada',
-    en_sitio: 'En Sitio',
-    en_progreso: 'En Progreso',
-    pedido_piezas: 'Pedido Piezas',
-    completada: 'Completada',
-    no_completada: 'No Completada',
-    cerrada: 'Cerrada',
-    firma_pendiente: 'Firma Pendiente',
-  };
-  return map[estado] || estado;
-}
-
-// ═══════════════════════════════════════════════════════════
-// TABS
-// ═══════════════════════════════════════════════════════════
-
-function switchTab(tab) {
-  currentTab = tab;
-
-  // Update tab pills
-  document.querySelectorAll('.tab-pill').forEach((el) => el.classList.remove('active'));
-  document.getElementById(`tab${capitalizeTab(tab)}`).classList.add('active');
-
-  // Update tab content
-  document.querySelectorAll('.tab-content').forEach((el) => el.classList.remove('active'));
-  document.getElementById(`tab${capitalizeTab(tab)}Content`).classList.add('active');
-
-  // Update bottom nav
-  document.querySelectorAll('.nav-item').forEach((el) => el.classList.remove('active'));
-  document.getElementById(`nav${capitalizeTab(tab)}`).classList.add('active');
-}
-
-// ═══════════════════════════════════════════════════════════
-// DETAIL MODAL
-// ═══════════════════════════════════════════════════════════
-
-async function showOrdenDetail(ordenId) {
-  showLoading();
-  try {
-    const res = await fetch(`${API}/orden?id=${ordenId}`);
-    const data = await res.json();
-
-    if (!res.ok || data.error) {
-      showToast(data.error || 'Error al cargar orden', 'error');
-      hideLoading();
-      return;
+      this.ordenes = Array.isArray(data.ordenes) ? data.ordenes :
+                     Array.isArray(data) ? data :
+                     (data.results || []);
+      this.applyFilter();
+      this.updateCounts();
+    } catch (err) {
+      console.warn('[ORDENES] Error:', err.message);
+    } finally {
+      if (fab) fab.classList.remove('spinning');
     }
+  },
 
-    currentOrden = data;
-    populateDetailModal(data);
-    document.getElementById('detailModal').classList.add('active');
-    hideLoading();
-  } catch (err) {
-    showToast('Error de conexión', 'error');
-    hideLoading();
-  }
-}
+  updateCounts() {
+    const counts = { todas: this.ordenes.length, en_proceso: 0, completada: 0, pendiente: 0 };
+    this.ordenes.forEach(o => {
+      const e = o.estado || '';
+      if (e === 'en_proceso' || e === 'pausada' || e === 'asignada') counts.en_proceso++;
+      else if (e === 'completada' || e === 'aprobada' || e === 'cerrada') counts.completada++;
+      else if (e === 'pendiente') counts.pendiente++;
+    });
+    document.getElementById('countTodas').textContent = counts.todas;
+    document.getElementById('countEnProceso').textContent = counts.en_proceso;
+    document.getElementById('countCompletada').textContent = counts.completada;
+    document.getElementById('countPendiente').textContent = counts.pendiente;
+  },
 
-function populateDetailModal(o) {
-  // Title
-  document.getElementById('detailTitle').textContent = `Orden #${o.numero || o.id}`;
-  document.getElementById('detailSubtitle').textContent = formatEstado(o.estado);
+  filterOrdenes(filter, btnEl) {
+    this.currentFilter = filter;
 
-  // Client
-  const clienteHTML = [
-    row('Nombre', o.nombre_cliente || o.cliente || '—'),
-    o.telefono_cliente ? row('Teléfono', `<a href="tel:${o.telefono_cliente}" style="color:#93c5fd;">${o.telefono_cliente}</a>`) : '',
-    row('Email', o.email_cliente || '—'),
-    row('Dirección', o.direccion || '—'),
-  ].filter(Boolean).join('');
-  document.getElementById('detailCliente').innerHTML = clienteHTML;
+    // Update filter buttons
+    document.querySelectorAll('.status-filter').forEach(b => b.classList.remove('active'));
+    if (btnEl) btnEl.classList.add('active');
 
-  // Vehicle
-  const vehiculoHTML = [
-    row('Patente', o.patente || '—'),
-    row('Marca', o.marca || '—'),
-    row('Modelo', o.modelo || ''),
-    row('Año', o.anio || ''),
-    row('Color', o.color || ''),
-    row('VIN / Chasis', o.vin || o.chasis || ''),
-    row('Kilometraje', o.km ? `${Number(o.km).toLocaleString('es-CL')} km` : ''),
-    row('Combustible', o.combustible || ''),
-  ].filter(Boolean).join('');
-  document.getElementById('detailVehiculo').innerHTML = vehiculoHTML;
+    this.applyFilter();
+  },
 
-  // Services
-  const servicios = o.servicios || o.diagnostico || [];
-  let serviciosHTML = '';
-  if (Array.isArray(servicios) && servicios.length > 0) {
-    serviciosHTML = servicios.map((s) => {
-      const nombre = s.nombre || s.servicio || s.descripcion || 'Servicio';
-      const precio = s.precio || s.valor || 0;
-      return `<div class="service-item"><span>${nombre}</span><span class="price">$${Number(precio).toLocaleString('es-CL')}</span></div>`;
-    }).join('');
-  } else if (typeof servicios === 'string') {
-    serviciosHTML = `<div class="service-item"><span>${servicios}</span></div>`;
-  } else {
-    serviciosHTML = '<p style="font-size:0.85rem;color:#64748b;text-align:center;">Sin servicios registrados</p>';
-  }
-  document.getElementById('detailServicios').innerHTML = serviciosHTML;
-
-  // Checklist
-  const checklist = o.checklist || o.checklist_vehiculo;
-  if (checklist && Array.isArray(checklist) && checklist.length > 0) {
-    document.getElementById('checklistSection').style.display = 'block';
-    document.getElementById('detailChecklist').innerHTML = checklist.map((c) => {
-      const icon = c.estado === 'ok' ? '✅' : c.estado === 'no' ? '❌' : '➖';
-      const cls = c.estado === 'ok' ? 'check-ok' : c.estado === 'no' ? 'check-no' : 'check-na';
-      return `<div class="checklist-item"><span class="check-icon ${cls}">${icon}</span><span>${c.item || c.nombre || '—'}</span></div>`;
-    }).join('');
-  } else {
-    document.getElementById('checklistSection').style.display = 'none';
-  }
-
-  // Domicilio
-  const domicilio = o.domicilio || o.es_domicilio;
-  if (domicilio && (domicilio.distancia || domicilio.cargo || domicilio.modo_pago)) {
-    document.getElementById('domicilioSection').style.display = 'block';
-    document.getElementById('detailDomicilio').innerHTML = [
-      row('Distancia', domicilio.distancia ? `${domicilio.distancia} km` : '—'),
-      row('Cargo', domicilio.cargo ? `$${Number(domicilio.cargo).toLocaleString('es-CL')}` : '—'),
-      row('Modo de Pago', domicilio.modo_pago || '—'),
-    ].join('');
-  } else {
-    document.getElementById('domicilioSection').style.display = 'none';
-  }
-
-  // Photos (load async)
-  loadFotos(o.id);
-
-  // Notes (load async)
-  loadNotas(o.id);
-
-  // History (load async)
-  loadHistorial(o.id);
-}
-
-function row(label, value) {
-  return `<div class="detail-row"><span class="label">${label}</span><span class="value">${value}</span></div>`;
-}
-
-async function loadFotos(ordenId) {
-  const grid = document.getElementById('detailFotos');
-  const empty = document.getElementById('detailFotosEmpty');
-  try {
-    const res = await fetch(`${API}/fotos?orden_id=${ordenId}`);
-    const data = await res.json();
-    const fotos = Array.isArray(data) ? data : (data.fotos || []);
-
-    if (fotos.length === 0) {
-      grid.innerHTML = '';
-      empty.style.display = 'block';
-      return;
+  applyFilter() {
+    if (this.currentFilter === 'todas') {
+      this.filteredOrdenes = [...this.ordenes];
+    } else {
+      const f = this.currentFilter;
+      if (f === 'en_proceso') {
+        this.filteredOrdenes = this.ordenes.filter(o =>
+          ['en_proceso', 'pausada', 'asignada'].includes(o.estado));
+      } else {
+        this.filteredOrdenes = this.ordenes.filter(o => o.estado === f);
+      }
     }
-    empty.style.display = 'none';
-    grid.innerHTML = fotos.map((f) => {
-      const tipoLabel = { antes: 'Antes', durante: 'Durante', despues: 'Después' }[f.tipo] || '';
-      return `
-        <div>
-          <img class="photo-thumb" src="${f.url || f.ruta || ''}" alt="Foto ${tipoLabel}" 
-               onclick="event.stopPropagation();openFullscreen('${f.url || f.ruta || ''}')" loading="lazy" />
-          <div class="photo-label">${tipoLabel}</div>
-        </div>`;
-    }).join('');
-  } catch (_) {
-    grid.innerHTML = '';
-    empty.style.display = 'block';
-  }
-}
+    this.renderOrdenes();
+  },
 
-async function loadNotas(ordenId) {
-  const container = document.getElementById('detailNotas');
-  const empty = document.getElementById('detailNotasEmpty');
-  try {
-    const res = await fetch(`${API}/notas?orden_id=${ordenId}`);
-    const data = await res.json();
-    const notas = Array.isArray(data) ? data : (data.notas || []);
-
-    if (notas.length === 0) {
-      container.innerHTML = '';
-      empty.style.display = 'block';
-      return;
-    }
-    empty.style.display = 'none';
-    container.innerHTML = notas.map((n) => `
-      <div class="note-item">
-        <div class="note-text">${escapeHtml(n.texto || n.nota || '')}</div>
-        <div class="note-meta">${n.fecha || n.created_at || ''} · ${n.autor || n.tecnico || ''}</div>
-      </div>`).join('');
-  } catch (_) {
-    container.innerHTML = '';
-    empty.style.display = 'block';
-  }
-}
-
-async function loadHistorial(ordenId) {
-  const container = document.getElementById('detailHistorial');
-  try {
-    const res = await fetch(`${API}/historial?orden_id=${ordenId}`);
-    const data = await res.json();
-    const items = Array.isArray(data) ? data : (data.historial || []);
+  renderOrdenes() {
+    const container = document.getElementById('ordersList');
+    const items = this.filteredOrdenes;
 
     if (items.length === 0) {
-      container.innerHTML = '<p style="font-size:0.85rem;color:#64748b;text-align:center;">Sin historial</p>';
-      return;
-    }
-
-    container.innerHTML = items.map((h) => {
-      const lat = h.latitud ? ` (${h.latitud}, ${h.longitud})` : '';
-      return `
-        <div class="timeline-item">
-          <div class="timeline-dot">${h.emoji || '📍'}</div>
-          <div class="timeline-content">
-            <div class="timeline-status">${formatEstado(h.estado || h.nuevo_estado || '')}</div>
-            <div class="timeline-meta">${h.fecha || h.created_at || ''}${lat}</div>
-          </div>
+      container.innerHTML = `
+        <div class="empty-state">
+          <i class="fas fa-clipboard-list"></i>
+          <p>No hay órdenes${this.currentFilter !== 'todas' ? ' con este filtro' : ''}</p>
         </div>`;
-    }).join('');
-  } catch (_) {
-    container.innerHTML = '<p style="font-size:0.85rem;color:#64748b;text-align:center;">Sin historial</p>';
-  }
-}
-
-function closeDetailModal(event) {
-  if (event && event.target !== event.currentTarget) return;
-  document.getElementById('detailModal').classList.remove('active');
-  currentOrden = null;
-}
-
-// ── ACTION BUTTONS SHEET ────────────────────────────────────
-
-function showActionButtons() {
-  if (!currentOrden) return;
-  const o = currentOrden;
-  const estado = o.estado;
-  let buttons = '';
-
-  // GPS (always if address exists)
-  if (o.direccion) {
-    buttons += `<button class="action-btn btn-gps" onclick="navegarGPS()">🧭 Navegar GPS</button>`;
-  }
-
-  // State-based actions
-  switch (estado) {
-    case 'pendiente':
-    case 'asignada':
-      buttons += `<button class="action-btn btn-primary" onclick="llegarAlSitio()">📍 Llegar al Sitio</button>`;
-      break;
-
-    case 'en_sitio':
-      buttons += `<button class="action-btn btn-primary" onclick="iniciarTrabajo()">▶ Iniciar Trabajo</button>`;
-      buttons += `<button class="action-btn btn-note" onclick="openNoteModal()">📝 Agregar Nota</button>`;
-      break;
-
-    case 'en_progreso':
-      buttons += `<button class="action-btn btn-primary" onclick="subirFotoAction()">📸 Subir Fotos</button>`;
-      buttons += `<button class="action-btn btn-note" onclick="openNoteModal()">📝 Agregar Nota</button>`;
-      buttons += `<button class="action-btn btn-complete" onclick="completarOrden()">✅ Completar</button>`;
-      break;
-
-    case 'pedido_piezas':
-      buttons += `<button class="action-btn btn-primary" onclick="retomarTrabajo()">▶ Retomar Trabajo</button>`;
-      buttons += `<button class="action-btn btn-note" onclick="openNoteModal()">📝 Agregar Nota</button>`;
-      break;
-
-    case 'completada':
-      buttons += `<button class="action-btn btn-primary" onclick="solicitarFirma()">✍️ Solicitar Firma</button>`;
-      buttons += `<button class="action-btn btn-green" onclick="clienteSatisfecho()">👍 Cliente Satisfecho</button>`;
-      buttons += `<button class="action-btn btn-red" onclick="openNoCompletadaModal()">❌ No Completada</button>`;
-      buttons += `<button class="action-btn btn-dark" onclick="openCloseModal()">🔒 Cerrar Orden</button>`;
-      break;
-
-    case 'firma_pendiente':
-      buttons += `<button class="action-btn btn-primary" onclick="solicitarFirma()">✍️ Reenviar Firma</button>`;
-      buttons += `<button class="action-btn btn-dark" onclick="openCloseModal()">🔒 Cerrar Orden</button>`;
-      break;
-
-    case 'no_completada':
-      buttons += `<button class="action-btn btn-dark" onclick="openCloseModal()">🔒 Cerrar Orden</button>`;
-      break;
-  }
-
-  // Always allow notes and photos for active orders
-  if (['en_sitio', 'en_progreso', 'pedido_piezas'].includes(estado) && !buttons.includes('Subir Fotos')) {
-    buttons += `<button class="action-btn btn-primary" onclick="subirFotoAction()">📸 Subir Fotos</button>`;
-  }
-
-  if (buttons) {
-    document.getElementById('actionButtonsContent').innerHTML = buttons;
-    // Insert action buttons after detail modal
-    document.getElementById('detailModal').classList.remove('active');
-    document.getElementById('actionButtons').classList.add('active');
-  }
-}
-
-function closeActions(event) {
-  if (event && event.target !== event.currentTarget) return;
-  document.getElementById('actionButtons').classList.remove('active');
-}
-
-// ═══════════════════════════════════════════════════════════
-// ACTIONS
-// ═══════════════════════════════════════════════════════════
-
-function navegarGPS() {
-  if (!currentOrden || !currentOrden.direccion) return;
-  const addr = encodeURIComponent(currentOrden.direccion);
-  window.open(`https://maps.google.com/?q=${addr}`, '_blank');
-  document.getElementById('actionButtons').classList.remove('active');
-}
-
-async function llegarAlSitio() {
-  if (!currentOrden) return;
-  showLoading();
-  try {
-    const coords = await getCurrentPosition();
-    const res = await fetch(`${API}/cambiar-estado`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        orden_id: currentOrden.id,
-        nuevo_estado: 'en_sitio',
-        latitud: coords.lat,
-        longitud: coords.lng,
-      }),
-    });
-    const data = await res.json();
-
-    if (data.error) {
-      showToast(data.error, 'error');
-      hideLoading();
       return;
     }
 
-    hideLoading();
-    document.getElementById('actionButtons').classList.remove('active');
-    showToast('📍 Has llegado al sitio', 'success');
-    loadOrdenes();
-    showOrdenDetail(currentOrden.id);
-  } catch (err) {
-    showToast('No se pudo obtener la ubicación GPS', 'error');
-    hideLoading();
-  }
-}
+    container.innerHTML = items.map(o => this.renderOrdenCard(o)).join('');
+  },
 
-async function iniciarTrabajo() {
-  if (!currentOrden) return;
-  showLoading();
-  try {
-    const coords = await getCurrentPosition();
-    const res = await fetch(`${API}/cambiar-estado`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        orden_id: currentOrden.id,
-        nuevo_estado: 'en_progreso',
-        latitud: coords.lat,
-        longitud: coords.lng,
-      }),
-    });
-    const data = await res.json();
+  renderOrdenCard(orden) {
+    const estadoLabel = this.formatEstado(orden.estado);
+    const estadoClass = orden.estado || 'pendiente';
+    const prioridad = orden.prioridad || 'normal';
+    const cliente = orden.cliente_nombre || orden.nombre_cliente || '';
+    const telefono = orden.cliente_telefono || orden.telefono_cliente || '';
+    const placa = orden.placa || '';
+    const vehiculo = [orden.vehiculo_marca || orden.marca, orden.vehiculo_modelo || orden.modelo]
+      .filter(Boolean).join(' ');
+    const tipo = orden.tipo || '';
 
-    if (data.error) {
-      showToast(data.error, 'error');
-      hideLoading();
-      return;
+    return `
+      <div class="ot-card" onclick="App.openOrden(${orden.id})">
+        <div class="ot-card-header">
+          <span class="ot-number">#${orden.numero || orden.id}</span>
+          <div class="ot-badges">
+            <span class="badge-prioridad ${prioridad}">${prioridad}</span>
+            <span class="badge-estado ${estadoClass}">${estadoLabel}</span>
+          </div>
+        </div>
+        <div class="ot-info">
+          <div class="row"><span class="label">Cliente:</span> <span>${this.escapeHtml(cliente)}</span></div>
+          ${telefono ? `<div class="row"><span class="label">Tel:</span> <span><a href="tel:${telefono}" style="color:var(--primary-light)" onclick="event.stopPropagation()">${telefono}</a></span></div>` : ''}
+          ${tipo ? `<div class="row"><span class="label">Tipo:</span> <span>${this.escapeHtml(tipo)}</span></div>` : ''}
+        </div>
+        ${placa || vehiculo ? `
+          <div class="ot-vehicle">
+            ${placa ? `<span class="ot-plate">${placa}</span>` : ''}
+            <span class="ot-vehicle-info">${vehiculo || '—'}</span>
+          </div>` : ''}
+      </div>`;
+  },
+
+  formatEstado(estado) {
+    const map = {
+      pendiente: 'Pendiente',
+      asignada: 'Asignada',
+      en_proceso: 'En Proceso',
+      pausada: 'Pausada',
+      completada: 'Completada',
+      cancelada: 'Cancelada',
+      aprobada: 'Aprobada',
+      cerrada: 'Cerrada',
+    };
+    return map[estado] || estado || '—';
+  },
+
+  // ═══════════════════════════════════════════════════════════
+  // TABS NAVIGATION
+  // ═══════════════════════════════════════════════════════════
+
+  switchTab(tab) {
+    this.currentTab = tab;
+
+    // Hide all pages
+    document.querySelectorAll('.page-view').forEach(p => p.classList.remove('active'));
+
+    // Show selected page
+    const pageId = tab === 'ordenes' ? 'pageOrdenes' :
+                   tab === 'detalle' ? 'pageDetalle' : 'pagePerfil';
+    const page = document.getElementById(pageId);
+    if (page) page.classList.add('active');
+
+    // Update nav
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    const navBtn = document.querySelector(`.nav-item[data-tab="${tab}"]`);
+    if (navBtn) navBtn.classList.add('active');
+
+    // Show/hide FAB
+    const fab = document.getElementById('fabRefresh');
+    if (fab) fab.style.display = tab === 'ordenes' ? 'flex' : 'none';
+
+    // Load profile data when switching to profile tab
+    if (tab === 'perfil') this.loadProfile();
+
+    // If switching to detalle tab without an order, show first active order or message
+    if (tab === 'detalle' && !this.currentOrden) {
+      this.renderDetalleEmpty();
     }
+  },
 
-    hideLoading();
-    document.getElementById('actionButtons').classList.remove('active');
-    showToast('▶ Trabajo iniciado', 'success');
-    loadOrdenes();
-    showOrdenDetail(currentOrden.id);
-  } catch (err) {
-    showToast('No se pudo obtener la ubicación GPS', 'error');
-    hideLoading();
-  }
-}
+  // ═══════════════════════════════════════════════════════════
+  // ORDER DETAIL
+  // ═══════════════════════════════════════════════════════════
 
-async function completarOrden() {
-  if (!currentOrden) return;
-  showLoading();
-  try {
-    const res = await fetch(`${API}/cambiar-estado`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        orden_id: currentOrden.id,
-        nuevo_estado: 'completada',
-      }),
-    });
-    const data = await res.json();
+  async openOrden(ordenId) {
+    this.showLoading();
+    try {
+      const res = await fetch(`${this.API}/ordenes/${ordenId}?tecnico_id=${this.session.tecnico_id}`);
+      const data = await res.json();
 
-    if (data.error) {
-      showToast(data.error, 'error');
-      hideLoading();
-      return;
+      if (!res.ok || data.error) {
+        this.showToast(data.error || 'Error al cargar orden', 'error');
+        this.hideLoading();
+        return;
+      }
+
+      this.currentOrden = data.orden || data;
+      this.renderDetalle();
+      this.switchTab('detalle');
+    } catch (err) {
+      this.showToast('Error de conexión', 'error');
+    } finally {
+      this.hideLoading();
     }
+  },
 
-    hideLoading();
-    document.getElementById('actionButtons').classList.remove('active');
-    showToast('✅ Orden completada', 'success');
-    loadOrdenes();
-    showOrdenDetail(currentOrden.id);
-  } catch (err) {
-    showToast('Error de conexión', 'error');
-    hideLoading();
-  }
-}
+  renderDetalleEmpty() {
+    const container = document.getElementById('pageDetalle');
+    container.innerHTML = `
+      <div class="empty-state" style="padding-top:80px;">
+        <i class="fas fa-tools"></i>
+        <p>Selecciona una orden para ver el detalle</p>
+      </div>`;
+  },
 
-async function retomarTrabajo() {
-  if (!currentOrden) return;
-  showLoading();
-  try {
-    const res = await fetch(`${API}/cambiar-estado`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        orden_id: currentOrden.id,
-        nuevo_estado: 'en_progreso',
-      }),
-    });
-    const data = await res.json();
+  renderDetalle() {
+    const o = this.currentOrden;
+    if (!o) { this.renderDetalleEmpty(); return; }
 
-    if (data.error) {
-      showToast(data.error, 'error');
-      hideLoading();
-      return;
+    const estado = o.estado || 'pendiente';
+    const prioridad = o.prioridad || 'normal';
+    const estadoLabel = this.formatEstado(estado);
+
+    const container = document.getElementById('pageDetalle');
+    container.innerHTML = `
+      <!-- Header -->
+      <div class="detail-header">
+        <button class="back-btn" onclick="App.switchTab('ordenes')">
+          <i class="fas fa-arrow-left"></i>
+        </button>
+        <div class="ot-title">
+          <h2>Orden #${o.numero || o.id}</h2>
+          <div class="ot-meta">
+            <span class="badge-estado ${estado}">${estadoLabel}</span>
+            <span class="badge-prioridad ${prioridad}">${prioridad}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="detail-content">
+        <!-- Client & Vehicle Info -->
+        <div class="detail-section">
+          <div class="detail-section-title"><i class="fas fa-user"></i> Información</div>
+          <div class="detail-row"><span class="label">Cliente</span><span class="value">${this.escapeHtml(o.cliente_nombre || '—')}</span></div>
+          ${o.cliente_telefono ? `<div class="detail-row"><span class="label">Teléfono</span><span class="value"><a href="tel:${o.cliente_telefono}" style="color:var(--primary-light)">${o.cliente_telefono}</a></span></div>` : ''}
+          ${o.cliente_direccion ? `<div class="detail-row"><span class="label">Dirección</span><span class="value">${this.escapeHtml(o.cliente_direccion)}</span></div>` : ''}
+          ${o.placa ? `<div class="detail-row"><span class="label">Vehículo</span><span class="value">${o.placa} ${[o.vehiculo_marca, o.vehiculo_modelo].filter(Boolean).join(' ')}</span></div>` : ''}
+          <div class="detail-row"><span class="label">Tipo</span><span class="value">${this.escapeHtml(o.tipo || '—')}</span></div>
+        </div>
+
+        <!-- Description -->
+        ${o.descripcion || o.titulo ? `
+        <div class="detail-section">
+          <div class="detail-section-title"><i class="fas fa-align-left"></i> Descripción</div>
+          <p style="font-size:0.88rem;color:var(--text);line-height:1.6;">
+            ${this.escapeHtml(o.descripcion || o.titulo)}
+          </p>
+        </div>` : ''}
+
+        <!-- Status Change Buttons -->
+        <div class="detail-section">
+          <div class="detail-section-title"><i class="fas fa-exchange-alt"></i> Cambiar Estado</div>
+          <div class="status-actions">
+            ${estado === 'pendiente' || estado === 'asignada' ? `
+              <button class="status-btn btn-start" onclick="App.cambiarEstado('en_proceso')">
+                <i class="fas fa-play"></i> Iniciar
+              </button>` : ''}
+            ${estado === 'en_proceso' ? `
+              <button class="status-btn btn-pause" onclick="App.cambiarEstado('pausada')">
+                <i class="fas fa-pause"></i> Pausar
+              </button>
+              <button class="status-btn btn-complete" onclick="App.cambiarEstado('completada')">
+                <i class="fas fa-check"></i> Completar
+              </button>` : ''}
+            ${estado === 'pausada' ? `
+              <button class="status-btn btn-start" onclick="App.cambiarEstado('en_proceso')">
+                <i class="fas fa-play"></i> Reanudar
+              </button>` : ''}
+            ${estado === 'completada' ? `
+              <button class="status-btn btn-complete" onclick="App.enviarAprobacion()">
+                <i class="fas fa-paper-plane"></i> Enviar Aprobación
+              </button>` : ''}
+          </div>
+          <p id="estadoMsg" style="font-size:0.8rem;color:var(--text-dim);margin-top:8px;display:none;"></p>
+        </div>
+
+        <!-- GPS Location -->
+        <div class="detail-section">
+          <div class="detail-section-title"><i class="fas fa-map-marker-alt"></i> Ubicación GPS</div>
+          <div id="gpsCoords" class="gps-coords">
+            ${o.latitud_ubicacion ? `${o.latitud_ubicacion.toFixed(6)}, ${o.longitud_ubicacion.toFixed(6)}` : 'Sin ubicación registrada'}
+          </div>
+          <div style="margin-top:10px;">
+            <button class="btn-action btn-dark-action" onclick="App.captureGPS()">
+              <i class="fas fa-crosshairs"></i> Capturar Ubicación Actual
+            </button>
+          </div>
+          <div id="gpsMapContainer" style="margin-top:10px;display:none;">
+            <div id="gpsMap"></div>
+          </div>
+        </div>
+
+        <!-- Photos -->
+        <div class="detail-section">
+          <div class="detail-section-title"><i class="fas fa-camera"></i> Fotos del Trabajo</div>
+          <div class="photo-type-selector">
+            <button class="photo-type-btn selected" onclick="App.selectPhotoType('antes',this)">🔸 Antes</button>
+            <button class="photo-type-btn" onclick="App.selectPhotoType('durante',this)">🔹 Durante</button>
+            <button class="photo-type-btn" onclick="App.selectPhotoType('despues',this)">🔻 Después</button>
+            <button class="photo-type-btn" onclick="App.selectPhotoType('evidencia',this)">📎 Evidencia</button>
+          </div>
+          <div class="photo-actions">
+            <button class="photo-action-btn camera" onclick="App.capturePhoto('camera')">
+              <i class="fas fa-camera"></i> Cámara
+            </button>
+            <button class="photo-action-btn gallery" onclick="App.capturePhoto('gallery')">
+              <i class="fas fa-images"></i> Galería
+            </button>
+          </div>
+          <input type="file" id="photoInput" accept="image/*" style="display:none;" />
+          <div id="photosGrid" class="photos-grid"></div>
+          <div id="photosEmpty" style="display:none;">
+            <p style="font-size:0.82rem;color:var(--text-dim);text-align:center;padding:10px;">Sin fotos registradas</p>
+          </div>
+        </div>
+
+        <!-- Notes -->
+        <div class="detail-section">
+          <div class="detail-section-title"><i class="fas fa-sticky-note"></i> Notas</div>
+          <div id="notasList"></div>
+          <div style="margin-top:10px;">
+            <button class="btn-action btn-dark-action" onclick="App.openModal('noteModal')">
+              <i class="fas fa-plus"></i> Agregar Nota
+            </button>
+          </div>
+        </div>
+
+        <!-- Costs -->
+        <div class="detail-section">
+          <div class="detail-section-title"><i class="fas fa-dollar-sign"></i> Costos Adicionales</div>
+          <div id="costosList"></div>
+          <div style="margin-top:10px;">
+            <button class="btn-action btn-dark-action" onclick="App.openModal('costModal')">
+              <i class="fas fa-plus"></i> Agregar Costo
+            </button>
+          </div>
+        </div>
+
+        <!-- Digital Signature -->
+        <div class="detail-section">
+          <div class="detail-section-title"><i class="fas fa-signature"></i> Firma del Cliente</div>
+          <div class="signature-area" id="signatureArea">
+            <canvas id="signatureCanvas"></canvas>
+            <div class="placeholder-text" id="signaturePlaceholder">Firma aquí con el dedo</div>
+          </div>
+          <div class="signature-actions">
+            <button class="btn-action btn-dark-action" style="flex:1;" onclick="App.clearSignature()">
+              <i class="fas fa-eraser"></i> Limpiar
+            </button>
+            <button class="btn-action btn-primary-action" style="flex:1;" onclick="App.saveSignature()">
+              <i class="fas fa-save"></i> Guardar Firma
+            </button>
+          </div>
+        </div>
+
+        <!-- Timeline / Tracking -->
+        <div class="detail-section">
+          <div class="detail-section-title"><i class="fas fa-history"></i> Historial / Seguimiento</div>
+          <div id="timelineList"></div>
+        </div>
+
+        <!-- Send for approval -->
+        ${estado === 'completada' ? `
+        <button class="btn-action btn-success-action" onclick="App.enviarAprobacion()" style="margin-bottom:20px;">
+          <i class="fas fa-paper-plane"></i> Enviar para Aprobación
+        </button>` : ''}
+      </div>
+    `;
+
+    // Initialize signature canvas
+    this.initSignatureCanvas();
+
+    // Load async data
+    this.loadFotos(o.id);
+    this.loadNotas(o.id);
+    this.loadCostos(o.id);
+    this.loadTimeline(o.id);
+  },
+
+  // ═══════════════════════════════════════════════════════════
+  // STATUS CHANGE
+  // ═══════════════════════════════════════════════════════════
+
+  async cambiarEstado(nuevoEstado) {
+    if (!this.currentOrden) return;
+    this.showLoading();
+
+    let latitud = null, longitud = null;
+    try {
+      const pos = await this.getCurrentPosition();
+      latitud = pos.lat;
+      longitud = pos.lng;
+    } catch (_) { /* GPS optional */ }
+
+    try {
+      const res = await fetch(`${this.API}/ordenes/${this.currentOrden.id}/estado`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          estado: nuevoEstado,
+          tecnico_id: this.session.tecnico_id,
+          latitud,
+          longitud,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        this.showToast(data.error || 'Error al cambiar estado', 'error');
+        this.hideLoading();
+        return;
+      }
+
+      this.showToast(`Estado cambiado a "${this.formatEstado(nuevoEstado)}"`, 'success');
+      this.hideLoading();
+
+      // Reload detail and orders list
+      await this.openOrden(this.currentOrden.id);
+      this.loadOrdenes();
+    } catch (err) {
+      this.showToast('Error de conexión', 'error');
+      this.hideLoading();
     }
+  },
 
-    hideLoading();
-    document.getElementById('actionButtons').classList.remove('active');
-    showToast('▶ Trabajo retomado', 'success');
-    loadOrdenes();
-    showOrdenDetail(currentOrden.id);
-  } catch (err) {
-    showToast('Error de conexión', 'error');
-    hideLoading();
-  }
-}
+  async enviarAprobacion() {
+    if (!this.currentOrden) return;
+    this.showToast('Solicitud de aprobación enviada', 'success');
+    // This would call an approval API endpoint
+    // For now, just show the toast
+  },
 
-async function solicitarFirma() {
-  if (!currentOrden) return;
-  showLoading();
-  try {
-    const res = await fetch(`${API}/generar-token-firma`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        orden_id: currentOrden.id,
-        tecnico_id: session.tecnico_id,
-      }),
+  // ═══════════════════════════════════════════════════════════
+  // GPS LOCATION
+  // ═══════════════════════════════════════════════════════════
+
+  getCurrentPosition() {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('Geolocalización no disponible'));
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }),
+        (err) => reject(err),
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
+      );
     });
-    const data = await res.json();
+  },
 
-    if (data.error) {
-      showToast(data.error, 'error');
-      hideLoading();
-      return;
+  async captureGPS() {
+    if (!this.currentOrden) return;
+    this.showLoading();
+
+    try {
+      const pos = await this.getCurrentPosition();
+
+      // Update order location via API
+      const res = await fetch(`${this.API}/ordenes/${this.currentOrden.id}/ubicacion`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          latitud: pos.lat,
+          longitud: pos.lng,
+          precision: pos.accuracy,
+        }),
+      });
+      const data = await res.json();
+
+      if (data.error) {
+        this.showToast(data.error, 'error');
+      } else {
+        const coordsEl = document.getElementById('gpsCoords');
+        if (coordsEl) {
+          coordsEl.textContent = `${pos.lat.toFixed(6)}, ${pos.lng.toFixed(6)} (±${Math.round(pos.accuracy)}m)`;
+        }
+
+        // Show map
+        this.showMiniMap(pos.lat, pos.lng);
+        this.showToast('Ubicación capturada', 'success');
+      }
+    } catch (err) {
+      this.showToast('No se pudo obtener la ubicación GPS', 'error');
+    } finally {
+      this.hideLoading();
     }
+  },
 
-    const token = data.token || data.firma_token;
-    const baseUrl = window.location.origin;
-    const link = `${baseUrl}/firma/${token}`;
-    document.getElementById('signatureLink').value = link;
+  showMiniMap(lat, lng) {
+    const mapContainer = document.getElementById('gpsMapContainer');
+    if (!mapContainer) return;
+    mapContainer.style.display = 'block';
 
-    hideLoading();
-    document.getElementById('actionButtons').classList.remove('active');
-    document.getElementById('signatureModal').classList.add('active');
-  } catch (err) {
-    showToast('Error de conexión', 'error');
-    hideLoading();
-  }
-}
+    // Small delay to ensure container is rendered
+    setTimeout(() => {
+      const mapEl = document.getElementById('gpsMap');
+      if (!mapEl || typeof L === 'undefined') return;
 
-function shareWhatsApp() {
-  const link = document.getElementById('signatureLink').value;
-  if (!link) return;
-  const msg = encodeURIComponent(`Hola, por favor firma la conformidad de su orden en el siguiente enlace:\n${link}`);
-  window.open(`https://wa.me/?text=${msg}`, '_blank');
-}
+      try {
+        const map = L.map('gpsMap').setView([lat, lng], 15);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© OpenStreetMap',
+        }).addTo(map);
+        L.marker([lat, lng]).addTo(map)
+          .bindPopup('Ubicación actual')
+          .openPopup();
 
-function shareLinkGeneric() {
-  const link = document.getElementById('signatureLink').value;
-  if (!link) return;
-  if (navigator.share) {
-    navigator.share({
-      title: 'Firma BizFlow',
-      text: 'Firma la conformidad de tu orden',
-      url: link,
-    }).catch(() => {});
-  } else {
-    copySignatureLink();
-  }
-}
+        // Invalidate size after a short delay
+        setTimeout(() => map.invalidateSize(), 300);
+      } catch (err) {
+        console.warn('Map error:', err);
+      }
+    }, 100);
+  },
 
-function copySignatureLink() {
-  const input = document.getElementById('signatureLink');
-  input.select();
-  input.setSelectionRange(0, 99999);
-  try {
-    navigator.clipboard.writeText(input.value);
-    showToast('🔗 Link copiado', 'success');
-  } catch (_) {
-    document.execCommand('copy');
-    showToast('🔗 Link copiado', 'success');
-  }
-}
+  startGPSTracking() {
+    if (!this.session) return;
 
-async function cerrarOrdenDesdeFirma() {
-  if (!currentOrden) return;
-  const notes = document.getElementById('signatureNotes').value.trim();
-  const pagoEstado = getRadioValue('sigPagoEstado');
-  const pagoMetodo = getRadioValue('sigPagoMetodo');
+    // Send location every 2 minutes
+    if (this.gpsTimer) clearInterval(this.gpsTimer);
+    this.gpsTimer = setInterval(() => {
+      this.sendCurrentLocation();
+    }, 120000);
 
-  await doCerrarOrden(currentOrden.id, notes, pagoEstado, pagoMetodo);
-  document.getElementById('signatureModal').classList.remove('active');
-}
+    // Send immediately on start
+    this.sendCurrentLocation();
+  },
 
-function openCloseModal() {
-  document.getElementById('actionButtons').classList.remove('active');
-  document.getElementById('closeNotes').value = '';
-  // Reset radios
-  document.querySelectorAll('#closePagoEstado .radio-option').forEach((el, i) => {
-    el.classList.toggle('selected', i === 2); // Pendiente default
-  });
-  document.querySelectorAll('#closePagoMetodo .radio-option').forEach((el, i) => {
-    el.classList.toggle('selected', i === 0); // Efectivo default
-  });
-  document.getElementById('closeModal').classList.add('active');
-}
+  async sendCurrentLocation() {
+    if (!this.session || !navigator.onLine) return;
 
-function closeCloseModal(event) {
-  if (event && event.target !== event.currentTarget) return;
-  document.getElementById('closeModal').classList.remove('active');
-}
-
-async function confirmCloseOrder() {
-  if (!currentOrden) return;
-  const notes = document.getElementById('closeNotes').value.trim();
-  const pagoEstado = getRadioValue('closePagoEstado');
-  const pagoMetodo = getRadioValue('closePagoMetodo');
-
-  await doCerrarOrden(currentOrden.id, notes, pagoEstado, pagoMetodo);
-  document.getElementById('closeModal').classList.remove('active');
-}
-
-async function doCerrarOrden(ordenId, notes, pagoEstado, pagoMetodo) {
-  showLoading();
-  try {
-    const res = await fetch(`${API}/cerrar-orden`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        orden_id: ordenId,
-        tecnico_id: session.tecnico_id,
-        notas: notes,
-        estado_pago: pagoEstado,
-        metodo_pago: pagoMetodo,
-      }),
-    });
-    const data = await res.json();
-
-    if (data.error) {
-      showToast(data.error, 'error');
-      hideLoading();
-      return;
+    try {
+      const pos = await this.getCurrentPosition();
+      await fetch(`${this.API}/ubicacion`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tecnico_id: this.session.tecnico_id,
+          latitud: pos.lat,
+          longitud: pos.lng,
+        }),
+      });
+    } catch (_) {
+      // Silent fail for background GPS
     }
+  },
 
-    hideLoading();
-    showToast('🔒 Orden cerrada', 'success');
-    loadOrdenes();
-    if (currentOrden) showOrdenDetail(currentOrden.id);
-  } catch (err) {
-    showToast('Error de conexión', 'error');
-    hideLoading();
-  }
-}
+  // ═══════════════════════════════════════════════════════════
+  // PHOTOS
+  // ═══════════════════════════════════════════════════════════
 
-async function clienteSatisfecho() {
-  if (!currentOrden) return;
-  showLoading();
-  try {
-    const res = await fetch(`${API}/cambiar-estado`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        orden_id: currentOrden.id,
-        nuevo_estado: 'completada',
-        cliente_satisfecho: true,
-      }),
-    });
-    const data = await res.json();
+  selectPhotoType(type, el) {
+    this.currentPhotoType = type;
+    el.closest('.photo-type-selector').querySelectorAll('.photo-type-btn').forEach(b => b.classList.remove('selected'));
+    el.classList.add('selected');
+  },
 
-    if (data.error) {
-      showToast(data.error, 'error');
-      hideLoading();
-      return;
-    }
-
-    hideLoading();
-    document.getElementById('actionButtons').classList.remove('active');
-    showToast('👍 Cliente satisfecho registrado', 'success');
-    loadOrdenes();
-    showOrdenDetail(currentOrden.id);
-  } catch (err) {
-    showToast('Error de conexión', 'error');
-    hideLoading();
-  }
-}
-
-function openNoCompletadaModal() {
-  selectedReason = null;
-  document.getElementById('actionButtons').classList.remove('active');
-  document.getElementById('noCompletadaNotes').value = '';
-  document.getElementById('noCompletadaNotesField').style.display = 'none';
-  document.querySelectorAll('.reason-option').forEach((el) => el.classList.remove('selected'));
-  document.getElementById('noCompletadaModal').classList.add('active');
-}
-
-function closeNoCompletadaModal(event) {
-  if (event && event.target !== event.currentTarget) return;
-  document.getElementById('noCompletadaModal').classList.remove('active');
-}
-
-function selectReason(el, reason) {
-  selectedReason = reason;
-  document.querySelectorAll('.reason-option').forEach((opt) => opt.classList.remove('selected'));
-  el.classList.add('selected');
-
-  const notesField = document.getElementById('noCompletadaNotesField');
-  notesField.style.display = reason === 'otro' ? 'block' : 'none';
-}
-
-async function confirmNoCompletada() {
-  if (!currentOrden || !selectedReason) {
-    showToast('Selecciona un motivo', 'warning');
-    return;
-  }
-
-  const notes = document.getElementById('noCompletadaNotes').value.trim();
-  showLoading();
-  try {
-    const res = await fetch(`${API}/cambiar-estado`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        orden_id: currentOrden.id,
-        nuevo_estado: 'no_completada',
-        motivo: selectedReason,
-        notas: notes,
-      }),
-    });
-    const data = await res.json();
-
-    if (data.error) {
-      showToast(data.error, 'error');
-      hideLoading();
-      return;
-    }
-
-    hideLoading();
-    document.getElementById('noCompletadaModal').classList.remove('active');
-    showToast('❌ Orden marcada como no completada', 'warning');
-    loadOrdenes();
-    showOrdenDetail(currentOrden.id);
-  } catch (err) {
-    showToast('Error de conexión', 'error');
-    hideLoading();
-  }
-}
-
-// ═══════════════════════════════════════════════════════════
-// PHOTOS
-// ═══════════════════════════════════════════════════════════
-
-function subirFotoAction() {
-  if (!currentOrden) return;
-  currentPhotoOrdenId = currentOrden.id;
-  currentPhotoType = 'antes';
-  document.getElementById('actionButtons').classList.remove('active');
-  document.getElementById('photoPreviewGrid').innerHTML = '';
-  document.querySelectorAll('.photo-type-btn').forEach((el, i) => {
-    el.classList.toggle('selected', i === 0);
-  });
-  document.getElementById('photoModalSubtitle').textContent = `Orden #${currentOrden.numero || currentOrden.id}`;
-  document.getElementById('photoModal').classList.add('active');
-}
-
-function selectPhotoType(type, el) {
-  currentPhotoType = type;
-  document.querySelectorAll('.photo-type-btn').forEach((b) => b.classList.remove('selected'));
-  el.classList.add('selected');
-}
-
-function capturePhoto(source) {
-  const input = document.getElementById('photoInput');
-  if (source === 'camera') {
-    input.setAttribute('capture', 'environment');
-  } else {
-    input.removeAttribute('capture');
-  }
-  input.accept = 'image/*';
-  input.onchange = handlePhotoSelected;
-  input.click();
-}
-
-async function handlePhotoSelected(event) {
-  const file = event.target.files[0];
-  if (!file || !currentPhotoOrdenId) return;
-
-  showLoading();
-  try {
-    const formData = new FormData();
-    formData.append('foto', file);
-    formData.append('orden_id', currentPhotoOrdenId);
-    formData.append('tipo', currentPhotoType);
-    formData.append('tecnico_id', session.tecnico_id);
-
-    const res = await fetch(`${API}/subir-foto`, {
-      method: 'POST',
-      body: formData,
-    });
-    const data = await res.json();
-
-    if (data.error) {
-      showToast(data.error, 'error');
+  capturePhoto(source) {
+    if (!this.currentOrden) return;
+    const input = document.getElementById('photoInput');
+    if (source === 'camera') {
+      input.setAttribute('capture', 'environment');
     } else {
-      showToast('📸 Foto subida correctamente', 'success');
-      // Add preview
-      const grid = document.getElementById('photoPreviewGrid');
-      const url = URL.createObjectURL(file);
-      const tipoLabel = { antes: 'Antes', durante: 'Durante', despues: 'Después' }[currentPhotoType] || '';
-      const div = document.createElement('div');
-      div.innerHTML = `<img class="photo-thumb" src="${url}" alt="Preview" onclick="openFullscreen('${url}')" /><div class="photo-label">${tipoLabel}</div>`;
-      grid.prepend(div);
+      input.removeAttribute('capture');
     }
-  } catch (err) {
-    showToast('Error al subir foto', 'error');
-  }
+    input.accept = 'image/*';
+    input.onchange = (e) => this.handlePhotoSelected(e);
+    input.click();
+  },
 
-  hideLoading();
-  // Reset input
-  event.target.value = '';
-}
+  async handlePhotoSelected(event) {
+    const file = event.target.files[0];
+    if (!file || !this.currentOrden) return;
 
-function closePhotoModal(event) {
-  if (event && event.target !== event.currentTarget) return;
-  document.getElementById('photoModal').classList.remove('active');
-  // Refresh photos in detail
-  if (currentOrden) {
-    document.getElementById('detailModal').classList.add('active');
-    loadFotos(currentOrden.id);
-  }
-}
+    this.showLoading();
 
-function closeSignatureModal(event) {
-  if (event && event.target !== event.currentTarget) return;
-  document.getElementById('signatureModal').classList.remove('active');
-}
+    try {
+      const base64 = await this.fileToBase64(file);
 
-// ═══════════════════════════════════════════════════════════
-// NOTES
-// ═══════════════════════════════════════════════════════════
+      const res = await fetch(`${this.API}/ordenes/${this.currentOrden.id}/fotos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          foto_base64: base64,
+          tipo: this.currentPhotoType,
+          descripcion: '',
+          mime_type: file.type || 'image/jpeg',
+        }),
+      });
+      const data = await res.json();
 
-function openNoteModal() {
-  document.getElementById('noteText').value = '';
-  document.getElementById('noteModal').classList.add('active');
-}
+      if (data.error) {
+        this.showToast(data.error, 'error');
+      } else {
+        this.showToast('Foto subida correctamente', 'success');
+        this.loadFotos(this.currentOrden.id);
+      }
+    } catch (err) {
+      this.showToast('Error al subir foto', 'error');
+    } finally {
+      this.hideLoading();
+      event.target.value = '';
+    }
+  },
 
-function closeNoteModal(event) {
-  if (event && event.target !== event.currentTarget) return;
-  document.getElementById('noteModal').classList.remove('active');
-}
-
-async function confirmAddNote() {
-  if (!currentOrden) return;
-  const texto = document.getElementById('noteText').value.trim();
-  if (!texto) {
-    showToast('Escribe una nota', 'warning');
-    return;
-  }
-
-  showLoading();
-  try {
-    const res = await fetch(`${API}/agregar-nota`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        orden_id: currentOrden.id,
-        tecnico_id: session.tecnico_id,
-        texto,
-      }),
+  fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
     });
-    const data = await res.json();
+  },
 
-    if (data.error) {
-      showToast(data.error, 'error');
-      hideLoading();
+  async loadFotos(ordenId) {
+    const grid = document.getElementById('photosGrid');
+    const empty = document.getElementById('photosEmpty');
+    if (!grid) return;
+
+    try {
+      const res = await fetch(`${this.API}/ordenes/${ordenId}/fotos`);
+      const data = await res.json();
+      const fotos = Array.isArray(data.fotos) ? data.fotos :
+                    Array.isArray(data) ? data : [];
+
+      if (fotos.length === 0) {
+        grid.innerHTML = '';
+        if (empty) empty.style.display = 'block';
+        return;
+      }
+
+      if (empty) empty.style.display = 'none';
+      grid.innerHTML = fotos.map(f => {
+        const src = f.url_publica || f.url || f.ruta_r2 || '';
+        const tipoLabel = { antes: 'Antes', durante: 'Durante', despues: 'Después', evidencia: 'Evidencia' }[f.tipo] || f.tipo;
+        return `
+          <div>
+            <img class="photo-thumb" src="${src}" alt="${tipoLabel}" loading="lazy"
+                 onclick="event.stopPropagation();App.openFullscreen('${src}')" />
+            <div class="photo-label">${tipoLabel}</div>
+          </div>`;
+      }).join('');
+    } catch (_) {
+      grid.innerHTML = '';
+      if (empty) empty.style.display = 'block';
+    }
+  },
+
+  // ═══════════════════════════════════════════════════════════
+  // NOTES
+  // ═══════════════════════════════════════════════════════════
+
+  async addNote() {
+    if (!this.currentOrden) return;
+    const contenido = document.getElementById('noteContenido').value.trim();
+    if (!contenido) {
+      this.showToast('Escribe una nota', 'warning');
       return;
     }
 
-    hideLoading();
-    document.getElementById('noteModal').classList.remove('active');
-    showToast('📝 Nota agregada', 'success');
-    loadNotas(currentOrden.id);
-  } catch (err) {
-    showToast('Error de conexión', 'error');
-    hideLoading();
-  }
-}
+    this.showLoading();
+    try {
+      const res = await fetch(`${this.API}/ordenes/${this.currentOrden.id}/notas`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contenido }),
+      });
+      const data = await res.json();
 
-// ═══════════════════════════════════════════════════════════
-// GPS
-// ═══════════════════════════════════════════════════════════
+      if (data.error) {
+        this.showToast(data.error, 'error');
+      } else {
+        this.showToast('Nota agregada', 'success');
+        document.getElementById('noteContenido').value = '';
+        this.closeModal('noteModal');
+        this.loadNotas(this.currentOrden.id);
+      }
+    } catch (err) {
+      this.showToast('Error de conexión', 'error');
+    } finally {
+      this.hideLoading();
+    }
+  },
 
-function getCurrentPosition() {
-  return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error('Geolocalización no disponible'));
+  async loadNotas(ordenId) {
+    const container = document.getElementById('notasList');
+    if (!container) return;
+
+    try {
+      const res = await fetch(`${this.API}/ordenes/${ordenId}/notas`);
+      const data = await res.json();
+      const notas = Array.isArray(data.notas) ? data.notas :
+                    Array.isArray(data) ? data : [];
+
+      if (notas.length === 0) {
+        container.innerHTML = '<p style="font-size:0.82rem;color:var(--text-dim);text-align:center;">Sin notas</p>';
+        return;
+      }
+
+      container.innerHTML = notas.map(n => `
+        <div class="note-item">
+          <div class="note-text">${this.escapeHtml(n.contenido || n.texto || '')}</div>
+          <div class="note-meta">${n.creado_en || n.fecha || ''} · ${this.escapeHtml(n.autor || 'Técnico')}</div>
+        </div>`).join('');
+    } catch (_) {
+      container.innerHTML = '<p style="font-size:0.82rem;color:var(--text-dim);text-align:center;">Sin notas</p>';
+    }
+  },
+
+  // ═══════════════════════════════════════════════════════════
+  // COSTS
+  // ═══════════════════════════════════════════════════════════
+
+  selectCostType(type, el) {
+    this.currentCostType = type;
+    el.closest('.field-group').querySelectorAll('.photo-type-btn').forEach(b => b.classList.remove('selected'));
+    el.classList.add('selected');
+  },
+
+  async addCost() {
+    if (!this.currentOrden) return;
+    const concepto = document.getElementById('costConcepto').value.trim();
+    const cantidad = parseInt(document.getElementById('costCantidad').value) || 1;
+    const precio_unitario = parseFloat(document.getElementById('costPrecio').value) || 0;
+
+    if (!concepto) {
+      this.showToast('Ingresa el concepto', 'warning');
       return;
     }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      (err) => reject(err),
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-    );
-  });
-}
 
-function calculateDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371; // Earth radius in km
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return Math.round(R * c * 10) / 10; // km with 1 decimal
-}
+    this.showLoading();
+    try {
+      const res = await fetch(`${this.API}/ordenes/${this.currentOrden.id}/costos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          concepto,
+          cantidad,
+          precio_unitario,
+          tipo: this.currentCostType,
+        }),
+      });
+      const data = await res.json();
 
-function toRad(deg) {
-  return deg * (Math.PI / 180);
-}
+      if (data.error) {
+        this.showToast(data.error, 'error');
+      } else {
+        this.showToast('Costo agregado', 'success');
+        document.getElementById('costConcepto').value = '';
+        document.getElementById('costCantidad').value = '1';
+        document.getElementById('costPrecio').value = '0';
+        this.closeModal('costModal');
+        this.loadCostos(this.currentOrden.id);
+      }
+    } catch (err) {
+      this.showToast('Error de conexión', 'error');
+    } finally {
+      this.hideLoading();
+    }
+  },
+
+  async loadCostos(ordenId) {
+    const container = document.getElementById('costosList');
+    if (!container) return;
+
+    try {
+      const res = await fetch(`${this.API}/ordenes/${ordenId}/costos`);
+      const data = await res.json();
+      const costos = Array.isArray(data.costos) ? data.costos :
+                     Array.isArray(data) ? data : [];
+
+      if (costos.length === 0) {
+        container.innerHTML = '<p style="font-size:0.82rem;color:var(--text-dim);text-align:center;">Sin costos adicionales</p>';
+        return;
+      }
+
+      let total = 0;
+      container.innerHTML = costos.map(c => {
+        const t = (c.cantidad || 1) * (c.precio_unitario || 0);
+        total += t;
+        return `
+          <div class="cost-item">
+            <div>
+              <div style="font-weight:600;">${this.escapeHtml(c.concepto || '')}</div>
+              <div style="font-size:0.75rem;color:var(--text-dim);">${c.tipo || ''} · ${c.cantidad || 1} × $${(c.precio_unitario || 0).toFixed(2)}</div>
+            </div>
+            <div class="price">$${t.toFixed(2)}</div>
+          </div>`;
+      }).join('');
+
+      container.innerHTML += `
+        <div style="display:flex;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border);font-weight:700;font-size:0.95rem;margin-top:4px;">
+          <span>Total Costos</span>
+          <span class="price">$${total.toFixed(2)}</span>
+        </div>`;
+    } catch (_) {
+      container.innerHTML = '<p style="font-size:0.82rem;color:var(--text-dim);text-align:center;">Sin costos adicionales</p>';
+    }
+  },
+
+  // ═══════════════════════════════════════════════════════════
+  // TIMELINE
+  // ═══════════════════════════════════════════════════════════
+
+  async loadTimeline(ordenId) {
+    const container = document.getElementById('timelineList');
+    if (!container) return;
+
+    try {
+      // Get order detail which includes seguimiento
+      const res = await fetch(`${this.API}/ordenes/${ordenId}?tecnico_id=${this.session.tecnico_id}`);
+      const data = await res.json();
+      const items = (data.seguimiento || []).sort((a, b) =>
+        new Date(a.creado_en) - new Date(b.creado_en));
+
+      if (items.length === 0) {
+        container.innerHTML = '<p style="font-size:0.82rem;color:var(--text-dim);text-align:center;">Sin historial</p>';
+        return;
+      }
+
+      const emojis = {
+        pendiente: '📋', asignada: '👤', en_proceso: '▶️',
+        pausada: '⏸️', completada: '✅', cancelada: '❌',
+        aprobada: '👍', cerrada: '🔒',
+      };
+
+      container.innerHTML = items.map(item => {
+        const estado = item.estado_nuevo || item.estado || '';
+        const emoji = emojis[estado] || '📍';
+        const fecha = item.creado_en || item.fecha_evento || '';
+        const notas = item.notas || '';
+        const realizado = item.realizado_por || '';
+
+        return `
+          <div class="timeline-item">
+            <div class="timeline-dot">${emoji}</div>
+            <div class="timeline-content">
+              <div class="timeline-status">${this.formatEstado(estado)}</div>
+              <div class="timeline-meta">${this.formatDate(fecha)}${realizado ? ` · ${realizado}` : ''}</div>
+              ${notas ? `<div style="font-size:0.8rem;color:var(--text-muted);margin-top:2px;">${this.escapeHtml(notas)}</div>` : ''}
+            </div>
+          </div>`;
+      }).join('');
+    } catch (_) {
+      container.innerHTML = '<p style="font-size:0.82rem;color:var(--text-dim);text-align:center;">Sin historial</p>';
+    }
+  },
+
+  // ═══════════════════════════════════════════════════════════
+  // DIGITAL SIGNATURE
+  // ═══════════════════════════════════════════════════════════
+
+  initSignatureCanvas() {
+    const canvas = document.getElementById('signatureCanvas');
+    if (!canvas) return;
+
+    this.signatureCanvas = canvas;
+    this.signatureCtx = canvas.getContext('2d');
+
+    // Set canvas resolution
+    const rect = canvas.parentElement.getBoundingClientRect();
+    canvas.width = rect.width * 2 || 600;
+    canvas.height = 400;
+    canvas.style.height = '200px';
+
+    this.signatureCtx.scale(2, 2);
+    this.signatureCtx.lineJoin = 'round';
+    this.signatureCtx.lineCap = 'round';
+    this.signatureCtx.lineWidth = 2.5;
+    this.signatureCtx.strokeStyle = '#1e293b';
+
+    // Touch events
+    canvas.addEventListener('touchstart', (e) => this.sigTouchStart(e), { passive: false });
+    canvas.addEventListener('touchmove', (e) => this.sigTouchMove(e), { passive: false });
+    canvas.addEventListener('touchend', (e) => this.sigTouchEnd(e));
+
+    // Mouse events (for desktop testing)
+    canvas.addEventListener('mousedown', (e) => this.sigMouseDown(e));
+    canvas.addEventListener('mousemove', (e) => this.sigMouseMove(e));
+    canvas.addEventListener('mouseup', (e) => this.sigMouseUp(e));
+    canvas.addEventListener('mouseleave', (e) => this.sigMouseUp(e));
+  },
+
+  sigGetPos(e) {
+    const rect = this.signatureCanvas.getBoundingClientRect();
+    return {
+      x: (e.clientX || e.touches[0].clientX) - rect.left,
+      y: (e.clientY || e.touches[0].clientY) - rect.top,
+    };
+  },
+
+  sigTouchStart(e) {
+    e.preventDefault();
+    this.signatureDrawing = true;
+    const pos = this.sigGetPos(e);
+    this.signatureCtx.beginPath();
+    this.signatureCtx.moveTo(pos.x, pos.y);
+    // Hide placeholder
+    const ph = document.getElementById('signaturePlaceholder');
+    if (ph) ph.style.display = 'none';
+  },
+
+  sigTouchMove(e) {
+    e.preventDefault();
+    if (!this.signatureDrawing) return;
+    const pos = this.sigGetPos(e);
+    this.signatureCtx.lineTo(pos.x, pos.y);
+    this.signatureCtx.stroke();
+  },
+
+  sigTouchEnd() {
+    this.signatureDrawing = false;
+  },
+
+  sigMouseDown(e) {
+    this.signatureDrawing = true;
+    const pos = this.sigGetPos(e);
+    this.signatureCtx.beginPath();
+    this.signatureCtx.moveTo(pos.x, pos.y);
+    const ph = document.getElementById('signaturePlaceholder');
+    if (ph) ph.style.display = 'none';
+  },
+
+  sigMouseMove(e) {
+    if (!this.signatureDrawing) return;
+    const pos = this.sigGetPos(e);
+    this.signatureCtx.lineTo(pos.x, pos.y);
+    this.signatureCtx.stroke();
+  },
+
+  sigMouseUp() {
+    this.signatureDrawing = false;
+  },
+
+  clearSignature() {
+    if (!this.signatureCtx || !this.signatureCanvas) return;
+    this.signatureCtx.clearRect(0, 0, this.signatureCanvas.width, this.signatureCanvas.height);
+    const ph = document.getElementById('signaturePlaceholder');
+    if (ph) ph.style.display = 'block';
+  },
+
+  async saveSignature() {
+    if (!this.signatureCanvas || !this.currentOrden) return;
+
+    // Check if canvas is empty
+    const blank = document.createElement('canvas');
+    blank.width = this.signatureCanvas.width;
+    blank.height = this.signatureCanvas.height;
+    if (this.signatureCanvas.toDataURL() === blank.toDataURL()) {
+      this.showToast('Firma vacía – dibuja antes de guardar', 'warning');
+      return;
+    }
+
+    this.showLoading();
+    try {
+      const firmaBase64 = this.signatureCanvas.toDataURL('image/png');
+
+      const res = await fetch(`${this.API}/ordenes/${this.currentOrden.id}/firma`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ firma_base64, tipo: 'cliente' }),
+      });
+      const data = await res.json();
+
+      if (data.error) {
+        this.showToast(data.error, 'error');
+      } else {
+        this.showToast('Firma guardada exitosamente', 'success');
+        this.clearSignature();
+      }
+    } catch (err) {
+      this.showToast('Error al guardar firma', 'error');
+    } finally {
+      this.hideLoading();
+    }
+  },
+
+  // ═══════════════════════════════════════════════════════════
+  // PROFILE
+  // ═══════════════════════════════════════════════════════════
+
+  async loadProfile() {
+    if (!this.session) return;
+
+    const container = document.getElementById('pagePerfil');
+
+    try {
+      const res = await fetch(`${this.API}/perfil/${this.session.tecnico_id}`);
+      const data = await res.json();
+
+      if (data.error) {
+        // Show basic profile without stats
+        container.innerHTML = this.renderBasicProfile();
+        return;
+      }
+
+      this.profile = data;
+      container.innerHTML = this.renderProfile(data);
+    } catch (_) {
+      container.innerHTML = this.renderBasicProfile();
+    }
+  },
+
+  renderBasicProfile() {
+    const s = this.session;
+    return `
+      <div class="profile-card">
+        <div class="profile-avatar"><i class="fas fa-user"></i></div>
+        <div class="profile-name">${this.escapeHtml(s.nombre || 'Técnico')}</div>
+        <div class="profile-code">${this.escapeHtml(s.codigo || '')}</div>
+        ${s.especialidad ? `<div class="profile-specialty">${this.escapeHtml(s.especialidad)}</div>` : ''}
+        <div class="profile-info-list">
+          ${s.telefono ? `<div class="profile-info-item"><i class="fas fa-phone"></i> <a href="tel:${s.telefono}">${s.telefono}</a></div>` : ''}
+          ${s.email ? `<div class="profile-info-item"><i class="fas fa-envelope"></i> <a href="mailto:${s.email}">${s.email}</a></div>` : ''}
+        </div>
+      </div>`;
+  },
+
+  renderProfile(data) {
+    const s = this.session;
+    const p = data;
+    const total = p.total_ots || 0;
+    const completadas = p.completadas || 0;
+    const enProgreso = p.en_progreso || 0;
+    const rating = p.promedio_calificacion || 0;
+
+    return `
+      <div class="profile-card">
+        <div class="profile-avatar"><i class="fas fa-user"></i></div>
+        <div class="profile-name">${this.escapeHtml(s.nombre || p.nombre || 'Técnico')}</div>
+        <div class="profile-code">${this.escapeHtml(s.codigo || p.codigo || '')}</div>
+        ${s.especialidad || p.especialidad ? `<div class="profile-specialty">${this.escapeHtml(s.especialidad || p.especialidad)}</div>` : ''}
+
+        <div class="profile-stats">
+          <div class="stat-item">
+            <div class="stat-value">${total}</div>
+            <div class="stat-label">Total OTs</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" style="color:var(--success)">${completadas}</div>
+            <div class="stat-label">Completadas</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" style="color:var(--warning)">${enProgreso}</div>
+            <div class="stat-label">En Progreso</div>
+          </div>
+        </div>
+
+        ${rating > 0 ? `
+        <div style="margin-top:14px;text-align:center;">
+          <div style="font-size:0.78rem;color:var(--text-dim);margin-bottom:4px;">Calificación Promedio</div>
+          <div style="font-size:1.5rem;color:var(--warning);">
+            ${'★'.repeat(Math.round(rating))}${'☆'.repeat(5 - Math.round(rating))}
+            <span style="font-size:0.9rem;color:var(--text-muted);">${rating.toFixed(1)}</span>
+          </div>
+        </div>` : ''}
+
+        <div class="profile-info-list">
+          ${s.telefono || p.telefono ? `<div class="profile-info-item"><i class="fas fa-phone"></i> <a href="tel:${s.telefono || p.telefono}">${s.telefono || p.telefono}</a></div>` : ''}
+          ${s.email || p.email ? `<div class="profile-info-item"><i class="fas fa-envelope"></i> <a href="mailto:${s.email || p.email}">${s.email || p.email}</a></div>` : ''}
+        </div>
+
+        <div class="profile-location" id="profileGps">
+          <i class="fas fa-map-marker-alt"></i> Obteniendo ubicación...
+        </div>
+      </div>
+
+      <div style="padding:0 16px;margin-bottom:20px;">
+        <button class="btn-action btn-danger-action" onclick="App.logout()">
+          <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
+        </button>
+      </div>`;
+
+    // Update GPS display
+    this.updateProfileGPS();
+  },
+
+  async updateProfileGPS() {
+    const el = document.getElementById('profileGps');
+    if (!el) return;
+    try {
+      const pos = await this.getCurrentPosition();
+      el.innerHTML = `<i class="fas fa-map-marker-alt"></i> ${pos.lat.toFixed(6)}, ${pos.lng.toFixed(6)} (±${Math.round(pos.accuracy)}m)`;
+    } catch (_) {
+      el.innerHTML = '<i class="fas fa-map-marker-alt"></i> Ubicación no disponible';
+    }
+  },
+
+  // ═══════════════════════════════════════════════════════════
+  // UI HELPERS
+  // ═══════════════════════════════════════════════════════════
+
+  showLoading() {
+    document.getElementById('loadingOverlay').classList.add('active');
+  },
+
+  hideLoading() {
+    document.getElementById('loadingOverlay').classList.remove('active');
+  },
+
+  showToast(message, type = 'info') {
+    const container = document.getElementById('toastContainer');
+    const icons = {
+      success: 'fas fa-check-circle',
+      error: 'fas fa-times-circle',
+      warning: 'fas fa-exclamation-triangle',
+      info: 'fas fa-info-circle',
+    };
+    const toast = document.createElement('div');
+    toast.className = `toast-msg ${type}`;
+    toast.innerHTML = `<i class="${icons[type] || icons.info}"></i> ${this.escapeHtml(message)}`;
+    container.appendChild(toast);
+
+    // Auto-remove after 3.5 seconds
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateY(-20px)';
+      toast.style.transition = 'all 0.3s ease-out';
+      setTimeout(() => toast.remove(), 300);
+    }, 3500);
+
+    // Simulate push notification for important events
+    if (type === 'success' && navigator.onLine) {
+      this.simulatePush(message);
+    }
+  },
+
+  simulatePush(message) {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification('BizFlow', {
+          body: message,
+          icon: '/icons/icon-192.png',
+          badge: '/icons/icon-192.png',
+        });
+      } catch (_) { /* Notification may fail in some contexts */ }
+    } else if ('Notification' in window && Notification.permission === 'default') {
+      // Don't request permission automatically, just ignore
+    }
+  },
+
+  openModal(id) {
+    document.getElementById(id).classList.add('active');
+  },
+
+  closeModal(id) {
+    document.getElementById(id).classList.remove('active');
+  },
+
+  openFullscreen(src) {
+    document.getElementById('fullscreenImg').src = src;
+    document.getElementById('fullscreenPhoto').classList.add('active');
+  },
+
+  closeFullscreenPhoto() {
+    document.getElementById('fullscreenPhoto').classList.remove('active');
+  },
+
+  escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  },
+
+  formatDate(dateStr) {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString('es', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      });
+    } catch (_) {
+      return dateStr;
+    }
+  },
+
+  // ═══════════════════════════════════════════════════════════
+  // ONLINE / OFFLINE
+  // ═══════════════════════════════════════════════════════════
+
+  setupOnlineOffline() {
+    const banner = document.getElementById('offlineBanner');
+
+    const update = () => {
+      this.isOnline = navigator.onLine;
+      if (this.isOnline) {
+        banner.classList.remove('active');
+      } else {
+        banner.classList.add('active');
+        this.showToast('Sin conexión – Modo offline activo', 'warning');
+      }
+    };
+
+    window.addEventListener('online', () => {
+      update();
+      if (this.session) this.loadOrdenes();
+    });
+    window.addEventListener('offline', update);
+    update();
+  },
+
+  // ═══════════════════════════════════════════════════════════
+  // PULL TO REFRESH
+  // ═══════════════════════════════════════════════════════════
+
+  setupPullToRefresh() {
+    let startY = 0;
+    let pulling = false;
+    const indicator = document.getElementById('pullIndicator');
+    const container = document.getElementById('ordersList');
+
+    if (!container || !indicator) return;
+
+    container.addEventListener('touchstart', (e) => {
+      if (window.scrollY === 0) {
+        startY = e.touches[0].clientY;
+        pulling = true;
+      }
+    }, { passive: true });
+
+    container.addEventListener('touchmove', (e) => {
+      if (!pulling) return;
+      const diff = e.touches[0].clientY - startY;
+      if (diff > 80) {
+        indicator.classList.add('active');
+      }
+    }, { passive: true });
+
+    container.addEventListener('touchend', () => {
+      if (indicator.classList.contains('active')) {
+        indicator.classList.remove('active');
+        this.loadOrdenes();
+      }
+      pulling = false;
+    }, { passive: true });
+  },
+
+  // ═══════════════════════════════════════════════════════════
+  // ENTER KEY LOGIN
+  // ═══════════════════════════════════════════════════════════
+
+  setupEnterKeyLogin() {
+    const codigoInput = document.getElementById('codigoInput');
+    const passwordInput = document.getElementById('passwordInput');
+
+    if (codigoInput) {
+      codigoInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') passwordInput.focus();
+      });
+    }
+    if (passwordInput) {
+      passwordInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') this.login();
+      });
+    }
+  },
+};
 
 // ═══════════════════════════════════════════════════════════
-// UI HELPERS
+// BOOT
 // ═══════════════════════════════════════════════════════════
-
-function showLoading() {
-  document.getElementById('loadingOverlay').classList.add('active');
-}
-
-function hideLoading() {
-  document.getElementById('loadingOverlay').classList.remove('active');
-}
-
-function showToast(message, type) {
-  type = type || 'info';
-  const container = document.getElementById('toastContainer');
-  const toast = document.createElement('div');
-  toast.className = `toast ${type}`;
-  toast.textContent = message;
-  container.appendChild(toast);
-  setTimeout(() => {
-    toast.style.opacity = '0';
-    toast.style.transform = 'translateY(-10px)';
-    toast.style.transition = 'all .3s';
-    setTimeout(() => toast.remove(), 300);
-  }, 3500);
-}
-
-function openFullscreen(url) {
-  document.getElementById('fullscreenImg').src = url;
-  document.getElementById('fullscreenPhoto').classList.add('active');
-}
-
-function closeFullscreenPhoto() {
-  document.getElementById('fullscreenPhoto').classList.remove('active');
-}
-
-function selectRadio(el, groupId) {
-  const group = document.getElementById(groupId);
-  if (!group) return;
-  group.querySelectorAll('.radio-option').forEach((opt) => opt.classList.remove('selected'));
-  el.classList.add('selected');
-}
-
-function getRadioValue(groupId) {
-  const group = document.getElementById(groupId);
-  if (!group) return null;
-  const selected = group.querySelector('.radio-option.selected');
-  return selected ? selected.textContent.trim().toLowerCase() : null;
-}
-
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
+document.addEventListener('DOMContentLoaded', () => {
+  App.init();
+});

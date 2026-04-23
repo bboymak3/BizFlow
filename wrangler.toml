@@ -1,10 +1,36 @@
 name = "bizflow"
 compatibility_date = "2024-01-01"
 
+# ============================================================
+# Cloudflare Pages Configuration
+# ============================================================
+pages_build_output_dir = "."
+
+# ============================================================
+# D1 Database Binding
+# ============================================================
 [[d1_databases]]
 binding = "DB"
 database_name = "bizflow_db"
 database_id = "df3d3561-bde1-48e0-863b-edf65926d6ab"
 
+# ============================================================
+# R2 Storage Binding
+# Bucket: my-emdash-media
+# Account ID: 6fc12c9a89723c0039cf189380c0b02f
+# Se usa para almacenar: fotos de trabajo, firmas digitales,
+# avatares, documentos, imágenes de landing pages
+# ============================================================
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "my-emdash-media"
+
+# ============================================================
+# Environment Variables
+# ============================================================
 [vars]
 ENVIRONMENT = "production"
+APP_NAME = "BizFlow"
+# UltraMsg API (WhatsApp) - configurar en dashboard de Cloudflare
+# ULTRAMSG_INSTANCE = "tu_instancia"
+# ULTRAMSG_TOKEN = "tu_token"

@@ -1,120 +1,59 @@
 // ============================================================
-// BizFlow - Modelos de Vehículo CRUD API
-// GET: list all modelos
-// POST: create modelo { nombre }
-// DELETE: delete by ?id
+// BizFlow - Admin Modelos Vehiculo API
+// GET: List vehicle models with optional brand filter
 // ============================================================
 
-import {
-  handleOptions,
-  parseBody,
-  successRes,
-  errorRes,
-  chileNowISO,
-  asegurarColumnasFaltantes,
-  validateRequired,
-} from '../../lib/db-helpers.js';
+import { jsonResponse, errorResponse, handleCors } from '../../lib/db-helpers.js';
 
-export async function onRequestOptions() {
-  return handleOptions();
-}
+export async function onRequest(context) {
+  const cors = handleCors(context.request);
+  if (cors) return cors;
 
-// GET - List all modelos
-export async function onRequestGet(context) {
-  const { env, request } = context;
-  const url = new URL(request.url);
-  const busqueda = url.searchParams.get('q');
+  const { request, env } = context;
+  const { DB } = env;
+
+  if (request.method !== 'GET') {
+    return errorResponse('Método no permitido', 405);
+  }
 
   try {
-    await asegurarColumnasFaltantes(env);
+    const url = new URL(request.url);
+    const marca = url.searchParams.get('marca');
 
-    let query = `SELECT * FROM ModelosVehiculo WHERE 1=1`;
+    let query = 'SELECT * FROM ModelosVehiculo';
     const params = [];
 
-    if (busqueda) {
-      query += ` AND nombre LIKE ?`;
-      params.push(`%${busqueda}%`);
+    if (marca && marca.trim()) {
+      query += ' WHERE marca LIKE ?';
+      params.push(`%${marca.trim()}%`);
     }
 
-    query += ` ORDER BY nombre ASC`;
+    query += ' ORDER BY marca ASC, modelo ASC';
 
-    const result = await env.DB.prepare(query).bind(...params).all();
+    const { results } = await DB.prepare(query).bind(...params).all();
 
-    return successRes(result.results || []);
-  } catch (error) {
-    console.error('Modelos list error:', error);
-    return errorRes('Error listando modelos: ' + error.message, 500);
-  }
-}
-
-// POST - Create modelo
-export async function onRequestPost(context) {
-  const { env, request } = context;
-  const data = await parseBody(request);
-  const { nombre, marca, modelo } = data;
-
-  const validation = validateRequired(data, ['nombre']);
-  if (!validation.valid) {
-    return errorRes(`Campo requerido faltante: ${validation.missing.join(', ')}`);
-  }
-
-  try {
-    await asegurarColumnasFaltantes(env);
-
-    // Check for duplicate
-    const existing = await env.DB.prepare(
-      `SELECT id FROM ModelosVehiculo WHERE nombre = ? LIMIT 1`
-    ).bind(nombre.trim()).first();
-
-    if (existing) {
-      return errorRes('Ya existe un modelo con ese nombre');
+    // Group by brand
+    const porMarca = {};
+    for (const modelo of (results || [])) {
+      if (!porMarca[modelo.marca]) {
+        porMarca[modelo.marca] = [];
+      }
+      porMarca[modelo.marca].push({
+        id: modelo.id,
+        modelo: modelo.modelo,
+        anio_desde: modelo.anio_desde,
+        anio_hasta: modelo.anio_hasta,
+      });
     }
 
-    const result = await env.DB.prepare(`
-      INSERT INTO ModelosVehiculo (nombre, marca, modelo, negocio_id, created_at)
-      VALUES (?, ?, ?, 1, ?)
-    `).bind(
-      nombre.trim(),
-      marca?.trim() || null,
-      modelo?.trim() || null,
-      chileNowISO()
-    ).run();
-
-    const newModelo = await env.DB.prepare(
-      `SELECT * FROM ModelosVehiculo WHERE id = ?`
-    ).bind(result.meta.last_row_id).first();
-
-    return successRes(newModelo, 201);
+    return jsonResponse({
+      modelos: results || [],
+      por_marca: porMarca,
+      total: (results || []).length,
+      marcas: Object.keys(porMarca).sort(),
+    });
   } catch (error) {
-    console.error('Modelo create error:', error);
-    return errorRes('Error creando modelo: ' + error.message, 500);
-  }
-}
-
-// DELETE - Delete modelo
-export async function onRequestDelete(context) {
-  const { env, request } = context;
-  const url = new URL(request.url);
-  const id = url.searchParams.get('id');
-
-  if (!id) {
-    return errorRes('ID es requerido');
-  }
-
-  try {
-    const existing = await env.DB.prepare(
-      `SELECT id FROM ModelosVehiculo WHERE id = ?`
-    ).bind(id).first();
-
-    if (!existing) {
-      return errorRes('Modelo no encontrado', 404);
-    }
-
-    await env.DB.prepare(`DELETE FROM ModelosVehiculo WHERE id = ?`).bind(id).run();
-
-    return successRes({ deleted: true, id: parseInt(id) });
-  } catch (error) {
-    console.error('Modelo delete error:', error);
-    return errorRes('Error eliminando modelo: ' + error.message, 500);
+    console.error('Modelos vehiculo error:', error);
+    return errorResponse('Error en modelos de vehículo: ' + error.message, 500);
   }
 }
