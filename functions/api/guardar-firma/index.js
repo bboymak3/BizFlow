@@ -37,11 +37,11 @@ export async function onRequest(context) {
     let order;
     if (token) {
       order = await env.DB.prepare(
-        'SELECT * FROM OrdenesTrabajo WHERE token_aprobacion = ? OR token_aprobacion_tecnico = ? OR firma_token = ?'
+        'SELECT id, estado, usuario_id FROM OrdenesTrabajo WHERE token_aprobacion = ? OR token_aprobacion_tecnico = ? OR firma_token = ?'
       ).bind(token, token, token).first();
     } else {
       order = await env.DB.prepare(
-        'SELECT * FROM OrdenesTrabajo WHERE id = ?'
+        'SELECT id, estado, usuario_id FROM OrdenesTrabajo WHERE id = ?'
       ).bind(parseInt(orden_id)).first();
     }
 

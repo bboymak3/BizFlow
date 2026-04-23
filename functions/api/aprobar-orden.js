@@ -47,7 +47,10 @@ export async function onRequestPost(context) {
     // Obtener orden actualizada
     const ordenActualizada = await env.DB.prepare(`
       SELECT
-        o.*,
+        o.id, o.numero_orden, o.token, o.estado, o.patente_placa, o.marca, o.modelo,
+        o.fecha_ingreso, o.hora_ingreso, o.recepcionista, o.firma_imagen, o.fecha_aprobacion,
+        o.monto_total, o.monto_abono, o.monto_restante, o.cliente_id, o.vehiculo_id,
+        o.servicios_seleccionados, o.diagnostico_checks, o.diagnostico_observaciones,
         c.nombre as cliente_nombre,
         c.rut as cliente_rut,
         c.telefono as cliente_telefono

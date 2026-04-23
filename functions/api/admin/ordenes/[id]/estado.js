@@ -32,7 +32,7 @@ export async function onRequest(context) {
 
   try {
     const orden = await DB.prepare(
-      'SELECT * FROM OrdenesTrabajo WHERE id = ?'
+      'SELECT id, estado, estado_trabajo, tecnico_asignado_id, cliente_id FROM OrdenesTrabajo WHERE id = ?'
     ).bind(id).first();
 
     if (!orden) {
@@ -105,7 +105,7 @@ export async function onRequest(context) {
 
     // Get updated order
     const ordenActualizada = await DB.prepare(
-      'SELECT * FROM OrdenesTrabajo WHERE id = ?'
+      'SELECT id, estado, estado_trabajo, tecnico_asignado_id, cliente_id FROM OrdenesTrabajo WHERE id = ?'
     ).bind(id).first();
 
     return jsonResponse({

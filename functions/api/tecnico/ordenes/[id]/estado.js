@@ -39,7 +39,7 @@ export async function onRequest(context) {
 
     // Get current order
     const orden = await DB.prepare(`
-      SELECT * FROM OrdenesTrabajo WHERE id = ?
+      SELECT id, estado, estado_trabajo, tecnico_asignado_id, tecnico_id, fecha_inicio FROM OrdenesTrabajo WHERE id = ?
     `).bind(parseInt(id)).first();
 
     if (!orden) {

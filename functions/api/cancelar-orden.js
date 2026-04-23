@@ -21,7 +21,7 @@ export async function onRequestPost(context) {
 
     // Verificar que la orden existe y está en estado "Enviada"
     const orden = await env.DB.prepare(
-      "SELECT * FROM OrdenesTrabajo WHERE token = ? AND estado = 'Enviada'"
+      "SELECT id, token, estado FROM OrdenesTrabajo WHERE token = ? AND estado = 'Enviada'"
     ).bind(data.token).first();
 
     if (!orden) {

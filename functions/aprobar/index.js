@@ -20,7 +20,7 @@ export async function onRequestGet(context) {
 
     // Buscar orden
     const orden = await env.DB.prepare(
-      'SELECT o.*, c.nombre as cliente_nombre, c.rut as cliente_rut, c.telefono as cliente_telefono FROM OrdenesTrabajo o LEFT JOIN Clientes c ON o.cliente_id = c.id WHERE o.token = ?'
+      'SELECT o.id, o.numero_orden, o.token, o.estado, o.patente_placa, o.marca, o.modelo, o.fecha_ingreso, o.hora_ingreso, o.recepcionista, o.firma_imagen, o.fecha_aprobacion, o.fecha_cancelacion, o.motivo_cancelacion, o.monto_total, o.monto_abono, o.monto_restante, o.distancia_km, o.cargo_domicilio, o.nivel_combustible, o.diagnostico_checks, o.diagnostico_observaciones, o.servicios_seleccionados, o.check_paragolfe_delantero_der, o.check_puerta_delantera_der, o.check_puerta_trasera_der, o.check_paragolfe_trasero_izq, o.check_otros_carroceria, o.trabajo_frenos, o.detalle_frenos, o.trabajo_luces, o.detalle_luces, o.trabajo_tren_delantero, o.detalle_tren_delantero, o.trabajo_correas, o.detalle_correas, o.trabajo_componentes, o.detalle_componentes, c.nombre as cliente_nombre, c.rut as cliente_rut, c.telefono as cliente_telefono FROM OrdenesTrabajo o LEFT JOIN Clientes c ON o.cliente_id = c.id WHERE o.token = ?'
     ).bind(token).first();
 
     if (!orden) {
