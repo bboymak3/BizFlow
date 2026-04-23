@@ -1,19 +1,31 @@
 -- ============================================================
--- BizFlow + Globalprov2 - MIGRACION PARA D1 EXISTENTE
--- Ejecutar en Cloudflare D1 Console (una vez)
--- ALTER TABLE ADD COLUMN no reemplaza datos existentes
+-- BizFlow + Globalprov2 - MIGRACION D1 (VERSION CORREGIDA)
+-- ============================================================
+-- PROBLEMA RESUELTO: SQLite NO permite DEFAULT con funciones
+-- como datetime('now') en ALTER TABLE ADD COLUMN.
+-- Solucion: DEFAULT '' (constante) + UPDATE posterior.
+--
+-- COMO EJECUTAR:
+--   Opcion A: Pega TODO en la consola D1 de Cloudflare.
+--             Si una columna ya existe, veras error "duplicate
+--             column name" — IGNORALO y continua con las demas.
+--   Opcion B: Ejecuta GET /api/admin/migrar-db en tu app
+--             (este endpoint verifica automaticamente que no
+--             duplique columnas ni tablas).
 -- ============================================================
 
+
 -- ============================================================
--- 1. TABLAS NUEVAS (CREATE IF NOT EXISTS - no afecta existentes)
+-- 1. TABLAS NUEVAS (CREATE IF NOT EXISTS = seguro)
 -- ============================================================
+
 CREATE TABLE IF NOT EXISTS AdminUsers (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   nombre TEXT NOT NULL,
   activo INTEGER DEFAULT 1,
-  creado_en TEXT DEFAULT (datetime('now'))
+  creado_en TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS SesionesAdmin (
@@ -21,8 +33,7 @@ CREATE TABLE IF NOT EXISTS SesionesAdmin (
   admin_id INTEGER NOT NULL,
   token TEXT UNIQUE NOT NULL,
   expires_at TEXT,
-  creado_en TEXT DEFAULT (datetime('now')),
-  FOREIGN KEY (admin_id) REFERENCES AdminUsers(id) ON DELETE CASCADE
+  creado_en TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS SeguimientoTrabajo (
@@ -34,7 +45,7 @@ CREATE TABLE IF NOT EXISTS SeguimientoTrabajo (
   latitud REAL DEFAULT 0,
   longitud REAL DEFAULT 0,
   observaciones TEXT DEFAULT '',
-  fecha_registro TEXT DEFAULT (datetime('now')),
+  fecha_registro TEXT DEFAULT '',
   FOREIGN KEY (orden_id) REFERENCES OrdenesTrabajo(id) ON DELETE CASCADE,
   FOREIGN KEY (tecnico_id) REFERENCES Tecnicos(id) ON DELETE SET NULL
 );
@@ -42,38 +53,43 @@ CREATE TABLE IF NOT EXISTS SeguimientoTrabajo (
 CREATE TABLE IF NOT EXISTS ConfigKV (
   clave TEXT PRIMARY KEY,
   valor TEXT DEFAULT '',
-  actualizado_en TEXT DEFAULT (datetime('now'))
+  actualizado_en TEXT DEFAULT ''
 );
 
+
 -- ============================================================
--- 2. COLUMNAS NUEVAS - Clientes (Globalprov2)
+-- 2. COLUMNAS NUEVAS - Clientes
 -- ============================================================
 ALTER TABLE Clientes ADD COLUMN rut TEXT DEFAULT '';
 ALTER TABLE Clientes ADD COLUMN patente TEXT DEFAULT '';
 
+
 -- ============================================================
--- 3. COLUMNAS NUEVAS - Vehiculos (Globalprov2)
+-- 3. COLUMNAS NUEVAS - Vehiculos
 -- ============================================================
 ALTER TABLE Vehiculos ADD COLUMN patente_placa TEXT DEFAULT '';
 ALTER TABLE Vehiculos ADD COLUMN cilindrada TEXT DEFAULT '';
 ALTER TABLE Vehiculos ADD COLUMN combustible TEXT DEFAULT '';
 
+
 -- ============================================================
--- 4. COLUMNAS NUEVAS - ServiciosCatalogo (Globalprov2)
+-- 4. COLUMNAS NUEVAS - ServiciosCatalogo
 -- ============================================================
 ALTER TABLE ServiciosCatalogo ADD COLUMN precio_sugerido REAL DEFAULT 0;
 ALTER TABLE ServiciosCatalogo ADD COLUMN tipo_comision TEXT DEFAULT 'mano_obra';
-ALTER TABLE ServiciosCatalogo ADD COLUMN fecha_registro TEXT DEFAULT (datetime('now'));
+ALTER TABLE ServiciosCatalogo ADD COLUMN fecha_registro TEXT DEFAULT '';
+
 
 -- ============================================================
--- 5. COLUMNAS NUEVAS - Tecnicos (Globalprov2)
+-- 5. COLUMNAS NUEVAS - Tecnicos
 -- ============================================================
 ALTER TABLE Tecnicos ADD COLUMN comision_porcentaje REAL DEFAULT 40;
 ALTER TABLE Tecnicos ADD COLUMN password TEXT DEFAULT '';
 ALTER TABLE Tecnicos ADD COLUMN token TEXT DEFAULT '';
 
+
 -- ============================================================
--- 6. COLUMNAS NUEVAS - OrdenesTrabajo (Globalprov2 - muchas)
+-- 6. COLUMNAS NUEVAS - OrdenesTrabajo
 -- ============================================================
 ALTER TABLE OrdenesTrabajo ADD COLUMN numero_orden TEXT DEFAULT '';
 ALTER TABLE OrdenesTrabajo ADD COLUMN token TEXT DEFAULT '';
@@ -127,47 +143,68 @@ ALTER TABLE OrdenesTrabajo ADD COLUMN diagnostico_observaciones TEXT DEFAULT '';
 ALTER TABLE OrdenesTrabajo ADD COLUMN servicios_seleccionados TEXT DEFAULT '';
 ALTER TABLE OrdenesTrabajo ADD COLUMN fecha_completado TEXT DEFAULT '';
 
+
 -- ============================================================
--- 7. COLUMNAS NUEVAS - CostosAdicionales (Globalprov2)
+-- 7. COLUMNAS NUEVAS - CostosAdicionales
 -- ============================================================
 ALTER TABLE CostosAdicionales ADD COLUMN monto REAL DEFAULT 0;
 ALTER TABLE CostosAdicionales ADD COLUMN categoria TEXT DEFAULT 'Mano de Obra';
-ALTER TABLE CostosAdicionales ADD COLUMN fecha_registro TEXT DEFAULT (datetime('now'));
+ALTER TABLE CostosAdicionales ADD COLUMN fecha_registro TEXT DEFAULT '';
 ALTER TABLE CostosAdicionales ADD COLUMN registrado_por TEXT DEFAULT '';
 
+
 -- ============================================================
--- 8. COLUMNAS NUEVAS - GastosNegocio (Globalprov2)
+-- 8. COLUMNAS NUEVAS - GastosNegocio
 -- ============================================================
 ALTER TABLE GastosNegocio ADD COLUMN fecha_gasto TEXT DEFAULT '';
 ALTER TABLE GastosNegocio ADD COLUMN observaciones TEXT DEFAULT '';
 
--- ============================================================
--- 9. COLUMNAS NUEVAS - ModelosVehiculo (Globalprov2)
--- ============================================================
-ALTER TABLE ModelosVehiculo ADD COLUMN nombre TEXT DEFAULT '';
-ALTER TABLE ModelosVehiculo ADD COLUMN fecha_registro TEXT DEFAULT (datetime('now'));
 
 -- ============================================================
--- 10. COLUMNAS NUEVAS - NotificacionesWhatsApp (Globalprov2)
+-- 9. COLUMNAS NUEVAS - ModelosVehiculo
+-- ============================================================
+ALTER TABLE ModelosVehiculo ADD COLUMN nombre TEXT DEFAULT '';
+ALTER TABLE ModelosVehiculo ADD COLUMN fecha_registro TEXT DEFAULT '';
+
+
+-- ============================================================
+-- 10. COLUMNAS NUEVAS - NotificacionesWhatsApp
 -- ============================================================
 ALTER TABLE NotificacionesWhatsApp ADD COLUMN telefono TEXT DEFAULT '';
 ALTER TABLE NotificacionesWhatsApp ADD COLUMN tipo_evento TEXT DEFAULT '';
 ALTER TABLE NotificacionesWhatsApp ADD COLUMN enviada INTEGER DEFAULT 0;
-ALTER TABLE NotificacionesWhatsApp ADD COLUMN fecha_creacion TEXT DEFAULT (datetime('now'));
+ALTER TABLE NotificacionesWhatsApp ADD COLUMN fecha_creacion TEXT DEFAULT '';
+
 
 -- ============================================================
--- 11. COLUMNAS NUEVAS - Pagos (Globalprov2)
+-- 11. COLUMNAS NUEVAS - Pagos
 -- ============================================================
 ALTER TABLE Pagos ADD COLUMN metodo_pago TEXT DEFAULT '';
 ALTER TABLE Pagos ADD COLUMN observaciones TEXT DEFAULT '';
 
+
 -- ============================================================
--- 12. COLUMNAS NUEVAS - Configuracion (Globalprov2)
+-- 12. COLUMNAS NUEVAS - Configuracion
 -- ============================================================
 ALTER TABLE Configuracion ADD COLUMN ultimo_numero_orden INTEGER DEFAULT 0;
 
+
 -- ============================================================
--- 13. INDICES (despues de agregar columnas)
+-- 13. LLENAR FECHAS EN FILAS EXISTENTES
+-- (registros que quedaron con '' ahora reciben datetime)
+-- ============================================================
+UPDATE AdminUsers SET creado_en = datetime('now') WHERE creado_en = '' OR creado_en IS NULL;
+UPDATE SesionesAdmin SET creado_en = datetime('now') WHERE creado_en = '' OR creado_en IS NULL;
+UPDATE SeguimientoTrabajo SET fecha_registro = datetime('now') WHERE fecha_registro = '' OR fecha_registro IS NULL;
+UPDATE ConfigKV SET actualizado_en = datetime('now') WHERE actualizado_en = '' OR actualizado_en IS NULL;
+UPDATE ServiciosCatalogo SET fecha_registro = datetime('now') WHERE fecha_registro = '' OR fecha_registro IS NULL;
+UPDATE CostosAdicionales SET fecha_registro = datetime('now') WHERE fecha_registro = '' OR fecha_registro IS NULL;
+UPDATE ModelosVehiculo SET fecha_registro = datetime('now') WHERE fecha_registro = '' OR fecha_registro IS NULL;
+UPDATE NotificacionesWhatsApp SET fecha_creacion = datetime('now') WHERE fecha_creacion = '' OR fecha_creacion IS NULL;
+
+
+-- ============================================================
+-- 14. INDICES (CREATE INDEX IF NOT EXISTS = seguro)
 -- ============================================================
 CREATE INDEX IF NOT EXISTS idx_clientes_rut ON Clientes(rut);
 CREATE INDEX IF NOT EXISTS idx_clientes_patente ON Clientes(patente);
@@ -188,8 +225,9 @@ CREATE INDEX IF NOT EXISTS idx_whatsapp_enviada ON NotificacionesWhatsApp(enviad
 CREATE INDEX IF NOT EXISTS idx_sesiones_admin_token ON SesionesAdmin(token);
 CREATE INDEX IF NOT EXISTS idx_sesiones_admin_admin ON SesionesAdmin(admin_id);
 
+
 -- ============================================================
--- 14. DATOS INICIALES (INSERT OR IGNORE = no duplica)
+-- 15. DATOS INICIALES (INSERT OR IGNORE = no duplica)
 -- ============================================================
 INSERT OR IGNORE INTO AdminUsers (username, password_hash, nombre) VALUES
 ('admin', 'admin123_hashed_change_me', 'Administrador Globalprov2');
