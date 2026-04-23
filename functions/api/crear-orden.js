@@ -14,7 +14,7 @@ import {
   chileNowStr,
   chileToday,
   generateToken,
-} from '../../lib/db-helpers.js';
+} from '../lib/db-helpers.js';
 
 export async function onRequestOptions(context) {
   return handleOptions();

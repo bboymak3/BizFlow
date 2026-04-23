@@ -25,7 +25,7 @@ import {
   buildJsPDFGeneratorScript,
   getJsPDFScript,
   escapeHtml,
-} from '../../lib/db-helpers.js';
+} from '../lib/db-helpers.js';
 
 export async function onRequestOptions() {
   return handleOptions();

@@ -4,7 +4,7 @@
 // PUT: Update config value
 // ============================================================
 
-import { jsonResponse, errorResponse, handleCors, hoyISO } from '../../../../lib/db-helpers.js';
+import { jsonResponse, errorResponse, handleCors, hoyISO } from '../../../lib/db-helpers.js';
 
 export async function onRequest(context) {
   const cors = handleCors(context.request);

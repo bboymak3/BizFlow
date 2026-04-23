@@ -15,7 +15,7 @@ import {
   getConfig,
   sendWhatsApp,
   generarMensajeWhatsApp,
-} from '../../lib/db-helpers.js';
+} from '../lib/db-helpers.js';
 
 export async function onRequestOptions(context) {
   return handleOptions();

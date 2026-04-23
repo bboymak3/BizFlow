@@ -4,8 +4,8 @@
 // Sirve archivos almacenados en Cloudflare R2
 // ============================================================
 
-import { handleCors, jsonResponse, errorResponse } from '../../../lib/db-helpers.js';
-import { servirArchivoR2 } from '../../../lib/r2-helpers.js';
+import { handleCors, jsonResponse, errorResponse } from '../../lib/db-helpers.js';
+import { servirArchivoR2 } from '../../lib/r2-helpers.js';
 
 export async function onRequest(context) {
   const cors = handleCors(context.request);
