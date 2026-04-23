@@ -166,3 +166,19 @@ export async function notificarCambioEstado(env, DB, ordenId, estadoNuevo, datos
 export async function notificarNuevaOT(env, DB, ordenId) {
   return await enviarNotificacion(env, DB, 'nueva_orden', ordenId);
 }
+
+// Alias: enviarNotificacionOrden
+export const enviarNotificacionOrden = enviarNotificacion;
+
+// Alias: enviarWhatsAppUltraMsg
+export async function enviarWhatsAppUltraMsg(env, telefono, mensaje) {
+  const config = getConfigWhatsApp(env);
+  if (!config.activo) return { exito: false, razon: 'no_configurado' };
+  return await enviarUltraMsg(config.instance, config.token, telefono, mensaje);
+}
+
+// Alias: normalizarTelefonoChile
+export function normalizarTelefonoChile(phone) {
+  if (!phone) return '';
+  return phone.replace(/[^0-9+]/g, '').replace(/^56/, '+56');
+}
