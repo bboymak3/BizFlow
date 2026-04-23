@@ -985,8 +985,8 @@ const App = {
                         '<div class="bf-card-body" style="padding:0;"><div class="table-responsive"><table class="bf-table">' +
                         '<thead><tr><th>#</th><th>Patente</th><th>Cliente</th><th>Estado</th><th>Total</th><th>MO</th><th>Rep</th><th>Comisión</th></tr></thead><tbody>' +
                         items.map(o => {
-                            const comisionCalc = totalMO > 0 ? ((parseFloat(o.comision_mano_obra || 0) / totalMO) * comision : 0;
-                            const comisionRep = totalRep > 0 ? ((parseFloat(o.comision_repuestos || 0) / totalRep) * comision : 0;
+                            const comisionCalc = totalMO > 0 ? ((parseFloat(o.comision_mano_obra || 0) / totalMO) * comision) : 0;
+                            const comisionRep = totalRep > 0 ? ((parseFloat(o.comision_repuestos || 0) / totalRep) * comision) : 0;
                             const comisionOrd = comisionCalc + comisionRep;
                             return `<tr>
                                 <td class="fw-600">#${String(o.numero_orden || o.id).padStart(6,'0')}</td>
