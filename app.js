@@ -1110,7 +1110,7 @@ const App = {
 
         openCreate() {
             Utils.setText('modal-tecnico-title', 'Nuevo Técnico');
-            ['tc-id','tc-nombre','tc-telefono','tc-email','tc-comision'].forEach(id => Utils.setVal(id, ''));
+            ['tc-id','tc-nombre','tc-telefono','tc-pin','tc-email','tc-comision'].forEach(id => Utils.setVal(id, ''));
             Utils.setVal('tc-comision', '15');
             Utils.showModal('modal-tecnico');
         },
@@ -1122,20 +1122,27 @@ const App = {
             Utils.setVal('tc-id', t.id);
             Utils.setVal('tc-nombre', t.nombre);
             Utils.setVal('tc-telefono', t.telefono);
-            Utils.setVal('tc-email', t.email);
+            Utils.setVal('tc-pin', t.pin || '');
+            Utils.setVal('tc-email', t.email || '');
             Utils.setVal('tc-comision', t.comision_porcentaje || '15');
             Utils.showModal('modal-tecnico');
         },
 
         async save() {
             const id = Utils.val('tc-id');
+            const nombre = Utils.val('tc-nombre');
+            const telefono = Utils.val('tc-telefono');
+            const pin = Utils.val('tc-pin');
+            if (!nombre) { Utils.toast('El nombre es requerido', 'warning'); return; }
+            if (!telefono) { Utils.toast('El teléfono es requerido', 'warning'); return; }
+            if (!pin) { Utils.toast('El PIN de acceso es requerido', 'warning'); return; }
             const body = {
-                nombre: Utils.val('tc-nombre'),
-                telefono: Utils.val('tc-telefono'),
+                nombre,
+                telefono,
+                pin,
                 email: Utils.val('tc-email'),
                 comision_porcentaje: parseFloat(Utils.val('tc-comision')) || 15,
             };
-            if (!body.nombre) { Utils.toast('El nombre es requerido', 'warning'); return; }
             try {
                 if (id) { await API.put(`/tecnicos/${id}`, body); Utils.toast('Técnico actualizado', 'success'); }
                 else { await API.post('/tecnicos', body); Utils.toast('Técnico creado', 'success'); }

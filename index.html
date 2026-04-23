@@ -1069,13 +1069,14 @@
     <div class="modal-body">
         <input type="hidden" id="tc-id">
         <div class="row g-2">
-            <div class="col-md-6"><label class="bf-label">Nombre</label><input type="text" class="bf-input" id="tc-nombre" required></div>
-            <div class="col-md-6"><label class="bf-label">Teléfono</label><input type="text" class="bf-input" id="tc-telefono"></div>
+            <div class="col-md-6"><label class="bf-label">Nombre *</label><input type="text" class="bf-input" id="tc-nombre" required></div>
+            <div class="col-md-6"><label class="bf-label">Teléfono *</label><input type="text" class="bf-input" id="tc-telefono" required placeholder="Ej: +56912345678"></div>
+            <div class="col-md-6"><label class="bf-label">PIN de acceso *</label><input type="text" class="bf-input" id="tc-pin" required placeholder="Código numérico" minlength="3"></div>
             <div class="col-md-6"><label class="bf-label">Email</label><input type="email" class="bf-input" id="tc-email"></div>
-            <div class="col-md-6"><label class="bf-label">Comisión %</label><input type="number" class="bf-input" id="tc-comision" placeholder="Ej: 15" min="0" max="100"></div>
+            <div class="col-md-6"><label class="bf-label">Comisión %</label><input type="number" class="bf-input" id="tc-comision" placeholder="Ej: 15" min="0" max="100" value="15"></div>
         </div>
     </div>
-    <div class="modal-footer"><button class="btn-bf" onclick="App.tecnicos.save()"><i class="fa-solid fa-save"></i>Guardar</button><button class="btn-bf-outline" data-bs-dismiss="modal">Cancelar</button></div>
+    <div class="modal-footer"><button class="btn-bf" onclick="App.tecnicos.save()"><i class="fa-solid fa-save"></i> Guardar</button><button class="btn-bf-outline" data-bs-dismiss="modal">Cancelar</button></div>
 </div></div></div>
 
 <!-- Modal: Servicio -->
