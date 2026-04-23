@@ -1,4 +1,4 @@
-import { chileNow } from '../lib/db-helpers.js';
+import { chileNow, asegurarColumnasFaltantes, getColumnas } from '../lib/db-helpers.js';
 
 export async function onRequestGet(context) {
   const { request, env } = context;
@@ -13,10 +13,35 @@ export async function onRequestGet(context) {
   }
 
   try {
+    // Asegurar columnas existan
+    await asegurarColumnasFaltantes(env);
+    const otCols = await getColumnas(env, 'OrdenesTrabajo');
+
+    // Columnas explícitas para evitar "too many columns" en D1
+    const wanted = [
+      'id','numero','numero_orden','token','token_firma_tecnico',
+      'patente_placa','cliente_id','vehiculo_id','tecnico_asignado_id',
+      'fecha_ingreso','hora_ingreso','recepcionista',
+      'marca','modelo','anio','cilindrada','combustible','kilometraje','direccion',
+      'trabajo_frenos','detalle_frenos','trabajo_luces','detalle_luces',
+      'trabajo_tren_delantero','detalle_tren_delantero',
+      'trabajo_correas','detalle_correas','trabajo_componentes','detalle_componentes',
+      'nivel_combustible',
+      'check_paragolfe_delantero_der','check_puerta_delantera_der',
+      'check_puerta_trasera_der','check_paragolfe_trasero_izq','check_otros_carroceria',
+      'monto_total','monto_abono','monto_restante','metodo_pago',
+      'estado','estado_trabajo','es_express','pagado','completo',
+      'firma_imagen','fecha_aprobacion','fecha_completado','notas',
+      'servicios_seleccionados','diagnostico_checks','diagnostico_observaciones',
+      'distancia_km','cargo_domicilio','domicilio_modo_cobro'
+    ];
+    const safeCols = wanted.filter(c => otCols.includes(c));
+    const colStr = safeCols.map(c => `o.${c}`).join(', ');
+
     // Buscar orden por el token de firma del técnico
     const orden = await env.DB.prepare(`
       SELECT
-        o.*,
+        ${colStr},
         c.nombre as cliente_nombre,
         c.telefono as cliente_telefono,
         c.rut as cliente_rut,
@@ -56,7 +81,7 @@ export async function onRequestGet(context) {
 
   } catch (error) {
     console.error('Error en aprobación de técnico:', error);
-    return new Response('Error interno del servidor', { status: 500 });
+    return new Response('Error interno del servidor: ' + error.message, { status: 500 });
   }
 }
 
@@ -110,13 +135,15 @@ export async function onRequestPost(context) {
     }
 
     // Guardar firma y cerrar la orden
+    // Normalizar metodo_pago a minúsculas para cumplir CHECK constraint
+    const metodoPagoNorm = metodoPago ? metodoPago.toLowerCase().trim() : null;
     await env.DB.prepare(`
       UPDATE OrdenesTrabajo
       SET firma_imagen = ?, estado = 'Aprobada', estado_trabajo = 'Cerrada',
           fecha_aprobacion = ${chileNow()}, fecha_completado = ${chileNow()},
           notas = ?, pagado = ?, metodo_pago = ?
       WHERE id = ?
-    `).bind(firma, notasActualizadas, pagoCompletado ? 1 : 0, metodoPago || null, orden.id).run();
+    `).bind(firma, notasActualizadas, pagoCompletado ? 1 : 0, metodoPagoNorm, orden.id).run();
 
     // Registrar en seguimiento
     await env.DB.prepare(`

@@ -73,7 +73,7 @@ export async function onRequestPost(context) {
     }
 
     const pagoCompletado = !!data.pago_completado;
-    let metodoPago = data.metodo_pago ? data.metodo_pago.trim() : null;
+    let metodoPago = data.metodo_pago ? data.metodo_pago.trim().toLowerCase() : null;
 
     if (pagoCompletado) {
       if (!metodoPago) {
@@ -89,7 +89,7 @@ export async function onRequestPost(context) {
           status: 400
         });
       }
-      metodoPago = `Pago pendiente: ${metodoPago}`;
+      metodoPago = '';
     }
 
     const notasActualizadas = ((orden.notas || '').trim() ? `${orden.notas.trim()}\nCierre: ${notasCierre}` : `Cierre: ${notasCierre}`);
