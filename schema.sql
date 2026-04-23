@@ -465,7 +465,7 @@ CREATE INDEX IF NOT EXISTS idx_movimientos_asiento ON MovimientosContables(asien
 -- DATOS INICIALES
 -- ============================================================
 INSERT OR IGNORE INTO Usuarios (email, password_hash, nombre, rol, empresa) VALUES
-('admin@bizflow.com', 'admin123', 'Administrador', 'admin', 'BizFlow');
+('admin@bizflow.com', 'g10hvh', 'Administrador', 'admin', 'BizFlow');
 
 INSERT OR IGNORE INTO ModelosVehiculo (marca, modelo, anio_desde, anio_hasta) VALUES
 ('Toyota', 'Corolla', 2015, 2025),

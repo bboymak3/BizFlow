@@ -42,14 +42,17 @@ export async function onRequestPost(context) {
       return errorRes('Credenciales inválidas', 401);
     }
 
-    // Simple password check (compare hashed)
-    // In production, use bcrypt or similar
+    // Password check - support both 'password' and 'password_hash' column names
+    const storedPass = usuario.password_hash || usuario.password || '';
     const hashedPassword = simpleHash(password);
-    if (usuario.password !== hashedPassword) {
+    if (storedPass !== hashedPassword) {
       // Also try plain text comparison for backwards compatibility
-      if (usuario.password !== password) {
+      if (storedPass !== password) {
         return errorRes('Credenciales inválidas', 401);
       }
+      // If plain text matched, upgrade to hashed version
+      const passCol = usuario.password_hash !== undefined ? 'password_hash' : 'password';
+      await env.DB.prepare(`UPDATE Usuarios SET ${passCol} = ? WHERE id = ?`).bind(hashedPassword, usuario.id).run();
     }
 
     // Generate session token
@@ -57,19 +60,21 @@ export async function onRequestPost(context) {
 
     // Update last access
     const now = chileNowISO();
+    const tsCol = usuario.actualizado_en !== undefined ? 'actualizado_en' : 'updated_at';
     await env.DB.prepare(
-      `UPDATE Usuarios SET ultimo_acceso = ?, updated_at = ? WHERE id = ?`
-    ).bind(now, now, usuario.id).run();
+      `UPDATE Usuarios SET ${tsCol} = ? WHERE id = ?`
+    ).bind(now, usuario.id).run();
 
-    // Store session token (use Configuracion or a sessions table)
-    // For simplicity, we'll include it in the response
-    await env.DB.prepare(
-      `INSERT OR REPLACE INTO Configuracion (clave, valor, negocio_id)
-       VALUES (?, ?, ?)`
-    ).bind(`session_token_${usuario.id}`, token, usuario.negocio_id || 1).run();
+    // Store session token
+    if (usuario.id) {
+      await env.DB.prepare(
+        `INSERT INTO Configuracion (usuario_id, clave, valor, actualizado_en)
+         VALUES (?, ?, ?, ?)`
+      ).bind(usuario.id, `session_token`, token, now).run();
+    }
 
     // Return user data without password
-    const { password: _, ...userData } = usuario;
+    const { password_hash: _, password: __, ...userData } = usuario;
 
     return successRes({
       usuario: {
