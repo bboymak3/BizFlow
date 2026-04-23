@@ -178,5 +178,22 @@ export async function registrarNotificacion(env, ordenId, telefono, tipoEvento, 
   }
 }
 
+// Alias compatibles con los imports de otros archivos
+export async function enviarNotificacionOrden(env, ordenId, telefono, tipoEvento, datosOrden) {
+  return await registrarNotificacion(env, ordenId, telefono, tipoEvento, datosOrden);
+}
+
+export async function enviarNotificacion(env, ordenId, telefono, tipoEvento, datosOrden) {
+  return await registrarNotificacion(env, ordenId, telefono, tipoEvento, datosOrden);
+}
+
+export async function notificarNuevaOT(env, ordenId, telefono, datosOrden) {
+  return await registrarNotificacion(env, ordenId, telefono, 'orden_creada', datosOrden);
+}
+
+export async function notificarCambioEstado(env, ordenId, telefono, tipoEvento, datosOrden) {
+  return await registrarNotificacion(env, ordenId, telefono, tipoEvento, datosOrden);
+}
+
 // Exportar para uso desde admin (test de conexión)
 export { enviarUltraMsg, getUltraMsgConfig };
