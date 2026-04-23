@@ -28,14 +28,14 @@ export async function onRequestGet(context) {
       SELECT v.*, c.nombre as cliente_nombre, c.rut as cliente_rut, c.telefono as cliente_telefono
       FROM Vehiculos v
       LEFT JOIN Clientes c ON v.cliente_id = c.id
-      WHERE v.patente_placa = ?
+      WHERE v.placa = ?
     `).bind(patenteLimpia).first();
 
     if (vehiculo) {
       return new Response(JSON.stringify({
         success: true,
         vehiculo: {
-          patente: vehiculo.patente_placa,
+          patente: vehiculo.placa,
           marca: vehiculo.marca,
           modelo: vehiculo.modelo,
           anio: vehiculo.anio,

@@ -60,7 +60,7 @@ export async function onRequestPost(context) {
 
     // Buscar o crear vehículo
     let vehiculo = await env.DB.prepare(
-      "SELECT id FROM Vehiculos WHERE patente_placa = ?"
+      "SELECT id FROM Vehiculos WHERE placa = ?"
     ).bind(data.patente).first();
 
     let vehiculoId;
@@ -86,7 +86,7 @@ export async function onRequestPost(context) {
       }
     } else {
       const result = await env.DB.prepare(`
-        INSERT INTO Vehiculos (cliente_id, patente_placa, marca, modelo, anio,
+        INSERT INTO Vehiculos (cliente_id, placa, marca, modelo, anio,
                               cilindrada, combustible, kilometraje)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(

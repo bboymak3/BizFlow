@@ -317,7 +317,7 @@ export async function onRequestGet(context) {
     let vehiculos = [];
     try {
       const { results } = await env.DB.prepare(`
-        SELECT DISTINCT v.id, v.patente_placa, v.marca, v.modelo, v.anio, v.combustible
+        SELECT DISTINCT v.id, v.placa as patente_placa, v.marca, v.modelo, v.anio, v.combustible
         FROM Vehiculos v
         INNER JOIN OrdenesTrabajo o ON o.vehiculo_id = v.id
         WHERE 1=1 ${fOT}
