@@ -125,20 +125,20 @@ export async function onRequestGet(context) {
     `).bind(...params).first();
 
     // 6. Desglose por método de pago
+    const pagosWhere = fechaCondicion ? `${fechaCondicion} AND` : 'WHERE';
     const pagosResult = await env.DB.prepare(`
       SELECT metodo_pago, COUNT(*) as cantidad, COALESCE(SUM(monto_abono), 0) as total
-      FROM OrdenesTrabajo ${fechaCondicion}
-      AND metodo_pago IS NOT NULL AND metodo_pago != ''
+      FROM OrdenesTrabajo ${pagosWhere} metodo_pago IS NOT NULL AND metodo_pago != ''
       GROUP BY metodo_pago
-    `).bind(...params).all();
+    `).bind(...(fechaCondicion ? params : [])).all();
 
     // 7. Calcular comisiones SOLO sobre mano de obra (excluir repuestos)
     let totalMOFromServicios = 0;
     try {
+      const srvWhere = fechaCondicion ? `${fechaCondicion} AND` : 'WHERE';
       const ordenesServicios = await env.DB.prepare(`
-        SELECT servicios_seleccionados FROM OrdenesTrabajo ${fechaCondicion}
-        AND servicios_seleccionados IS NOT NULL AND servicios_seleccionados != ''
-      `).bind(...params).all();
+        SELECT servicios_seleccionados FROM OrdenesTrabajo ${srvWhere} servicios_seleccionados IS NOT NULL AND servicios_seleccionados != ''
+      `).bind(...(fechaCondicion ? params : [])).all();
       (ordenesServicios.results || []).forEach(row => {
         if (row.servicios_seleccionados) {
           try {

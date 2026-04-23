@@ -33,7 +33,7 @@ async function handleGet(request, DB) {
   const categoria = url.searchParams.get('categoria');
 
   if (!usuarioId) {
-    return errorResponse('usuario_id es requerido');
+    usuarioId = '1';
   }
 
   let whereClause = 'WHERE usuario_id = ? AND activo = 1';
@@ -61,7 +61,7 @@ async function handlePost(request, DB) {
 
   const { usuario_id, nombre, descripcion, precio, duracion_minutos, categoria } = data;
 
-  if (!usuario_id) return errorResponse('usuario_id es requerido');
+  if (!usuario_id) usuario_id = 1;
   if (!nombre || !nombre.trim()) return errorResponse('nombre es requerido');
 
   const result = await DB.prepare(`

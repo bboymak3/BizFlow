@@ -24,7 +24,7 @@ export async function onRequest(context) {
     const fechaHasta = url.searchParams.get('fecha_hasta');
 
     if (!usuarioId) {
-      return errorResponse('usuario_id es requerido');
+      usuarioId = '1';
     }
 
     // Base date filters

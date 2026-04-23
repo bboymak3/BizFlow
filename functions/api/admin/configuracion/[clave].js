@@ -37,7 +37,7 @@ async function handleGet(request, DB, clave) {
   const usuarioId = url.searchParams.get('usuario_id');
 
   if (!usuarioId) {
-    return errorResponse('usuario_id es requerido');
+    usuarioId = '1';
   }
 
   const config = await DB.prepare(
@@ -66,7 +66,7 @@ async function handlePut(request, DB, clave) {
   const usuarioId = url.searchParams.get('usuario_id');
 
   if (!usuarioId) {
-    return errorResponse('usuario_id es requerido');
+    usuarioId = '1';
   }
 
   const data = await request.json();

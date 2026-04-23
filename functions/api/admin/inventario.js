@@ -36,7 +36,8 @@ async function handleGet(request, DB) {
   const limit = parseInt(url.searchParams.get('limit')) || 20;
 
   if (!usuarioId) {
-    return errorResponse('usuario_id es requerido');
+    // Default to usuario_id 1 when not provided
+    usuarioId = '1';
   }
 
   let whereClause = 'WHERE usuario_id = ? AND activo = 1';
@@ -93,7 +94,7 @@ async function handlePost(request, DB) {
     proveedor, ubicacion,
   } = data;
 
-  if (!usuario_id) return errorResponse('usuario_id es requerido');
+  if (!usuario_id) usuario_id = 1;
   if (!nombre || !nombre.trim()) return errorResponse('nombre es requerido');
 
   // Check for duplicate code

@@ -21,7 +21,7 @@ export async function onRequest(context) {
     const usuarioId = url.searchParams.get('usuario_id');
 
     if (!usuarioId) {
-      return errorResponse('usuario_id es requerido');
+      usuarioId = '1';
     }
 
     // Run all dashboard queries in parallel

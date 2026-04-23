@@ -36,7 +36,7 @@ async function handleGet(request, DB) {
   const limit = parseInt(url.searchParams.get('limit')) || 20;
 
   if (!usuarioId) {
-    return errorResponse('usuario_id es requerido');
+    usuarioId = '1';
   }
 
   let whereClause = 'WHERE usuario_id = ?';
@@ -99,7 +99,7 @@ async function handlePost(request, DB) {
 
   const { usuario_id, numero, fecha, concepto, tipo_fuente, fuente_id, movimientos } = data;
 
-  if (!usuario_id) return errorResponse('usuario_id es requerido');
+  if (!usuario_id) usuario_id = 1;
   if (!concepto || !concepto.trim()) return errorResponse('concepto es requerido');
 
   if (!movimientos || !Array.isArray(movimientos) || movimientos.length < 2) {

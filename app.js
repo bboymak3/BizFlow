@@ -1845,7 +1845,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 1000);
 
     // Login deshabilitado - acceso directo al panel
-    currentUser = { nombre: 'Admin', email: 'admin@bizflow.com' };
+    currentUser = { id: 1, nombre: 'Admin', email: 'admin@bizflow.com' };
     const ini = Utils.initials(currentUser.nombre);
     Utils.setText('sb-avatar', ini);
     Utils.setText('sb-name', currentUser.nombre);

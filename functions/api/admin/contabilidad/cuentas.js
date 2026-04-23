@@ -32,7 +32,8 @@ async function handleGet(request, DB) {
   const usuarioId = url.searchParams.get('usuario_id');
 
   if (!usuarioId) {
-    return errorResponse('usuario_id es requerido');
+    // Default to usuario_id 1 when not provided
+    usuarioId = '1';
   }
 
   const { results } = await DB.prepare(`
@@ -81,7 +82,7 @@ async function handlePost(request, DB) {
   const data = await request.json();
   const { usuario_id, codigo, nombre, tipo, descripcion } = data;
 
-  if (!usuario_id) return errorResponse('usuario_id es requerido');
+  if (!usuario_id) usuario_id = 1;
   if (!codigo || !codigo.trim()) return errorResponse('codigo es requerido');
   if (!nombre || !nombre.trim()) return errorResponse('nombre es requerido');
 

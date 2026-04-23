@@ -37,7 +37,7 @@ async function handleGet(request, DB) {
   const limit = parseInt(url.searchParams.get('limit')) || 20;
 
   if (!usuarioId) {
-    return errorResponse('usuario_id es requerido');
+    usuarioId = '1';
   }
 
   let whereClause = `WHERE ot.usuario_id = ?`;
