@@ -19,12 +19,12 @@ export async function onRequest(context) {
   }
 
   try {
-    const orden = await DB.prepare(
-      'SELECT ot.*, c.telefono as cliente_telefono, c.nombre as cliente_nombre
-       FROM OrdenesTrabajo ot
-       LEFT JOIN Clientes c ON ot.cliente_id = c.id
-       WHERE ot.id = ?'
-    ).bind(id).first();
+    const orden = await DB.prepare(`
+      SELECT ot.*, c.telefono as cliente_telefono, c.nombre as cliente_nombre
+      FROM OrdenesTrabajo ot
+      LEFT JOIN Clientes c ON ot.cliente_id = c.id
+      WHERE ot.id = ?
+    `).bind(id).first();
 
     if (!orden) {
       return errorResponse('Orden no encontrada', 404);

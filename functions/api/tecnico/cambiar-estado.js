@@ -46,7 +46,8 @@ export async function onRequestPost(context) {
     return errorResponse(`Faltan campos obligatorios: ${missing.join(', ')}`);
   }
 
-  const { orden_id, tecnico_id, nuevo_estado, latitud, longitud, observaciones } = body;
+  const { orden_id, tecnico_id, nuevo_estado, latitud, longitud } = body;
+  let observaciones = body.observaciones || null;
 
   try {
     // 1. Ensure any needed columns exist
