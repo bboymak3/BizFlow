@@ -138,6 +138,9 @@ CREATE TABLE IF NOT EXISTS Tecnicos (
   comision_porcentaje REAL DEFAULT 40,
   password TEXT DEFAULT '',
   token TEXT DEFAULT '',
+  pin TEXT DEFAULT '',
+  codigo_acceso TEXT DEFAULT '',
+  fecha_registro DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (usuario_id) REFERENCES Usuarios(id) ON DELETE CASCADE
 );
 
@@ -370,6 +373,27 @@ CREATE TABLE IF NOT EXISTS ConfigKV (
 );
 
 -- ============================================================
+-- 15b. AGENDA TECNICOS (Global Pro Automotriz)
+-- Calendario de agendamiento por técnico
+-- ============================================================
+CREATE TABLE IF NOT EXISTS AgendaTecnicos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tecnico_id INTEGER NOT NULL,
+  orden_id INTEGER,
+  titulo TEXT NOT NULL,
+  tipo_servicio TEXT NOT NULL DEFAULT 'taller',
+  fecha_inicio TEXT NOT NULL,
+  fecha_fin TEXT NOT NULL,
+  color TEXT DEFAULT '#0d6efd',
+  observaciones TEXT,
+  estado TEXT DEFAULT 'pendiente',
+  creado_por TEXT DEFAULT 'admin',
+  fecha_creacion TEXT DEFAULT (datetime('now', '-3 hours')),
+  FOREIGN KEY (tecnico_id) REFERENCES Tecnicos(id),
+  FOREIGN KEY (orden_id) REFERENCES OrdenesTrabajo(id)
+);
+
+-- ============================================================
 -- 16. FOTOS DE TRABAJO (BizFlow - unchanged)
 -- metadata en D1, archivo en R2
 -- ============================================================
@@ -379,13 +403,17 @@ CREATE TABLE IF NOT EXISTS FotosTrabajo (
   tipo TEXT DEFAULT 'evidencia' CHECK(tipo IN (
     'antes', 'durante', 'despues', 'evidencia', 'diagnostico', 'firma'
   )),
+  tipo_foto TEXT,
   descripcion TEXT DEFAULT '',
-  ruta_r2 TEXT NOT NULL,
+  ruta_r2 TEXT DEFAULT '',
+  url_imagen TEXT DEFAULT '',
   url_publica TEXT DEFAULT '',
   subida_por TEXT DEFAULT '',
   mime_type TEXT DEFAULT 'image/jpeg',
   tamano_bytes INTEGER DEFAULT 0,
   creado_en TEXT DEFAULT (datetime('now')),
+  fecha_subida DATETIME DEFAULT CURRENT_TIMESTAMP,
+  tecnico_id INTEGER,
   FOREIGN KEY (orden_id) REFERENCES OrdenesTrabajo(id) ON DELETE CASCADE
 );
 
@@ -396,10 +424,13 @@ CREATE TABLE IF NOT EXISTS FotosTrabajo (
 CREATE TABLE IF NOT EXISTS NotasTrabajo (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   orden_id INTEGER NOT NULL,
-  autor TEXT NOT NULL,
+  autor TEXT DEFAULT '',
   autor_tipo TEXT DEFAULT 'admin' CHECK(autor_tipo IN ('admin', 'tecnico', 'sistema', 'cliente')),
-  contenido TEXT NOT NULL,
+  contenido TEXT DEFAULT '',
+  nota TEXT,
   creado_en TEXT DEFAULT (datetime('now')),
+  fecha_nota DATETIME DEFAULT CURRENT_TIMESTAMP,
+  tecnico_id INTEGER,
   FOREIGN KEY (orden_id) REFERENCES OrdenesTrabajo(id) ON DELETE CASCADE
 );
 
@@ -658,6 +689,15 @@ CREATE INDEX IF NOT EXISTS idx_sesiones_admin_admin ON SesionesAdmin(admin_id);
 
 -- Config KV
 -- (clave is PRIMARY KEY, no separate index needed)
+
+-- AgendaTecnicos
+CREATE INDEX IF NOT EXISTS idx_agenda_tecnico ON AgendaTecnicos(tecnico_id);
+CREATE INDEX IF NOT EXISTS idx_agenda_orden ON AgendaTecnicos(orden_id);
+CREATE INDEX IF NOT EXISTS idx_agenda_fecha ON AgendaTecnicos(fecha_inicio);
+CREATE INDEX IF NOT EXISTS idx_agenda_estado ON AgendaTecnicos(estado);
+
+-- OrdenesTrabajo extra indexes
+CREATE INDEX IF NOT EXISTS idx_ot_fecha_programada ON OrdenesTrabajo(fecha_programada);
 
 -- ============================================================
 -- DATOS INICIALES

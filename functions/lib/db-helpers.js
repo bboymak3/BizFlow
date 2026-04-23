@@ -223,6 +223,22 @@ export async function asegurarColumnasFaltantes(env) {
       fecha_registro DATETIME DEFAULT CURRENT_TIMESTAMP
     )`).run();
 
+    // AgendaTecnicos - Calendario de agendamiento por técnico
+    await env.DB.prepare(`CREATE TABLE IF NOT EXISTS AgendaTecnicos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tecnico_id INTEGER NOT NULL,
+      orden_id INTEGER,
+      titulo TEXT NOT NULL,
+      tipo_servicio TEXT NOT NULL DEFAULT 'taller',
+      fecha_inicio TEXT NOT NULL,
+      fecha_fin TEXT NOT NULL,
+      color TEXT DEFAULT '#0d6efd',
+      observaciones TEXT,
+      estado TEXT DEFAULT 'pendiente',
+      creado_por TEXT DEFAULT 'admin',
+      fecha_creacion TEXT DEFAULT (datetime('now', '-3 hours'))
+    )`).run();
+
     // Columns that may be missing in OrdenesTrabajo
     const colsOT = [
       'numero_orden INTEGER', 'token TEXT', 'patente_placa TEXT',
@@ -268,6 +284,9 @@ export async function asegurarColumnasFaltantes(env) {
     try { await env.DB.prepare(`ALTER TABLE Tecnicos ADD COLUMN comision_porcentaje REAL NOT NULL DEFAULT 40`).run(); } catch (e) {}
     try { await env.DB.prepare(`ALTER TABLE Tecnicos ADD COLUMN password TEXT`).run(); } catch (e) {}
     try { await env.DB.prepare(`ALTER TABLE Tecnicos ADD COLUMN token TEXT`).run(); } catch (e) {}
+    try { await env.DB.prepare(`ALTER TABLE Tecnicos ADD COLUMN pin TEXT`).run(); } catch (e) {}
+    try { await env.DB.prepare(`ALTER TABLE Tecnicos ADD COLUMN codigo_acceso TEXT`).run(); } catch (e) {}
+    try { await env.DB.prepare(`ALTER TABLE Tecnicos ADD COLUMN fecha_registro DATETIME DEFAULT CURRENT_TIMESTAMP`).run(); } catch (e) {}
 
     // Columns in CostosAdicionales
     try { await env.DB.prepare(`ALTER TABLE CostosAdicionales ADD COLUMN monto REAL DEFAULT 0`).run(); } catch (e) {}
@@ -296,6 +315,16 @@ export async function asegurarColumnasFaltantes(env) {
     // Columns in Clientes
     try { await env.DB.prepare(`ALTER TABLE Clientes ADD COLUMN rut TEXT`).run(); } catch (e) {}
 
+    // Columns in FotosTrabajo (code uses url_imagen, fecha_subida, tecnico_id)
+    try { await env.DB.prepare(`ALTER TABLE FotosTrabajo ADD COLUMN url_imagen TEXT`).run(); } catch (e) {}
+    try { await env.DB.prepare(`ALTER TABLE FotosTrabajo ADD COLUMN fecha_subida DATETIME DEFAULT CURRENT_TIMESTAMP`).run(); } catch (e) {}
+    try { await env.DB.prepare(`ALTER TABLE FotosTrabajo ADD COLUMN tecnico_id INTEGER`).run(); } catch (e) {}
+
+    // Columns in NotasTrabajo (code uses nota, fecha_nota, tecnico_id)
+    try { await env.DB.prepare(`ALTER TABLE NotasTrabajo ADD COLUMN nota TEXT`).run(); } catch (e) {}
+    try { await env.DB.prepare(`ALTER TABLE NotasTrabajo ADD COLUMN fecha_nota DATETIME DEFAULT CURRENT_TIMESTAMP`).run(); } catch (e) {}
+    try { await env.DB.prepare(`ALTER TABLE NotasTrabajo ADD COLUMN tecnico_id INTEGER`).run(); } catch (e) {}
+
     // Columns in Vehiculos
     try { await env.DB.prepare(`ALTER TABLE Vehiculos ADD COLUMN patente_placa TEXT`).run(); } catch (e) {}
     try { await env.DB.prepare(`ALTER TABLE Vehiculos ADD COLUMN cilindrada TEXT`).run(); } catch (e) {}
@@ -308,6 +337,12 @@ export async function asegurarColumnasFaltantes(env) {
     // ConfigKV default rows
     try { await env.DB.prepare(`INSERT OR IGNORE INTO ConfigKV (clave, valor) VALUES ('negocio_nombre', 'BizFlow')`).run(); } catch (e) {}
     try { await env.DB.prepare(`INSERT OR IGNORE INTO ConfigKV (clave, valor) VALUES ('ultimo_numero_orden', '0')`).run(); } catch (e) {}
+
+    // Extra columns in OrdenesTrabajo
+    try { await env.DB.prepare(`ALTER TABLE OrdenesTrabajo ADD COLUMN fecha_programada TEXT`).run(); } catch (e) {}
+    try { await env.DB.prepare(`ALTER TABLE OrdenesTrabajo ADD COLUMN hora_programada TEXT`).run(); } catch (e) {}
+    try { await env.DB.prepare(`ALTER TABLE OrdenesTrabajo ADD COLUMN cliente_email TEXT`).run(); } catch (e) {}
+    try { await env.DB.prepare(`ALTER TABLE OrdenesTrabajo ADD COLUMN cliente_rut TEXT`).run(); } catch (e) {}
 
     // Ensure ultimo_numero_orden in Configuracion
     try { await env.DB.prepare(`ALTER TABLE Configuracion ADD COLUMN ultimo_numero_orden INTEGER DEFAULT 0`).run(); } catch (e) {}
