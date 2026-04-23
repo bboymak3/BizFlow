@@ -1,0 +1,11 @@
+{
+  "name": "bizflow",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "npx wrangler pages dev . --d1=bizflow_db",
+    "deploy": "npx wrangler pages deploy .",
+    "db:migrate": "npx wrangler d1 execute bizflow_db --file=./schema.sql"
+  },
+  "dependencies": {}
+}

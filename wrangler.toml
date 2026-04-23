@@ -1,0 +1,10 @@
+name = "bizflow"
+compatibility_date = "2024-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "bizflow_db"
+database_id = "df3d3561-bde1-48e0-863b-edf65926d6ab"
+
+[vars]
+ENVIRONMENT = "production"

@@ -1,0 +1,2724 @@
+<!DOCTYPE html>
+<html lang="es-MX">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="BizFlow - SaaS CRM y Gestión de Órdenes de Trabajo">
+    <title>BizFlow - SaaS CRM &amp; Gestión de Órdenes</title>
+
+    <!-- Bootstrap 5.3 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome 6.4 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#0d9488',
+                        'primary-dark': '#0f766e',
+                        'primary-light': '#14b8a6',
+                        'primary-50': '#f0fdfa',
+                        'primary-100': '#ccfbf1',
+                        sidebar: '#111827',
+                        'sidebar-hover': '#1f2937',
+                        'sidebar-active': '#0d9488',
+                        surface: '#f8fafc',
+                        card: '#ffffff',
+                        'card-dark': '#1e293b',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        :root {
+            --primary: #0d9488;
+            --primary-dark: #0f766e;
+            --primary-light: #14b8a6;
+            --primary-rgb: 13, 148, 136;
+            --sidebar-width: 280px;
+            --topbar-height: 64px;
+            --sidebar-bg: #111827;
+            --sidebar-hover: #1f2937;
+            --surface: #f8fafc;
+            --card-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+            --card-shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.08), 0 4px 6px -4px rgba(0,0,0,0.04);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', system-ui, sans-serif; background: var(--surface); overflow-x: hidden; }
+
+        /* ====== SCROLLBAR ====== */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .sidebar-content::-webkit-scrollbar-thumb { background: #374151; }
+        .sidebar-content::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+
+        /* ====== LOGIN SCREEN ====== */
+        #login-screen {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+            position: relative;
+            overflow: hidden;
+        }
+        #login-screen::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(ellipse at 30% 50%, rgba(13,148,136,0.08) 0%, transparent 50%),
+                        radial-gradient(ellipse at 70% 50%, rgba(14,165,233,0.06) 0%, transparent 50%);
+            animation: loginBgPulse 8s ease-in-out infinite alternate;
+        }
+        @keyframes loginBgPulse {
+            0% { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(-2%, 1%) scale(1.02); }
+        }
+        .login-card {
+            background: rgba(255,255,255,0.03);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 1.5rem;
+            padding: 3rem;
+            width: 100%;
+            max-width: 420px;
+            position: relative;
+            z-index: 1;
+        }
+        .login-logo {
+            font-size: 2rem;
+            font-weight: 800;
+            color: var(--primary-light);
+            letter-spacing: -0.5px;
+        }
+        .login-logo i { margin-right: 0.5rem; font-size: 1.8rem; }
+        .login-input {
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 0.75rem;
+            color: #e2e8f0;
+            padding: 0.85rem 1rem 0.85rem 2.8rem;
+            width: 100%;
+            font-size: 0.95rem;
+            transition: all 0.2s;
+        }
+        .login-input::placeholder { color: #64748b; }
+        .login-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.15);
+            background: rgba(255,255,255,0.08);
+        }
+        .login-input-icon {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #64748b;
+            font-size: 0.9rem;
+        }
+        .btn-login {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: #fff;
+            border: none;
+            border-radius: 0.75rem;
+            padding: 0.85rem;
+            font-size: 1rem;
+            font-weight: 600;
+            width: 100%;
+            cursor: pointer;
+            transition: all 0.2s;
+            letter-spacing: 0.3px;
+        }
+        .btn-login:hover {
+            background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary) 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(var(--primary-rgb), 0.35);
+        }
+
+        /* ====== SIDEBAR ====== */
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: var(--sidebar-width);
+            height: 100vh;
+            background: var(--sidebar-bg);
+            z-index: 1040;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+            border-right: 1px solid rgba(255,255,255,0.05);
+        }
+        .sidebar-brand {
+            height: var(--topbar-height);
+            display: flex;
+            align-items: center;
+            padding: 0 1.25rem;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            flex-shrink: 0;
+        }
+        .sidebar-brand-text {
+            font-size: 1.35rem;
+            font-weight: 800;
+            color: #fff;
+            letter-spacing: -0.5px;
+        }
+        .sidebar-brand-text i { color: var(--primary-light); margin-right: 0.5rem; }
+        .sidebar-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0.75rem 0;
+        }
+        .sidebar-section-label {
+            font-size: 0.65rem;
+            font-weight: 700;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            padding: 1rem 1.25rem 0.4rem;
+        }
+        .sidebar-nav-item {
+            display: flex;
+            align-items: center;
+            padding: 0.6rem 1.25rem;
+            color: #9ca3af;
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+            border-left: 3px solid transparent;
+            margin: 1px 0;
+        }
+        .sidebar-nav-item:hover {
+            color: #e5e7eb;
+            background: var(--sidebar-hover);
+        }
+        .sidebar-nav-item.active {
+            color: #fff;
+            background: rgba(var(--primary-rgb), 0.12);
+            border-left-color: var(--primary);
+        }
+        .sidebar-nav-item i {
+            width: 20px;
+            text-align: center;
+            margin-right: 0.75rem;
+            font-size: 0.85rem;
+        }
+        .sidebar-nav-item.active i { color: var(--primary-light); }
+
+        /* ====== SIDEBAR OVERLAY (mobile) ====== */
+        .sidebar-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1035;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s;
+        }
+        .sidebar-overlay.show { opacity: 1; visibility: visible; }
+
+        /* ====== TOPBAR ====== */
+        .topbar {
+            position: fixed;
+            top: 0;
+            left: var(--sidebar-width);
+            right: 0;
+            height: var(--topbar-height);
+            background: #fff;
+            border-bottom: 1px solid #e2e8f0;
+            z-index: 1030;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 1.5rem;
+            transition: left 0.3s;
+        }
+        .topbar-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #1e293b;
+        }
+        .topbar-right {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        .topbar-user {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #475569;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+        .topbar-user-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.8rem;
+        }
+        .btn-logout {
+            background: none;
+            border: 1px solid #e2e8f0;
+            color: #64748b;
+            border-radius: 0.5rem;
+            padding: 0.4rem 0.85rem;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+        .btn-logout:hover { border-color: #ef4444; color: #ef4444; }
+        .btn-sidebar-toggle {
+            display: none;
+            background: none;
+            border: none;
+            color: #475569;
+            font-size: 1.25rem;
+            cursor: pointer;
+            padding: 0.25rem;
+        }
+
+        /* ====== MAIN CONTENT ====== */
+        .main-content {
+            margin-left: var(--sidebar-width);
+            margin-top: var(--topbar-height);
+            padding: 1.5rem;
+            min-height: calc(100vh - var(--topbar-height));
+            transition: margin-left 0.3s;
+        }
+        .section-container { display: none; animation: fadeIn 0.25s ease; }
+        .section-container.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* ====== CARDS ====== */
+        .bf-card {
+            background: #fff;
+            border-radius: 0.875rem;
+            box-shadow: var(--card-shadow);
+            border: 1px solid #f1f5f9;
+            overflow: hidden;
+        }
+        .bf-card-header {
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid #f1f5f9;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .bf-card-title { font-size: 0.95rem; font-weight: 700; color: #1e293b; }
+        .bf-card-body { padding: 1.25rem; }
+
+        /* ====== KPI CARDS ====== */
+        .kpi-card {
+            background: #fff;
+            border-radius: 0.875rem;
+            padding: 1.25rem;
+            box-shadow: var(--card-shadow);
+            border: 1px solid #f1f5f9;
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            transition: all 0.2s;
+        }
+        .kpi-card:hover { transform: translateY(-2px); box-shadow: var(--card-shadow-lg); }
+        .kpi-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+        }
+        .kpi-label { font-size: 0.78rem; color: #64748b; font-weight: 500; margin-bottom: 0.25rem; }
+        .kpi-value { font-size: 1.5rem; font-weight: 800; color: #1e293b; line-height: 1.2; }
+        .kpi-sub { font-size: 0.72rem; color: #94a3b8; margin-top: 0.15rem; }
+
+        /* ====== STATUS BADGES ====== */
+        .badge-estado {
+            font-size: 0.72rem;
+            font-weight: 600;
+            padding: 0.3rem 0.65rem;
+            border-radius: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        .badge-enviada { background: #f1f5f9; color: #64748b; }
+        .badge-aprobada { background: #dcfce7; color: #16a34a; }
+        .badge-pendiente-visita { background: #fef3c7; color: #d97706; }
+        .badge-en-sitio { background: #dbeafe; color: #2563eb; }
+        .badge-en-progreso { background: #ccfbf1; color: #0d9488; }
+        .badge-completada { background: #d1fae5; color: #059669; }
+        .badge-cerrada { background: #e2e8f0; color: #475569; }
+        .badge-cancelada { background: #fee2e2; color: #dc2626; }
+
+        /* ====== TABLES ====== */
+        .bf-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+        .bf-table thead th {
+            background: #f8fafc;
+            color: #64748b;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #e2e8f0;
+            white-space: nowrap;
+        }
+        .bf-table tbody tr {
+            transition: background 0.1s;
+        }
+        .bf-table tbody tr:hover { background: #f8fafc; }
+        .bf-table tbody td {
+            padding: 0.75rem 1rem;
+            font-size: 0.875rem;
+            color: #334155;
+            border-bottom: 1px solid #f1f5f9;
+            vertical-align: middle;
+        }
+        .bf-table tbody tr:nth-child(even) { background: #fafbfc; }
+        .bf-table tbody tr:nth-child(even):hover { background: #f1f5f9; }
+
+        /* ====== BUTTONS ====== */
+        .btn-primary-bf {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: #fff;
+            border: none;
+            border-radius: 0.625rem;
+            padding: 0.55rem 1.15rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+        .btn-primary-bf:hover {
+            background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary) 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(var(--primary-rgb), 0.3);
+            color: #fff;
+        }
+        .btn-outline-bf {
+            background: transparent;
+            color: var(--primary);
+            border: 1.5px solid var(--primary);
+            border-radius: 0.625rem;
+            padding: 0.5rem 1.1rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+        .btn-outline-bf:hover {
+            background: var(--primary);
+            color: #fff;
+        }
+        .btn-sm-bf {
+            padding: 0.3rem 0.6rem;
+            font-size: 0.75rem;
+            border-radius: 0.4rem;
+        }
+        .btn-icon-bf {
+            background: none;
+            border: 1px solid #e2e8f0;
+            color: #64748b;
+            border-radius: 0.5rem;
+            width: 32px;
+            height: 32px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.15s;
+            font-size: 0.78rem;
+        }
+        .btn-icon-bf:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-50, #f0fdfa); }
+        .btn-icon-bf.danger:hover { border-color: #ef4444; color: #ef4444; background: #fef2f2; }
+
+        /* ====== FORMS ====== */
+        .bf-form-label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 0.35rem;
+        }
+        .bf-form-control {
+            border: 1.5px solid #e2e8f0;
+            border-radius: 0.5rem;
+            padding: 0.55rem 0.85rem;
+            font-size: 0.875rem;
+            color: #1e293b;
+            transition: all 0.15s;
+            width: 100%;
+        }
+        .bf-form-control:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.1);
+        }
+        .bf-form-control::placeholder { color: #94a3b8; }
+
+        /* ====== MODALS ====== */
+        .modal-content {
+            border: none;
+            border-radius: 1rem;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        .modal-header {
+            border-bottom: 1px solid #f1f5f9;
+            padding: 1rem 1.5rem;
+            background: #fafbfc;
+        }
+        .modal-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #1e293b;
+        }
+        .modal-body { padding: 1.5rem; }
+        .modal-footer { border-top: 1px solid #f1f5f9; padding: 1rem 1.5rem; }
+        .btn-close { opacity: 0.5; }
+        .btn-close:hover { opacity: 1; }
+
+        /* ====== PERIOD SELECTOR ====== */
+        .period-selector {
+            display: inline-flex;
+            background: #f1f5f9;
+            border-radius: 0.625rem;
+            padding: 0.2rem;
+            gap: 0.15rem;
+        }
+        .period-btn {
+            background: transparent;
+            border: none;
+            color: #64748b;
+            font-size: 0.78rem;
+            font-weight: 600;
+            padding: 0.4rem 0.85rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .period-btn:hover { color: #334155; }
+        .period-btn.active {
+            background: #fff;
+            color: var(--primary);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+
+        /* ====== SEARCH BAR ====== */
+        .search-bar {
+            position: relative;
+            max-width: 320px;
+        }
+        .search-bar input {
+            padding-left: 2.5rem;
+            border-radius: 2rem;
+            border: 1.5px solid #e2e8f0;
+            background: #fff;
+            font-size: 0.85rem;
+        }
+        .search-bar input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(var(--primary-rgb),0.1); outline:none; }
+        .search-bar i { position: absolute; left: 0.85rem; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 0.85rem; }
+
+        /* ====== CHECKBOXES / SERVICES CATALOG ====== */
+        .service-check-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.6rem 0.75rem;
+            border: 1px solid #f1f5f9;
+            border-radius: 0.5rem;
+            margin-bottom: 0.4rem;
+            transition: all 0.15s;
+            cursor: pointer;
+        }
+        .service-check-item:hover { border-color: var(--primary); background: rgba(var(--primary-rgb),0.02); }
+        .service-check-item.selected { border-color: var(--primary); background: rgba(var(--primary-rgb),0.05); }
+        .service-check-item .form-check-input:checked { background-color: var(--primary); border-color: var(--primary); }
+
+        /* ====== CHECKLIST ====== */
+        .checklist-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 0;
+        }
+        .checklist-item .form-check-input:checked { background-color: var(--primary); border-color: var(--primary); }
+
+        /* ====== EMPTY STATE ====== */
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1.5rem;
+            color: #94a3b8;
+        }
+        .empty-state i { font-size: 2.5rem; margin-bottom: 1rem; display: block; }
+        .empty-state p { font-size: 0.9rem; margin: 0; }
+
+        /* ====== CHART PLACEHOLDER ====== */
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 280px;
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            border-radius: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #94a3b8;
+        }
+        .chart-container i { font-size: 2rem; }
+
+        /* ====== LANDING PAGE PREVIEW ====== */
+        .landing-preview-frame {
+            border: 2px solid #e2e8f0;
+            border-radius: 0.75rem;
+            overflow: hidden;
+            background: #fff;
+            min-height: 400px;
+        }
+        .landing-preview-header {
+            background: linear-gradient(135deg, var(--primary) 0%, #0f766e 100%);
+            color: #fff;
+            padding: 2rem;
+            text-align: center;
+        }
+        .landing-section-block {
+            border: 1px dashed #cbd5e1;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin: 0.75rem 0;
+            background: #fafbfc;
+        }
+        .toggle-switch {
+            position: relative;
+            width: 44px;
+            height: 24px;
+        }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            inset: 0;
+            background: #cbd5e1;
+            transition: 0.3s;
+            border-radius: 24px;
+        }
+        .toggle-slider:before {
+            content: '';
+            position: absolute;
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background: #fff;
+            transition: 0.3s;
+            border-radius: 50%;
+        }
+        .toggle-switch input:checked + .toggle-slider { background: var(--primary); }
+        .toggle-switch input:checked + .toggle-slider:before { transform: translateX(20px); }
+
+        /* ====== RESPONSIVE ====== */
+        @media (max-width: 991.98px) {
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.show { transform: translateX(0); }
+            .topbar { left: 0; }
+            .main-content { margin-left: 0; }
+            .btn-sidebar-toggle { display: block; }
+        }
+        @media (max-width: 575.98px) {
+            .main-content { padding: 1rem; }
+            .kpi-value { font-size: 1.2rem; }
+            .kpi-icon { width: 40px; height: 40px; font-size: 1rem; }
+        }
+
+        /* ====== UTILITY ====== */
+        .text-primary-bf { color: var(--primary) !important; }
+        .bg-primary-bf { background-color: var(--primary) !important; }
+        .fw-800 { font-weight: 800; }
+        .gap-2 { gap: 0.5rem; }
+        .gap-3 { gap: 1rem; }
+    </style>
+</head>
+<body>
+
+<!-- ============================================================ -->
+<!-- LOGIN SCREEN                                                   -->
+<!-- ============================================================ -->
+<div id="login-screen">
+    <div class="login-card">
+        <div class="text-center mb-4">
+            <div class="login-logo mb-2">
+                <i class="fa-solid fa-bolt"></i>BizFlow
+            </div>
+            <p class="text-gray-400 text-sm">SaaS CRM &amp; Gestión de Órdenes de Trabajo</p>
+        </div>
+        <form id="login-form" autocomplete="off">
+            <div class="mb-4">
+                <div class="position-relative">
+                    <i class="fa-regular fa-envelope login-input-icon"></i>
+                    <input type="email" id="login-email" class="login-input" placeholder="Correo electrónico" required>
+                </div>
+            </div>
+            <div class="mb-5">
+                <div class="position-relative">
+                    <i class="fa-solid fa-lock login-input-icon"></i>
+                    <input type="password" id="login-password" class="login-input" placeholder="Contraseña" required>
+                </div>
+            </div>
+            <div class="mb-4">
+                <button type="submit" class="btn-login">
+                    <i class="fa-solid fa-right-to-bracket me-2"></i>Iniciar Sesión
+                </button>
+            </div>
+            <div class="text-center">
+                <a href="#" class="text-gray-500 text-xs" style="text-decoration:none;">¿Olvidaste tu contraseña?</a>
+            </div>
+        </form>
+        <div class="text-center mt-4">
+            <p class="text-gray-600 text-xs mb-0">Powered by <span class="fw-800 text-primary-bf">BizFlow</span> &copy; 2025</p>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- MAIN APP                                                       -->
+<!-- ============================================================ -->
+<div id="main-app" style="display:none;">
+
+    <!-- Sidebar Overlay (mobile) -->
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+    <!-- ====== SIDEBAR ====== -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-brand">
+            <span class="sidebar-brand-text">
+                <i class="fa-solid fa-bolt"></i>BizFlow
+            </span>
+            <button class="btn-close btn-close-white ms-auto d-lg-none" id="sidebar-close-btn" style="font-size:0.6rem;"></button>
+        </div>
+        <nav class="sidebar-content">
+            <!-- PRINCIPAL -->
+            <div class="sidebar-section-label">Principal</div>
+            <a class="sidebar-nav-item active" data-section="dashboard-section" onclick="navigateTo('dashboard-section')">
+                <i class="fa-solid fa-chart-pie"></i> Dashboard
+            </a>
+
+            <!-- OPERACIONES -->
+            <div class="sidebar-section-label">Operaciones</div>
+            <a class="sidebar-nav-item" data-section="ordenes-section" onclick="navigateTo('ordenes-section')">
+                <i class="fa-solid fa-clipboard-list"></i> Ordenes de Trabajo
+            </a>
+            <a class="sidebar-nav-item" data-section="tecnicos-section" onclick="navigateTo('tecnicos-section')">
+                <i class="fa-solid fa-users-gear"></i> Técnicos / Operarios
+            </a>
+            <a class="sidebar-nav-item" data-section="servicios-section" onclick="navigateTo('servicios-section')">
+                <i class="fa-solid fa-wrench"></i> Servicios
+            </a>
+            <a class="sidebar-nav-item" data-section="modelos-section" onclick="navigateTo('modelos-section')">
+                <i class="fa-solid fa-car"></i> Modelos Vehículos
+            </a>
+
+            <!-- FINANZAS -->
+            <div class="sidebar-section-label">Finanzas</div>
+            <a class="sidebar-nav-item" data-section="costos-section" onclick="navigateTo('costos-section')">
+                <i class="fa-solid fa-calculator"></i> Costos Adicionales
+            </a>
+            <a class="sidebar-nav-item" data-section="gastos-section" onclick="navigateTo('gastos-section')">
+                <i class="fa-solid fa-money-bill-trend-up"></i> Gastos
+            </a>
+            <a class="sidebar-nav-item" data-section="liquidaciones-section" onclick="navigateTo('liquidaciones-section')">
+                <i class="fa-solid fa-file-invoice-dollar"></i> Liquidaciones
+            </a>
+            <a class="sidebar-nav-item" data-section="pagos-section" onclick="navigateTo('pagos-section')">
+                <i class="fa-solid fa-credit-card"></i> Resumen Pagos
+            </a>
+
+            <!-- HERRAMIENTAS -->
+            <div class="sidebar-section-label">Herramientas</div>
+            <a class="sidebar-nav-item" data-section="notificaciones-section" onclick="navigateTo('notificaciones-section')">
+                <i class="fa-brands fa-whatsapp"></i> Notificaciones WhatsApp
+            </a>
+            <a class="sidebar-nav-item" data-section="exportar-section" onclick="navigateTo('exportar-section')">
+                <i class="fa-solid fa-file-export"></i> Exportar Datos
+            </a>
+            <a class="sidebar-nav-item" data-section="config-section" onclick="navigateTo('config-section')">
+                <i class="fa-solid fa-gear"></i> Configuración
+            </a>
+
+            <!-- SAAS -->
+            <div class="sidebar-section-label">SaaS</div>
+            <a class="sidebar-nav-item" data-section="landing-section" onclick="navigateTo('landing-section')">
+                <i class="fa-solid fa-globe"></i> Landing Pages
+            </a>
+        </nav>
+        <!-- Sidebar Footer -->
+        <div style="padding:0.75rem 1.25rem; border-top:1px solid rgba(255,255,255,0.06); flex-shrink:0;">
+            <div class="d-flex align-items-center gap-2">
+                <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--primary-light));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:0.7rem;" id="sidebar-avatar">AD</div>
+                <div>
+                    <div style="color:#e2e8f0;font-size:0.8rem;font-weight:600;" id="sidebar-username">Admin</div>
+                    <div style="color:#6b7280;font-size:0.68rem;">Administrador</div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- ====== TOPBAR ====== -->
+    <header class="topbar" id="topbar">
+        <div class="d-flex align-items-center gap-3">
+            <button class="btn-sidebar-toggle" id="sidebar-toggle-btn">
+                <i class="fa-solid fa-bars"></i>
+            </button>
+            <span class="topbar-title" id="topbar-title">Dashboard</span>
+        </div>
+        <div class="topbar-right">
+            <div class="topbar-user">
+                <div class="topbar-user-avatar" id="topbar-avatar">AD</div>
+                <span id="topbar-username" class="d-none d-md-inline">Admin</span>
+            </div>
+            <button class="btn-logout" onclick="logout()">
+                <i class="fa-solid fa-right-from-bracket"></i>
+                <span class="d-none d-sm-inline">Salir</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- ====== MAIN CONTENT AREA ====== -->
+    <main class="main-content" id="main-content">
+
+        <!-- ====================================================== -->
+        <!-- 1. DASHBOARD SECTION                                    -->
+        <!-- ====================================================== -->
+        <div id="dashboard-section" class="section-container active">
+            <!-- Period Selector -->
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+                <h2 class="h5 fw-800 mb-0 text-gray-800">Resumen General</h2>
+                <div class="period-selector">
+                    <button class="period-btn active" data-period="dia">Día</button>
+                    <button class="period-btn" data-period="semana">Semana</button>
+                    <button class="period-btn" data-period="quincena">Quincena</button>
+                    <button class="period-btn" data-period="mes">Mes</button>
+                    <button class="period-btn" data-period="anio">Año</button>
+                </div>
+            </div>
+
+            <!-- KPI Cards -->
+            <div class="row g-3 mb-4">
+                <div class="col-6 col-lg-3">
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background:rgba(var(--primary-rgb),0.1);color:var(--primary);">
+                            <i class="fa-solid fa-clipboard-list"></i>
+                        </div>
+                        <div>
+                            <div class="kpi-label">Total Órdenes</div>
+                            <div class="kpi-value" id="kpi-total-ordenes">0</div>
+                            <div class="kpi-sub">Período actual</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background:#dcfce7;color:#16a34a;">
+                            <i class="fa-solid fa-circle-check"></i>
+                        </div>
+                        <div>
+                            <div class="kpi-label">Aprobadas</div>
+                            <div class="kpi-value" id="kpi-aprobadas">0</div>
+                            <div class="kpi-sub">Listas para ejecutar</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background:#dbeafe;color:#2563eb;">
+                            <i class="fa-solid fa-spinner"></i>
+                        </div>
+                        <div>
+                            <div class="kpi-label">En Proceso</div>
+                            <div class="kpi-value" id="kpi-en-proceso">0</div>
+                            <div class="kpi-sub">Trabajando ahora</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background:#e2e8f0;color:#475569;">
+                            <i class="fa-solid fa-lock"></i>
+                        </div>
+                        <div>
+                            <div class="kpi-label">Cerradas</div>
+                            <div class="kpi-value" id="kpi-cerradas">0</div>
+                            <div class="kpi-sub">Completadas</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background:#fef3c7;color:#d97706;">
+                            <i class="fa-solid fa-dollar-sign"></i>
+                        </div>
+                        <div>
+                            <div class="kpi-label">Ingresos</div>
+                            <div class="kpi-value" id="kpi-ingresos">$0</div>
+                            <div class="kpi-sub">Facturado</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background:#fee2e2;color:#dc2626;">
+                            <i class="fa-solid fa-clock"></i>
+                        </div>
+                        <div>
+                            <div class="kpi-label">Pendientes</div>
+                            <div class="kpi-value" id="kpi-pendientes">0</div>
+                            <div class="kpi-sub">Sin asignar</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Row -->
+            <div class="row g-3 mb-4">
+                <div class="col-lg-8">
+                    <div class="bf-card">
+                        <div class="bf-card-header">
+                            <span class="bf-card-title"><i class="fa-solid fa-chart-line me-2 text-primary-bf"></i>Tendencia de Órdenes</span>
+                        </div>
+                        <div class="bf-card-body">
+                            <div class="chart-container" id="chart-ordenes-trend">
+                                <i class="fa-solid fa-chart-line"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="bf-card">
+                        <div class="bf-card-header">
+                            <span class="bf-card-title"><i class="fa-solid fa-chart-bar me-2 text-primary-bf"></i>Top Servicios</span>
+                        </div>
+                        <div class="bf-card-body">
+                            <div class="chart-container" id="chart-top-servicios">
+                                <i class="fa-solid fa-chart-bar"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Row -->
+            <div class="row g-3">
+                <div class="col-lg-6">
+                    <div class="bf-card">
+                        <div class="bf-card-header">
+                            <span class="bf-card-title"><i class="fa-solid fa-ranking-star me-2 text-primary-bf"></i>Rendimiento Técnicos</span>
+                        </div>
+                        <div class="bf-card-body" style="padding:0;">
+                            <div class="table-responsive" style="max-height:320px;overflow-y:auto;">
+                                <table class="bf-table" id="dashboard-tecnicos-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Técnico</th>
+                                            <th>Órdenes</th>
+                                            <th>Completadas</th>
+                                            <th>Eficiencia</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td colspan="4" class="text-center text-gray-400 py-4">
+                                                <i class="fa-solid fa-users mb-2 d-block" style="font-size:1.5rem;"></i>
+                                                Sin datos de técnicos
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="bf-card">
+                        <div class="bf-card-header">
+                            <span class="bf-card-title"><i class="fa-solid fa-tags me-2 text-primary-bf"></i>Gastos por Categoría</span>
+                        </div>
+                        <div class="bf-card-body">
+                            <div class="chart-container" id="chart-gastos-categoria">
+                                <i class="fa-solid fa-chart-pie"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ====================================================== -->
+        <!-- 2. ORDENES DE TRABAJO SECTION                           -->
+        <!-- ====================================================== -->
+        <div id="ordenes-section" class="section-container">
+            <!-- Top Bar -->
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <button class="btn-primary-bf" data-bs-toggle="modal" data-bs-target="#create-orden-modal">
+                        <i class="fa-solid fa-plus"></i> Nueva Orden
+                    </button>
+                    <button class="btn-outline-bf" data-bs-toggle="modal" data-bs-target="#express-orden-modal">
+                        <i class="fa-solid fa-bolt"></i> OT Express
+                    </button>
+                </div>
+                <div class="search-bar">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="text" class="bf-form-control" id="search-orden-patente" placeholder="Buscar por patente...">
+                </div>
+            </div>
+
+            <!-- Orders Table -->
+            <div class="bf-card">
+                <div class="bf-card-body" style="padding:0;">
+                    <div class="table-responsive" style="max-height:600px;overflow-y:auto;">
+                        <table class="bf-table" id="ordenes-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Patente</th>
+                                    <th>Cliente</th>
+                                    <th>Estado</th>
+                                    <th>Técnico</th>
+                                    <th>Monto</th>
+                                    <th>Fecha</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="8">
+                                        <div class="empty-state">
+                                            <i class="fa-solid fa-clipboard-list"></i>
+                                            <p>No hay órdenes de trabajo registradas</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ====================================================== -->
+        <!-- 3. TÉCNICOS SECTION                                     -->
+        <!-- ====================================================== -->
+        <div id="tecnicos-section" class="section-container">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+                <h2 class="h5 fw-800 mb-0 text-gray-800">Técnicos / Operarios</h2>
+                <button class="btn-primary-bf" data-bs-toggle="modal" data-bs-target="#create-tecnico-modal">
+                    <i class="fa-solid fa-user-plus"></i> Nuevo Técnico
+                </button>
+            </div>
+
+            <div class="bf-card">
+                <div class="bf-card-body" style="padding:0;">
+                    <div class="table-responsive" style="max-height:600px;overflow-y:auto;">
+                        <table class="bf-table" id="tecnicos-table">
+                            <thead>
+                                <tr>
+                                    <th>Nombre</th>
+                                    <th>Teléfono</th>
+                                    <th>Email</th>
+                                    <th>PIN</th>
+                                    <th>Comisión %</th>
+                                    <th>Estado</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="7">
+                                        <div class="empty-state">
+                                            <i class="fa-solid fa-users-gear"></i>
+                                            <p>No hay técnicos registrados</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Assign Orders Sub-section -->
+            <div class="bf-card mt-4">
+                <div class="bf-card-header">
+                    <span class="bf-card-title"><i class="fa-solid fa-link me-2 text-primary-bf"></i>Asignar Órdenes a Técnicos</span>
+                </div>
+                <div class="bf-card-body">
+                    <div class="row g-3">
+                        <div class="col-md-5">
+                            <label class="bf-form-label">Seleccionar Técnico</label>
+                            <select class="bf-form-control" id="assign-tecnico-select">
+                                <option value="">-- Seleccionar --</option>
+                            </select>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="bf-form-label">Seleccionar Orden</label>
+                            <select class="bf-form-control" id="assign-orden-select">
+                                <option value="">-- Seleccionar --</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end">
+                            <button class="btn-primary-bf w-100" onclick="assignOrden()">
+                                <i class="fa-solid fa-link"></i> Asignar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ====================================================== -->
+        <!-- 4. SERVICIOS SECTION                                    -->
+        <!-- ====================================================== -->
+        <div id="servicios-section" class="section-container">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+                <h2 class="h5 fw-800 mb-0 text-gray-800">Catálogo de Servicios</h2>
+                <button class="btn-primary-bf" data-bs-toggle="modal" data-bs-target="#create-servicio-modal">
+                    <i class="fa-solid fa-plus"></i> Nuevo Servicio
+                </button>
+            </div>
+
+            <div class="bf-card">
+                <div class="bf-card-body" style="padding:0;">
+                    <div class="table-responsive" style="max-height:600px;overflow-y:auto;">
+                        <table class="bf-table" id="servicios-table">
+                            <thead>
+                                <tr>
+                                    <th>Nombre</th>
+                                    <th>Categoría</th>
+                                    <th>Precio Base</th>
+                                    <th>Duración Est.</th>
+                                    <th>Descripción</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="6">
+                                        <div class="empty-state">
+                                            <i class="fa-solid fa-wrench"></i>
+                                            <p>No hay servicios registrados</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ====================================================== -->
+        <!-- 5. MODELOS VEHÍCULOS SECTION                            -->
+        <!-- ====================================================== -->
+        <div id="modelos-section" class="section-container">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+                <h2 class="h5 fw-800 mb-0 text-gray-800">Modelos de Vehículos</h2>
+                <button class="btn-primary-bf" data-bs-toggle="modal" data-bs-target="#create-modelo-modal">
+                    <i class="fa-solid fa-plus"></i> Nuevo Modelo
+                </button>
+            </div>
+
+            <div class="bf-card">
+                <div class="bf-card-body" style="padding:0;">
+                    <div class="table-responsive" style="max-height:600px;overflow-y:auto;">
+                        <table class="bf-table" id="modelos-table">
+                            <thead>
+                                <tr>
+                                    <th>Marca</th>
+                                    <th>Modelo</th>
+                                    <th>Año</th>
+                                    <th>Tipo</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="5">
+                                        <div class="empty-state">
+                                            <i class="fa-solid fa-car"></i>
+                                            <p>No hay modelos de vehículos registrados</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ====================================================== -->
+        <!-- 6. COSTOS ADICIONALES SECTION                           -->
+        <!-- ====================================================== -->
+        <div id="costos-section" class="section-container">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+                <h2 class="h5 fw-800 mb-0 text-gray-800">Costos Adicionales por Orden</h2>
+            </div>
+
+            <div class="row g-3 mb-4">
+                <div class="col-md-4">
+                    <label class="bf-form-label">Seleccionar Orden</label>
+                    <select class="bf-form-control" id="costo-orden-select">
+                        <option value="">-- Seleccionar --</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="bf-card">
+                <div class="bf-card-header">
+                    <span class="bf-card-title">Agregar Costo</span>
+                </div>
+                <div class="bf-card-body">
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <label class="bf-form-label">Tipo</label>
+                            <select class="bf-form-control" id="costo-tipo">
+                                <option value="mano_obra">Mano de Obra</option>
+                                <option value="repuestos">Repuestos</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="bf-form-label">Descripción</label>
+                            <input type="text" class="bf-form-control" id="costo-descripcion" placeholder="Descripción del costo">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="bf-form-label">Monto ($)</label>
+                            <input type="number" class="bf-form-control" id="costo-monto" placeholder="0.00" step="0.01">
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end">
+                            <button class="btn-primary-bf w-100" onclick="agregarCosto()">
+                                <i class="fa-solid fa-plus"></i> Agregar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bf-card mt-3">
+                <div class="bf-card-body" style="padding:0;">
+                    <div class="table-responsive" style="max-height:400px;overflow-y:auto;">
+                        <table class="bf-table" id="costos-table">
+                            <thead>
+                                <tr>
+                                    <th>Orden</th>
+                                    <th>Tipo</th>
+                                    <th>Descripción</th>
+                                    <th>Monto</th>
+                                    <th>Fecha</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="6">
+                                        <div class="empty-state">
+                                            <i class="fa-solid fa-calculator"></i>
+                                            <p>No hay costos registrados</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ====================================================== -->
+        <!-- 7. GASTOS SECTION                                       -->
+        <!-- ====================================================== -->
+        <div id="gastos-section" class="section-container">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+                <h2 class="h5 fw-800 mb-0 text-gray-800">Gastos del Negocio</h2>
+                <button class="btn-primary-bf" data-bs-toggle="modal" data-bs-target="#create-gasto-modal">
+                    <i class="fa-solid fa-plus"></i> Nuevo Gasto
+                </button>
+            </div>
+
+            <!-- Gastos Summary Cards -->
+            <div class="row g-3 mb-4">
+                <div class="col-6 col-lg-3">
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background:#fee2e2;color:#dc2626;">
+                            <i class="fa-solid fa-receipt"></i>
+                        </div>
+                        <div>
+                            <div class="kpi-label">Total Gastos (Mes)</div>
+                            <div class="kpi-value" id="gastos-total-mes">$0</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background:#fef3c7;color:#d97706;">
+                            <i class="fa-solid fa-store"></i>
+                        </div>
+                        <div>
+                            <div class="kpi-label">Alquiler / Local</div>
+                            <div class="kpi-value" id="gastos-alquiler">$0</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background:#dbeafe;color:#2563eb;">
+                            <i class="fa-solid fa-bolt"></i>
+                        </div>
+                        <div>
+                            <div class="kpi-label">Servicios</div>
+                            <div class="kpi-value" id="gastos-servicios">$0</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background:#f3e8ff;color:#9333ea;">
+                            <i class="fa-solid fa-truck"></i>
+                        </div>
+                        <div>
+                            <div class="kpi-label">Transporte</div>
+                            <div class="kpi-value" id="gastos-transporte">$0</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bf-card">
+                <div class="bf-card-body" style="padding:0;">
+                    <div class="table-responsive" style="max-height:500px;overflow-y:auto;">
+                        <table class="bf-table" id="gastos-table">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Categoría</th>
+                                    <th>Descripción</th>
+                                    <th>Monto</th>
+                                    <th>Comprobante</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="6">
+                                        <div class="empty-state">
+                                            <i class="fa-solid fa-money-bill-trend-up"></i>
+                                            <p>No hay gastos registrados</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ====================================================== -->
+        <!-- 8. LIQUIDACIONES SECTION                                -->
+        <!-- ====================================================== -->
+        <div id="liquidaciones-section" class="section-container">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+                <h2 class="h5 fw-800 mb-0 text-gray-800">Liquidaciones de Comisiones</h2>
+                <div class="d-flex gap-2">
+                    <select class="bf-form-control" id="liq-periodo" style="width:auto;">
+                        <option value="quincena">Esta Quincena</option>
+                        <option value="mes">Este Mes</option>
+                        <option value="anio">Este Año</option>
+                    </select>
+                    <button class="btn-primary-bf" onclick="calcularLiquidaciones()">
+                        <i class="fa-solid fa-calculator"></i> Calcular
+                    </button>
+                </div>
+            </div>
+
+            <div class="bf-card">
+                <div class="bf-card-body" style="padding:0;">
+                    <div class="table-responsive" style="max-height:600px;overflow-y:auto;">
+                        <table class="bf-table" id="liquidaciones-table">
+                            <thead>
+                                <tr>
+                                    <th>Técnico</th>
+                                    <th>Órdenes Completadas</th>
+                                    <th>Total Facturado</th>
+                                    <th>% Comisión</th>
+                                    <th>Monto Comisión</th>
+                                    <th>Estado</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="7">
+                                        <div class="empty-state">
+                                            <i class="fa-solid fa-file-invoice-dollar"></i>
+                                            <p>Seleccione un período y calcule liquidaciones</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ====================================================== -->
+        <!-- 9. RESUMEN PAGOS SECTION                                -->
+        <!-- ====================================================== -->
+        <div id="pagos-section" class="section-container">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+                <h2 class="h5 fw-800 mb-0 text-gray-800">Resumen de Pagos</h2>
+                <div class="d-flex gap-2">
+                    <select class="bf-form-control" id="pago-periodo" style="width:auto;">
+                        <option value="hoy">Hoy</option>
+                        <option value="semana">Esta Semana</option>
+                        <option value="mes">Este Mes</option>
+                        <option value="anio">Este Año</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Payment Method Cards -->
+            <div class="row g-3 mb-4">
+                <div class="col-6 col-md-4 col-lg-2">
+                    <div class="kpi-card flex-column text-center" style="align-items:center;">
+                        <div class="kpi-icon mb-2" style="background:#dcfce7;color:#16a34a;">
+                            <i class="fa-solid fa-money-bill"></i>
+                        </div>
+                        <div class="kpi-value" id="pago-efectivo">$0</div>
+                        <div class="kpi-label">Efectivo</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-4 col-lg-2">
+                    <div class="kpi-card flex-column text-center" style="align-items:center;">
+                        <div class="kpi-icon mb-2" style="background:#dbeafe;color:#2563eb;">
+                            <i class="fa-solid fa-credit-card"></i>
+                        </div>
+                        <div class="kpi-value" id="pago-tarjeta">$0</div>
+                        <div class="kpi-label">Tarjeta</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-4 col-lg-2">
+                    <div class="kpi-card flex-column text-center" style="align-items:center;">
+                        <div class="kpi-icon mb-2" style="background:#fef3c7;color:#d97706;">
+                            <i class="fa-solid fa-qrcode"></i>
+                        </div>
+                        <div class="kpi-value" id="pago-transferencia">$0</div>
+                        <div class="kpi-label">Transferencia</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-4 col-lg-2">
+                    <div class="kpi-card flex-column text-center" style="align-items:center;">
+                        <div class="kpi-icon mb-2" style="background:#f3e8ff;color:#9333ea;">
+                            <i class="fa-solid fa-mobile-screen"></i>
+                        </div>
+                        <div class="kpi-value" id="pago-mercado-pago">$0</div>
+                        <div class="kpi-label">MercadoPago</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-4 col-lg-2">
+                    <div class="kpi-card flex-column text-center" style="align-items:center;">
+                        <div class="kpi-icon mb-2" style="background:#ccfbf1;color:#0d9488;">
+                            <i class="fa-solid fa-building-columns"></i>
+                        </div>
+                        <div class="kpi-value" id="pago-deposito">$0</div>
+                        <div class="kpi-label">Depósito</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-4 col-lg-2">
+                    <div class="kpi-card flex-column text-center" style="align-items:center;">
+                        <div class="kpi-icon mb-2" style="background:#fee2e2;color:#dc2626;">
+                            <i class="fa-solid fa-hand-holding-dollar"></i>
+                        </div>
+                        <div class="kpi-value" id="pago-cta-cte">$0</div>
+                        <div class="kpi-label">Cta. Cte.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Payment Distribution Chart -->
+            <div class="bf-card">
+                <div class="bf-card-header">
+                    <span class="bf-card-title"><i class="fa-solid fa-chart-donut me-2 text-primary-bf"></i>Distribución de Pagos</span>
+                </div>
+                <div class="bf-card-body">
+                    <div class="chart-container" id="chart-pagos-dist">
+                        <i class="fa-solid fa-chart-pie"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ====================================================== -->
+        <!-- 10. NOTIFICACIONES WHATSAPP SECTION                     -->
+        <!-- ====================================================== -->
+        <div id="notificaciones-section" class="section-container">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+                <h2 class="h5 fw-800 mb-0 text-gray-800">Notificaciones WhatsApp</h2>
+                <button class="btn-primary-bf" data-bs-toggle="modal" data-bs-target="#config-ultramsg-modal">
+                    <i class="fa-solid fa-gear"></i> Configurar UltraMsg
+                </button>
+            </div>
+
+            <!-- UltraMsg Status -->
+            <div class="bf-card mb-4">
+                <div class="bf-card-header">
+                    <span class="bf-card-title"><i class="fa-brands fa-whatsapp me-2" style="color:#25D366;"></i>Estado de Conexión</span>
+                </div>
+                <div class="bf-card-body">
+                    <div class="d-flex align-items-center gap-3">
+                        <div style="width:12px;height:12px;border-radius:50%;background:#cbd5e1;" id="ultramsg-status-dot"></div>
+                        <span class="text-gray-600" id="ultramsg-status-text">Desconectado</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Notification Log -->
+            <div class="bf-card">
+                <div class="bf-card-header">
+                    <span class="bf-card-title"><i class="fa-solid fa-list me-2 text-primary-bf"></i>Registro de Notificaciones</span>
+                </div>
+                <div class="bf-card-body" style="padding:0;">
+                    <div class="table-responsive" style="max-height:500px;overflow-y:auto;">
+                        <table class="bf-table" id="notificaciones-table">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Destinatario</th>
+                                    <th>Mensaje</th>
+                                    <th>Estado</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="5">
+                                        <div class="empty-state">
+                                            <i class="fa-brands fa-whatsapp"></i>
+                                            <p>No hay notificaciones enviadas</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ====================================================== -->
+        <!-- 11. EXPORTAR DATOS SECTION                              -->
+        <!-- ====================================================== -->
+        <div id="exportar-section" class="section-container">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+                <h2 class="h5 fw-800 mb-0 text-gray-800">Exportar Datos</h2>
+            </div>
+
+            <div class="row g-3">
+                <div class="col-md-6 col-lg-4">
+                    <div class="bf-card h-100">
+                        <div class="bf-card-body text-center py-4">
+                            <div class="kpi-icon mx-auto mb-3" style="background:rgba(var(--primary-rgb),0.1);color:var(--primary);width:56px;height:56px;font-size:1.4rem;">
+                                <i class="fa-solid fa-clipboard-list"></i>
+                            </div>
+                            <h6 class="fw-700 text-gray-800">Órdenes de Trabajo</h6>
+                            <p class="text-gray-500 text-sm mb-3">Exportar todas las órdenes con detalle completo</p>
+                            <button class="btn-primary-bf" onclick="exportData('ordenes')">
+                                <i class="fa-solid fa-file-pdf"></i> Exportar PDF
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-4">
+                    <div class="bf-card h-100">
+                        <div class="bf-card-body text-center py-4">
+                            <div class="kpi-icon mx-auto mb-3" style="background:#dcfce7;color:#16a34a;width:56px;height:56px;font-size:1.4rem;">
+                                <i class="fa-solid fa-users-gear"></i>
+                            </div>
+                            <h6 class="fw-700 text-gray-800">Técnicos</h6>
+                            <p class="text-gray-500 text-sm mb-3">Exportar lista de técnicos y comisiones</p>
+                            <button class="btn-primary-bf" onclick="exportData('tecnicos')">
+                                <i class="fa-solid fa-file-pdf"></i> Exportar PDF
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-4">
+                    <div class="bf-card h-100">
+                        <div class="bf-card-body text-center py-4">
+                            <div class="kpi-icon mx-auto mb-3" style="background:#dbeafe;color:#2563eb;width:56px;height:56px;font-size:1.4rem;">
+                                <i class="fa-solid fa-file-invoice-dollar"></i>
+                            </div>
+                            <h6 class="fw-700 text-gray-800">Liquidaciones</h6>
+                            <p class="text-gray-500 text-sm mb-3">Exportar liquidaciones de comisiones</p>
+                            <button class="btn-primary-bf" onclick="exportData('liquidaciones')">
+                                <i class="fa-solid fa-file-pdf"></i> Exportar PDF
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-4">
+                    <div class="bf-card h-100">
+                        <div class="bf-card-body text-center py-4">
+                            <div class="kpi-icon mx-auto mb-3" style="background:#fef3c7;color:#d97706;width:56px;height:56px;font-size:1.4rem;">
+                                <i class="fa-solid fa-money-bill-trend-up"></i>
+                            </div>
+                            <h6 class="fw-700 text-gray-800">Gastos</h6>
+                            <p class="text-gray-500 text-sm mb-3">Exportar gastos del período seleccionado</p>
+                            <button class="btn-primary-bf" onclick="exportData('gastos')">
+                                <i class="fa-solid fa-file-pdf"></i> Exportar PDF
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-4">
+                    <div class="bf-card h-100">
+                        <div class="bf-card-body text-center py-4">
+                            <div class="kpi-icon mx-auto mb-3" style="background:#f3e8ff;color:#9333ea;width:56px;height:56px;font-size:1.4rem;">
+                                <i class="fa-solid fa-credit-card"></i>
+                            </div>
+                            <h6 class="fw-700 text-gray-800">Resumen Pagos</h6>
+                            <p class="text-gray-500 text-sm mb-3">Exportar resumen de pagos por método</p>
+                            <button class="btn-primary-bf" onclick="exportData('pagos')">
+                                <i class="fa-solid fa-file-pdf"></i> Exportar PDF
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-4">
+                    <div class="bf-card h-100">
+                        <div class="bf-card-body text-center py-4">
+                            <div class="kpi-icon mx-auto mb-3" style="background:#fee2e2;color:#dc2626;width:56px;height:56px;font-size:1.4rem;">
+                                <i class="fa-solid fa-database"></i>
+                            </div>
+                            <h6 class="fw-700 text-gray-800">Respaldo Completo</h6>
+                            <p class="text-gray-500 text-sm mb-3">Exportar toda la base de datos</p>
+                            <button class="btn-primary-bf" onclick="exportData('backup')">
+                                <i class="fa-solid fa-file-zipper"></i> Exportar JSON
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ====================================================== -->
+        <!-- 12. CONFIGURACIÓN SECTION                               -->
+        <!-- ====================================================== -->
+        <div id="config-section" class="section-container">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+                <h2 class="h5 fw-800 mb-0 text-gray-800">Configuración</h2>
+                <button class="btn-primary-bf" onclick="guardarConfiguracion()">
+                    <i class="fa-solid fa-floppy-disk"></i> Guardar Cambios
+                </button>
+            </div>
+
+            <div class="row g-4">
+                <!-- Business Info -->
+                <div class="col-lg-6">
+                    <div class="bf-card h-100">
+                        <div class="bf-card-header">
+                            <span class="bf-card-title"><i class="fa-solid fa-building me-2 text-primary-bf"></i>Información del Negocio</span>
+                        </div>
+                        <div class="bf-card-body">
+                            <div class="mb-3">
+                                <label class="bf-form-label">Nombre del Negocio</label>
+                                <input type="text" class="bf-form-control" id="config-nombre" placeholder="Nombre del negocio">
+                            </div>
+                            <div class="mb-3">
+                                <label class="bf-form-label">Dirección</label>
+                                <input type="text" class="bf-form-control" id="config-direccion" placeholder="Dirección completa">
+                            </div>
+                            <div class="mb-3">
+                                <label class="bf-form-label">Teléfono</label>
+                                <input type="tel" class="bf-form-control" id="config-telefono" placeholder="+52 555 123 4567">
+                            </div>
+                            <div class="mb-3">
+                                <label class="bf-form-label">Email</label>
+                                <input type="email" class="bf-form-control" id="config-email" placeholder="contacto@negocio.com">
+                            </div>
+                            <div class="mb-3">
+                                <label class="bf-form-label">Moneda</label>
+                                <select class="bf-form-control" id="config-moneda">
+                                    <option value="MXN">MXN - Peso Mexicano</option>
+                                    <option value="ARS">ARS - Peso Argentino</option>
+                                    <option value="USD">USD - Dólar</option>
+                                    <option value="COP">COP - Peso Colombiano</option>
+                                    <option value="CLP">CLP - Peso Chileno</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- WhatsApp UltraMsg Config -->
+                <div class="col-lg-6">
+                    <div class="bf-card h-100">
+                        <div class="bf-card-header">
+                            <span class="bf-card-title"><i class="fa-brands fa-whatsapp me-2" style="color:#25D366;"></i>UltraMsg Config</span>
+                        </div>
+                        <div class="bf-card-body">
+                            <div class="mb-3">
+                                <label class="bf-form-label">Instance ID</label>
+                                <input type="text" class="bf-form-control" id="config-ultramsg-instance" placeholder="Instance ID de UltraMsg">
+                            </div>
+                            <div class="mb-3">
+                                <label class="bf-form-label">API Token</label>
+                                <input type="password" class="bf-form-control" id="config-ultramsg-token" placeholder="Token de API">
+                            </div>
+                            <div class="mb-3">
+                                <label class="bf-form-label">Número de WhatsApp (con código país)</label>
+                                <input type="text" class="bf-form-control" id="config-whatsapp-num" placeholder="+5255512345678">
+                            </div>
+                            <div class="mb-0">
+                                <label class="bf-form-label">URL de API UltraMsg</label>
+                                <input type="text" class="bf-form-control" id="config-ultramsg-url" placeholder="https://api.ultramsg.com/..." value="https://api.ultramsg.com/">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Domicilio Config with GPS -->
+                <div class="col-lg-6">
+                    <div class="bf-card h-100">
+                        <div class="bf-card-header">
+                            <span class="bf-card-title"><i class="fa-solid fa-location-dot me-2 text-primary-bf"></i>Configuración de Domicilio</span>
+                        </div>
+                        <div class="bf-card-body">
+                            <div class="mb-3">
+                                <label class="bf-form-label">Radio de Cobertura (km)</label>
+                                <input type="number" class="bf-form-control" id="config-radio-cobertura" placeholder="10" value="10">
+                            </div>
+                            <div class="mb-3">
+                                <label class="bf-form-label">Costo por KM extra ($)</label>
+                                <input type="number" class="bf-form-control" id="config-costo-km" placeholder="0.00" step="0.01">
+                            </div>
+                            <div class="mb-3">
+                                <label class="bf-form-label">Costo Base Domicilio ($)</label>
+                                <input type="number" class="bf-form-control" id="config-costo-base-dom" placeholder="0.00" step="0.01">
+                            </div>
+                            <div class="mb-3">
+                                <label class="bf-form-label">Latitud GPS del Negocio</label>
+                                <input type="text" class="bf-form-control" id="config-gps-lat" placeholder="19.432608">
+                            </div>
+                            <div class="mb-0">
+                                <label class="bf-form-label">Longitud GPS del Negocio</label>
+                                <input type="text" class="bf-form-control" id="config-gps-lng" placeholder="-99.133209">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Theme & Appearance -->
+                <div class="col-lg-6">
+                    <div class="bf-card h-100">
+                        <div class="bf-card-header">
+                            <span class="bf-card-title"><i class="fa-solid fa-palette me-2 text-primary-bf"></i>Apariencia</span>
+                        </div>
+                        <div class="bf-card-body">
+                            <div class="mb-3">
+                                <label class="bf-form-label">Color Primario</label>
+                                <div class="d-flex align-items-center gap-2">
+                                    <input type="color" id="config-color-primary" value="#0d9488" style="width:48px;height:36px;border:none;cursor:pointer;border-radius:0.5rem;">
+                                    <input type="text" class="bf-form-control" id="config-color-primary-text" value="#0d9488" style="max-width:150px;">
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="bf-form-label">Logo del Negocio</label>
+                                <div class="d-flex align-items-center gap-3">
+                                    <div id="config-logo-preview" style="width:80px;height:80px;border:2px dashed #cbd5e1;border-radius:0.75rem;display:flex;align-items:center;justify-content:center;color:#94a3b8;">
+                                        <i class="fa-solid fa-cloud-arrow-up" style="font-size:1.2rem;"></i>
+                                    </div>
+                                    <div>
+                                        <input type="file" id="config-logo-upload" accept="image/*" class="d-none">
+                                        <button class="btn-outline-bf btn-sm-bf" onclick="document.getElementById('config-logo-upload').click()">
+                                            <i class="fa-solid fa-upload"></i> Subir Logo
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mb-0">
+                                <label class="bf-form-label">Firma Digital (para órdenes)</label>
+                                <div class="d-flex align-items-center gap-3">
+                                    <div id="config-firma-preview" style="width:160px;height:60px;border:2px dashed #cbd5e1;border-radius:0.5rem;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:0.75rem;">
+                                        Área de firma
+                                    </div>
+                                    <button class="btn-outline-bf btn-sm-bf" onclick="captureFirma()">
+                                        <i class="fa-solid fa-signature"></i> Capturar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ====================================================== -->
+        <!-- 13. LANDING PAGES SECTION                               -->
+        <!-- ====================================================== -->
+        <div id="landing-section" class="section-container">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+                <h2 class="h5 fw-800 mb-0 text-gray-800">Landing Pages</h2>
+                <button class="btn-primary-bf" data-bs-toggle="modal" data-bs-target="#create-landing-modal">
+                    <i class="fa-solid fa-plus"></i> Nueva Landing Page
+                </button>
+            </div>
+
+            <!-- Landing Pages List -->
+            <div class="row g-3 mb-4" id="landing-pages-list">
+                <div class="col-12">
+                    <div class="empty-state" style="background:#fff;border-radius:0.875rem;box-shadow:var(--card-shadow);">
+                        <i class="fa-solid fa-globe"></i>
+                        <p>No hay landing pages creadas</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main><!-- end main-content -->
+</div><!-- end main-app -->
+
+
+<!-- ============================================================ -->
+<!-- MODALS                                                        -->
+<!-- ============================================================ -->
+
+<!-- ====== CREATE ORDEN MODAL ====== -->
+<div class="modal fade" id="create-orden-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fa-solid fa-clipboard-list me-2 text-primary-bf"></i>Nueva Orden de Trabajo</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <form id="create-orden-form">
+                    <!-- Row 1: Patente -->
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <label class="bf-form-label">Patente / Placa *</label>
+                            <div class="position-relative">
+                                <input type="text" class="bf-form-control" id="co-patente" placeholder="ABC-123" required autocomplete="off">
+                                <div class="patente-autocomplete" id="patente-autocomplete" style="position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #e2e8f0;border-radius:0.5rem;box-shadow:var(--card-shadow-lg);z-index:10;display:none;max-height:200px;overflow-y:auto;"></div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="bf-form-label">Fecha</label>
+                            <input type="datetime-local" class="bf-form-control" id="co-fecha">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="bf-form-label">Estado Inicial</label>
+                            <select class="bf-form-control" id="co-estado">
+                                <option value="enviada">Enviada</option>
+                                <option value="aprobada" selected>Aprobada</option>
+                                <option value="pendiente_visita">Pendiente Visita</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Row 2: Cliente -->
+                    <h6 class="fw-700 text-gray-700 mt-4 mb-2"><i class="fa-solid fa-user me-1"></i>Datos del Cliente</h6>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <label class="bf-form-label">Nombre Completo *</label>
+                            <input type="text" class="bf-form-control" id="co-cliente-nombre" placeholder="Nombre del cliente">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="bf-form-label">Teléfono</label>
+                            <input type="tel" class="bf-form-control" id="co-cliente-tel" placeholder="+52 555 123 4567">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="bf-form-label">Email</label>
+                            <input type="email" class="bf-form-control" id="co-cliente-email" placeholder="email@ejemplo.com">
+                        </div>
+                    </div>
+
+                    <!-- Row 3: Vehículo -->
+                    <h6 class="fw-700 text-gray-700 mt-4 mb-2"><i class="fa-solid fa-car me-1"></i>Datos del Vehículo</h6>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-3">
+                            <label class="bf-form-label">Marca</label>
+                            <input type="text" class="bf-form-control" id="co-vehiculo-marca" placeholder="Toyota">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="bf-form-label">Modelo</label>
+                            <input type="text" class="bf-form-control" id="co-vehiculo-modelo" placeholder="Corolla">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="bf-form-label">Año</label>
+                            <input type="number" class="bf-form-control" id="co-vehiculo-anio" placeholder="2024">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="bf-form-label">Color</label>
+                            <input type="text" class="bf-form-control" id="co-vehiculo-color" placeholder="Blanco">
+                        </div>
+                    </div>
+
+                    <!-- Row 4: Services Catalog -->
+                    <h6 class="fw-700 text-gray-700 mt-4 mb-2"><i class="fa-solid fa-wrench me-1"></i>Servicios</h6>
+                    <div class="row g-3 mb-3">
+                        <div class="col-12">
+                            <div class="p-3 border border-dashed rounded-3" style="border-color:#cbd5e1 !important;max-height:250px;overflow-y:auto;" id="co-servicios-container">
+                                <div class="text-center text-gray-400 py-3">
+                                    <i class="fa-solid fa-wrench d-block mb-1"></i>
+                                    <small>Cargando catálogo de servicios...</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Row 5: Checklist -->
+                    <h6 class="fw-700 text-gray-700 mt-4 mb-2"><i class="fa-solid fa-list-check me-1"></i>Checklist de Inspección</h6>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <div class="checklist-item">
+                                <input class="form-check-input" type="checkbox" id="co-chk-combustible">
+                                <label class="form-check-label" for="co-chk-combustible" style="font-size:0.85rem;">Nivel de combustible</label>
+                            </div>
+                            <div class="checklist-item">
+                                <input class="form-check-input" type="checkbox" id="co-chk-carroceria">
+                                <label class="form-check-label" for="co-chk-carroceria" style="font-size:0.85rem;">Estado de carrocería</label>
+                            </div>
+                            <div class="checklist-item">
+                                <input class="form-check-input" type="checkbox" id="co-chk-neumaticos">
+                                <label class="form-check-label" for="co-chk-neumaticos" style="font-size:0.85rem;">Neumáticos</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="checklist-item">
+                                <input class="form-check-input" type="checkbox" id="co-chk-tablero">
+                                <label class="form-check-label" for="co-chk-tablero" style="font-size:0.85rem;">Tablero / Luces</label>
+                            </div>
+                            <div class="checklist-item">
+                                <input class="form-check-input" type="checkbox" id="co-chk-interior">
+                                <label class="form-check-label" for="co-chk-interior" style="font-size:0.85rem;">Interior</label>
+                            </div>
+                            <div class="checklist-item">
+                                <input class="form-check-input" type="checkbox" id="co-chk-aceite">
+                                <label class="form-check-label" for="co-chk-aceite" style="font-size:0.85rem;">Nivel de aceite</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Row 6: Monto & Payment -->
+                    <h6 class="fw-700 text-gray-700 mt-4 mb-2"><i class="fa-solid fa-dollar-sign me-1"></i>Pago</h6>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-3">
+                            <label class="bf-form-label">Monto Total ($)</label>
+                            <input type="number" class="bf-form-control" id="co-monto" placeholder="0.00" step="0.01">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="bf-form-label">Abono ($)</label>
+                            <input type="number" class="bf-form-control" id="co-abono" placeholder="0.00" step="0.01" value="0">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="bf-form-label">Método de Pago</label>
+                            <select class="bf-form-control" id="co-metodo-pago">
+                                <option value="efectivo">Efectivo</option>
+                                <option value="tarjeta">Tarjeta</option>
+                                <option value="transferencia">Transferencia</option>
+                                <option value="mercado_pago">MercadoPago</option>
+                                <option value="deposito">Depósito</option>
+                                <option value="cta_cte">Cuenta Corriente</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="bf-form-label">Técnico Asignado</label>
+                            <select class="bf-form-control" id="co-tecnico">
+                                <option value="">Sin asignar</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Row 7: Notes -->
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="bf-form-label">Notas Adicionales</label>
+                            <textarea class="bf-form-control" id="co-notas" rows="3" placeholder="Observaciones adicionales..."></textarea>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-outline-bf" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn-primary-bf" onclick="crearOrden()">
+                    <i class="fa-solid fa-floppy-disk"></i> Crear Orden
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ====== EXPRESS ORDEN MODAL ====== -->
+<div class="modal fade" id="express-orden-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fa-solid fa-bolt me-2 text-primary-bf"></i>OT Express</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <form id="express-orden-form">
+                    <div class="mb-3">
+                        <label class="bf-form-label">Patente *</label>
+                        <input type="text" class="bf-form-control" id="eo-patente" placeholder="ABC-123" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="bf-form-label">Cliente *</label>
+                        <input type="text" class="bf-form-control" id="eo-cliente" placeholder="Nombre del cliente" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="bf-form-label">Teléfono</label>
+                        <input type="tel" class="bf-form-control" id="eo-telefono" placeholder="+52 555 123 4567">
+                    </div>
+                    <div class="mb-3">
+                        <label class="bf-form-label">Servicio *</label>
+                        <input type="text" class="bf-form-control" id="eo-servicio" placeholder="Descripción del servicio" required>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <label class="bf-form-label">Monto ($)</label>
+                            <input type="number" class="bf-form-control" id="eo-monto" placeholder="0.00" step="0.01">
+                        </div>
+                        <div class="col-6">
+                            <label class="bf-form-label">Método de Pago</label>
+                            <select class="bf-form-control" id="eo-metodo-pago">
+                                <option value="efectivo">Efectivo</option>
+                                <option value="tarjeta">Tarjeta</option>
+                                <option value="transferencia">Transferencia</option>
+                            </select>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-outline-bf" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn-primary-bf" onclick="crearOrdenExpress()">
+                    <i class="fa-solid fa-bolt"></i> Crear Rápido
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ====== VIEW ORDEN MODAL ====== -->
+<div class="modal fade" id="view-orden-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fa-solid fa-eye me-2 text-primary-bf"></i>Detalle de Orden <span id="vo-numero" class="text-primary-bf">#0001</span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Status & Date -->
+                <div class="d-flex flex-wrap align-items-center justify-content-between mb-4 p-3 rounded-3" style="background:#f8fafc;">
+                    <div>
+                        <span class="bf-form-label d-block mb-1">Estado</span>
+                        <span class="badge-estado badge-aprobada" id="vo-estado">Aprobada</span>
+                    </div>
+                    <div class="text-center">
+                        <span class="bf-form-label d-block mb-1">Fecha</span>
+                        <span class="fw-600 text-gray-700" id="vo-fecha">--</span>
+                    </div>
+                    <div class="text-end">
+                        <span class="bf-form-label d-block mb-1">Monto Total</span>
+                        <span class="h4 fw-800 text-primary-bf mb-0" id="vo-monto">$0.00</span>
+                    </div>
+                </div>
+
+                <!-- Info Grid -->
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <h6 class="fw-700 text-gray-700 mb-3"><i class="fa-solid fa-user me-1"></i>Cliente</h6>
+                        <div class="bf-card">
+                            <div class="bf-card-body">
+                                <p class="mb-1"><strong>Nombre:</strong> <span id="vo-cliente-nombre">--</span></p>
+                                <p class="mb-1"><strong>Teléfono:</strong> <span id="vo-cliente-tel">--</span></p>
+                                <p class="mb-0"><strong>Email:</strong> <span id="vo-cliente-email">--</span></p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="fw-700 text-gray-700 mb-3"><i class="fa-solid fa-car me-1"></i>Vehículo</h6>
+                        <div class="bf-card">
+                            <div class="bf-card-body">
+                                <p class="mb-1"><strong>Patente:</strong> <span id="vo-patente">--</span></p>
+                                <p class="mb-1"><strong>Marca/Modelo:</strong> <span id="vo-vehiculo">--</span></p>
+                                <p class="mb-1"><strong>Año:</strong> <span id="vo-anio">--</span></p>
+                                <p class="mb-0"><strong>Color:</strong> <span id="vo-color">--</span></p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="fw-700 text-gray-700 mb-3"><i class="fa-solid fa-wrench me-1"></i>Servicios Realizados</h6>
+                        <div class="bf-card">
+                            <div class="bf-card-body" id="vo-servicios">
+                                <p class="text-gray-400 mb-0">Sin servicios</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="fw-700 text-gray-700 mb-3"><i class="fa-solid fa-list-check me-1"></i>Checklist</h6>
+                        <div class="bf-card">
+                            <div class="bf-card-body" id="vo-checklist">
+                                <p class="text-gray-400 mb-0">Sin checklist</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="fw-700 text-gray-700 mb-3"><i class="fa-solid fa-users-gear me-1"></i>Técnico</h6>
+                        <div class="bf-card">
+                            <div class="bf-card-body">
+                                <p class="mb-0"><span id="vo-tecnico">Sin asignar</span></p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="fw-700 text-gray-700 mb-3"><i class="fa-solid fa-calculator me-1"></i>Desglose de Costos</h6>
+                        <div class="bf-card">
+                            <div class="bf-card-body" id="vo-costos">
+                                <p class="text-gray-400 mb-0">Sin costos adicionales</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Notes -->
+                <div class="mt-4">
+                    <h6 class="fw-700 text-gray-700 mb-2"><i class="fa-solid fa-note-sticky me-1"></i>Notas</h6>
+                    <div class="bf-card">
+                        <div class="bf-card-body">
+                            <p class="mb-0" id="vo-notas" style="font-size:0.875rem;color:#475569;">Sin notas adicionales</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Signature -->
+                <div class="mt-4">
+                    <h6 class="fw-700 text-gray-700 mb-2"><i class="fa-solid fa-signature me-1"></i>Firma del Cliente</h6>
+                    <div class="bf-card">
+                        <div class="bf-card-body text-center">
+                            <div id="vo-firma" style="width:100%;height:100px;border:2px dashed #e2e8f0;border-radius:0.75rem;display:flex;align-items:center;justify-content:center;color:#94a3b8;">
+                                <i class="fa-solid fa-signature" style="font-size:1.5rem;"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-outline-bf" onclick="imprimirOrden()">
+                    <i class="fa-solid fa-print"></i> Imprimir
+                </button>
+                <button type="button" class="btn-outline-bf" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ====== EDIT ORDEN MODAL ====== -->
+<div class="modal fade" id="edit-orden-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fa-solid fa-pen-to-square me-2 text-primary-bf"></i>Editar Orden <span id="eo2-numero" class="text-primary-bf">#0001</span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-orden-form">
+                    <input type="hidden" id="eo2-id">
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-3">
+                            <label class="bf-form-label">Patente</label>
+                            <input type="text" class="bf-form-control" id="eo2-patente">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="bf-form-label">Estado</label>
+                            <select class="bf-form-control" id="eo2-estado">
+                                <option value="enviada">Enviada</option>
+                                <option value="aprobada">Aprobada</option>
+                                <option value="pendiente_visita">Pendiente Visita</option>
+                                <option value="en_sitio">En Sitio</option>
+                                <option value="en_progreso">En Progreso</option>
+                                <option value="completada">Completada</option>
+                                <option value="cerrada">Cerrada</option>
+                                <option value="cancelada">Cancelada</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="bf-form-label">Técnico</label>
+                            <select class="bf-form-control" id="eo2-tecnico">
+                                <option value="">Sin asignar</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="bf-form-label">Método Pago</label>
+                            <select class="bf-form-control" id="eo2-metodo-pago">
+                                <option value="efectivo">Efectivo</option>
+                                <option value="tarjeta">Tarjeta</option>
+                                <option value="transferencia">Transferencia</option>
+                                <option value="mercado_pago">MercadoPago</option>
+                                <option value="deposito">Depósito</option>
+                                <option value="cta_cte">Cuenta Corriente</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <label class="bf-form-label">Cliente</label>
+                            <input type="text" class="bf-form-control" id="eo2-cliente">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="bf-form-label">Teléfono</label>
+                            <input type="tel" class="bf-form-control" id="eo2-telefono">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="bf-form-label">Email</label>
+                            <input type="email" class="bf-form-control" id="eo2-email">
+                        </div>
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-3">
+                            <label class="bf-form-label">Marca</label>
+                            <input type="text" class="bf-form-control" id="eo2-marca">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="bf-form-label">Modelo</label>
+                            <input type="text" class="bf-form-control" id="eo2-modelo">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="bf-form-label">Año</label>
+                            <input type="number" class="bf-form-control" id="eo2-anio">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="bf-form-label">Color</label>
+                            <input type="text" class="bf-form-control" id="eo2-color">
+                        </div>
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-3">
+                            <label class="bf-form-label">Monto ($)</label>
+                            <input type="number" class="bf-form-control" id="eo2-monto" step="0.01">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="bf-form-label">Abono ($)</label>
+                            <input type="number" class="bf-form-control" id="eo2-abono" step="0.01">
+                        </div>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="bf-form-label">Notas</label>
+                            <textarea class="bf-form-control" id="eo2-notas" rows="3"></textarea>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-outline-bf" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn-primary-bf" onclick="guardarEdicionOrden()">
+                    <i class="fa-solid fa-floppy-disk"></i> Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ====== CREATE TÉCNICO MODAL ====== -->
+<div class="modal fade" id="create-tecnico-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fa-solid fa-user-plus me-2 text-primary-bf"></i>Nuevo Técnico</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="bf-form-label">Nombre Completo *</label>
+                    <input type="text" class="bf-form-control" id="ct-nombre" placeholder="Nombre completo" required>
+                </div>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="bf-form-label">Teléfono</label>
+                        <input type="tel" class="bf-form-control" id="ct-telefono" placeholder="+52 555 123 4567">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="bf-form-label">Email</label>
+                        <input type="email" class="bf-form-control" id="ct-email" placeholder="email@ejemplo.com">
+                    </div>
+                </div>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="bf-form-label">PIN de Acceso</label>
+                        <input type="text" class="bf-form-control" id="ct-pin" placeholder="4 dígitos" maxlength="4">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="bf-form-label">Comisión (%)</label>
+                        <input type="number" class="bf-form-control" id="ct-comision" placeholder="10" step="0.5" min="0" max="100" value="10">
+                    </div>
+                </div>
+                <div class="mb-0">
+                    <label class="bf-form-label">Especialidad</label>
+                    <input type="text" class="bf-form-control" id="ct-especialidad" placeholder="Mecánica, Electricidad, etc.">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-outline-bf" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn-primary-bf" onclick="crearTecnico()">
+                    <i class="fa-solid fa-floppy-disk"></i> Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ====== EDIT TÉCNICO MODAL ====== -->
+<div class="modal fade" id="edit-tecnico-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fa-solid fa-user-pen me-2 text-primary-bf"></i>Editar Técnico</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="et-id">
+                <div class="mb-3">
+                    <label class="bf-form-label">Nombre Completo</label>
+                    <input type="text" class="bf-form-control" id="et-nombre">
+                </div>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="bf-form-label">Teléfono</label>
+                        <input type="tel" class="bf-form-control" id="et-telefono">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="bf-form-label">Email</label>
+                        <input type="email" class="bf-form-control" id="et-email">
+                    </div>
+                </div>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="bf-form-label">PIN de Acceso</label>
+                        <input type="text" class="bf-form-control" id="et-pin" maxlength="4">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="bf-form-label">Comisión (%)</label>
+                        <input type="number" class="bf-form-control" id="et-comision" step="0.5" min="0" max="100">
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="bf-form-label">Especialidad</label>
+                    <input type="text" class="bf-form-control" id="et-especialidad">
+                </div>
+                <div class="mb-0">
+                    <label class="bf-form-label">Estado</label>
+                    <select class="bf-form-control" id="et-estado">
+                        <option value="activo">Activo</option>
+                        <option value="inactivo">Inactivo</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-outline-bf" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn-primary-bf" onclick="guardarEdicionTecnico()">
+                    <i class="fa-solid fa-floppy-disk"></i> Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ====== ASSIGN ORDEN MODAL ====== -->
+<div class="modal fade" id="assign-orden-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fa-solid fa-link me-2 text-primary-bf"></i>Asignar Orden a Técnico</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="ao-orden-id">
+                <div class="mb-3">
+                    <label class="bf-form-label">Orden</label>
+                    <input type="text" class="bf-form-control" id="ao-orden-info" readonly style="background:#f8fafc;">
+                </div>
+                <div class="mb-0">
+                    <label class="bf-form-label">Seleccionar Técnico *</label>
+                    <select class="bf-form-control" id="ao-tecnico">
+                        <option value="">-- Seleccionar --</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-outline-bf" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn-primary-bf" onclick="confirmarAsignacion()">
+                    <i class="fa-solid fa-link"></i> Asignar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ====== CREATE SERVICIO MODAL ====== -->
+<div class="modal fade" id="create-servicio-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fa-solid fa-wrench me-2 text-primary-bf"></i>Nuevo Servicio</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="bf-form-label">Nombre del Servicio *</label>
+                    <input type="text" class="bf-form-control" id="cs-nombre" placeholder="Ej: Cambio de aceite">
+                </div>
+                <div class="mb-3">
+                    <label class="bf-form-label">Categoría</label>
+                    <select class="bf-form-control" id="cs-categoria">
+                        <option value="mecanica">Mecánica</option>
+                        <option value="electrica">Eléctrica</option>
+                        <option value="carroceria">Carrocería</option>
+                        <option value="pintura">Pintura</option>
+                        <option value="lavado">Lavado / Detailing</option>
+                        <option value="neumaticos">Neumáticos</option>
+                        <option value="diagnostico">Diagnóstico</option>
+                        <option value="otro">Otro</option>
+                    </select>
+                </div>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="bf-form-label">Precio Base ($)</label>
+                        <input type="number" class="bf-form-control" id="cs-precio" placeholder="0.00" step="0.01">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="bf-form-label">Duración Estimada</label>
+                        <input type="text" class="bf-form-control" id="cs-duracion" placeholder="Ej: 1 hora">
+                    </div>
+                </div>
+                <div class="mb-0">
+                    <label class="bf-form-label">Descripción</label>
+                    <textarea class="bf-form-control" id="cs-descripcion" rows="2" placeholder="Descripción breve del servicio"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-outline-bf" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn-primary-bf" onclick="crearServicio()">
+                    <i class="fa-solid fa-floppy-disk"></i> Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ====== CREATE MODELO MODAL ====== -->
+<div class="modal fade" id="create-modelo-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fa-solid fa-car me-2 text-primary-bf"></i>Nuevo Modelo de Vehículo</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="bf-form-label">Marca *</label>
+                        <input type="text" class="bf-form-control" id="cm-marca" placeholder="Toyota">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="bf-form-label">Modelo *</label>
+                        <input type="text" class="bf-form-control" id="cm-modelo" placeholder="Corolla">
+                    </div>
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="bf-form-label">Año</label>
+                        <input type="number" class="bf-form-control" id="cm-anio" placeholder="2024">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="bf-form-label">Tipo</label>
+                        <select class="bf-form-control" id="cm-tipo">
+                            <option value="auto">Automóvil</option>
+                            <option value="suv">SUV</option>
+                            <option value="camioneta">Camioneta</option>
+                            <option value="camion">Camión</option>
+                            <option value="moto">Motocicleta</option>
+                            <option value="van">Van / Minivan</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-outline-bf" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn-primary-bf" onclick="crearModelo()">
+                    <i class="fa-solid fa-floppy-disk"></i> Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ====== CREATE GASTO MODAL ====== -->
+<div class="modal fade" id="create-gasto-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fa-solid fa-money-bill-trend-up me-2 text-primary-bf"></i>Nuevo Gasto</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="bf-form-label">Fecha</label>
+                    <input type="date" class="bf-form-control" id="cg-fecha">
+                </div>
+                <div class="mb-3">
+                    <label class="bf-form-label">Categoría</label>
+                    <select class="bf-form-control" id="cg-categoria">
+                        <option value="alquiler">Alquiler / Local</option>
+                        <option value="servicios">Servicios (Luz, Agua, Internet)</option>
+                        <option value="transporte">Transporte</option>
+                        <option value="insumos">Insumos / Herramientas</option>
+                        <option value="salarios">Salarios</option>
+                        <option value="marketing">Marketing / Publicidad</option>
+                        <option value="otros">Otros</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="bf-form-label">Descripción *</label>
+                    <input type="text" class="bf-form-control" id="cg-descripcion" placeholder="Descripción del gasto" required>
+                </div>
+                <div class="mb-0">
+                    <label class="bf-form-label">Monto ($) *</label>
+                    <input type="number" class="bf-form-control" id="cg-monto" placeholder="0.00" step="0.01" required>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-outline-bf" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn-primary-bf" onclick="crearGasto()">
+                    <i class="fa-solid fa-floppy-disk"></i> Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ====== CONFIG ULTRAMSG MODAL ====== -->
+<div class="modal fade" id="config-ultramsg-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fa-brands fa-whatsapp me-2" style="color:#25D366;"></i>Configurar UltraMsg</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="bf-form-label">Instance ID</label>
+                    <input type="text" class="bf-form-control" id="um-instance" placeholder="Instance ID">
+                </div>
+                <div class="mb-3">
+                    <label class="bf-form-label">API Token</label>
+                    <input type="password" class="bf-form-control" id="um-token" placeholder="Token de API">
+                </div>
+                <div class="mb-0">
+                    <label class="bf-form-label">URL Base</label>
+                    <input type="text" class="bf-form-control" id="um-url" placeholder="https://api.ultramsg.com/" value="https://api.ultramsg.com/">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-outline-bf" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn-primary-bf" onclick="guardarUltraMsgConfig()">
+                    <i class="fa-solid fa-floppy-disk"></i> Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ====== CREATE LANDING MODAL ====== -->
+<div class="modal fade" id="create-landing-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fa-solid fa-globe me-2 text-primary-bf"></i>Nueva Landing Page</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-4">
+                    <!-- Basic Info -->
+                    <div class="col-lg-6">
+                        <h6 class="fw-700 text-gray-700 mb-3">Información Básica</h6>
+                        <div class="mb-3">
+                            <label class="bf-form-label">Título de la Página *</label>
+                            <input type="text" class="bf-form-control" id="cl-titulo" placeholder="Servicios de Autolavado Profesional">
+                        </div>
+                        <div class="mb-3">
+                            <label class="bf-form-label">URL Slug *</label>
+                            <div class="input-group">
+                                <span class="input-group-text" style="background:#f8fafc;border-color:#e2e8f0;font-size:0.8rem;">/l/</span>
+                                <input type="text" class="bf-form-control" id="cl-slug" placeholder="autolavado-profesional">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="bf-form-label">Descripción</label>
+                            <textarea class="bf-form-control" id="cl-descripcion" rows="3" placeholder="Breve descripción de la landing page..."></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="bf-form-label">Logo</label>
+                            <input type="file" class="bf-form-control" id="cl-logo" accept="image/*">
+                        </div>
+                    </div>
+
+                    <!-- Design -->
+                    <div class="col-lg-6">
+                        <h6 class="fw-700 text-gray-700 mb-3">Diseño</h6>
+                        <div class="mb-3">
+                            <label class="bf-form-label">Color Principal</label>
+                            <div class="d-flex align-items-center gap-2">
+                                <input type="color" id="cl-color-primary" value="#0d9488" style="width:48px;height:36px;border:none;cursor:pointer;border-radius:0.5rem;">
+                                <input type="text" class="bf-form-control" id="cl-color-primary-text" value="#0d9488" style="max-width:150px;">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="bf-form-label">Color Secundario</label>
+                            <div class="d-flex align-items-center gap-2">
+                                <input type="color" id="cl-color-secondary" value="#111827" style="width:48px;height:36px;border:none;cursor:pointer;border-radius:0.5rem;">
+                                <input type="text" class="bf-form-control" id="cl-color-secondary-text" value="#111827" style="max-width:150px;">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="bf-form-label">Fuente</label>
+                            <select class="bf-form-control" id="cl-fuente">
+                                <option value="Inter">Inter</option>
+                                <option value="Roboto">Roboto</option>
+                                <option value="Poppins">Poppins</option>
+                                <option value="Montserrat">Montserrat</option>
+                                <option value="Open Sans">Open Sans</option>
+                            </select>
+                        </div>
+                        <div class="mb-0 d-flex align-items-center justify-content-between">
+                            <label class="bf-form-label mb-0">Publicada</label>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="cl-publicada">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sections Editor -->
+                <div class="mt-4">
+                    <h6 class="fw-700 text-gray-700 mb-3"><i class="fa-solid fa-layer-group me-1"></i>Secciones</h6>
+                    <div id="cl-sections-container">
+                        <div class="landing-section-block d-flex align-items-center justify-content-between">
+                            <div>
+                                <strong style="font-size:0.85rem;">Hero Banner</strong>
+                                <p class="text-gray-500 text-xs mb-0">Título principal, subtítulo y botón CTA</p>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button type="button" class="btn-icon-bf" onclick="editLandingSection(0)"><i class="fa-solid fa-pen"></i></button>
+                                <button type="button" class="btn-icon-bf danger" onclick="removeLandingSection(0)"><i class="fa-solid fa-trash"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="btn-outline-bf btn-sm-bf mt-2" onclick="addLandingSection()">
+                        <i class="fa-solid fa-plus"></i> Agregar Sección
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-outline-bf" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn-outline-bf" onclick="previewLanding()">
+                    <i class="fa-solid fa-eye"></i> Vista Previa
+                </button>
+                <button type="button" class="btn-primary-bf" onclick="crearLanding()">
+                    <i class="fa-solid fa-floppy-disk"></i> Crear Landing
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ====== LANDING PREVIEW MODAL ====== -->
+<div class="modal fade" id="preview-landing-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content" style="padding:0;">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fa-solid fa-eye me-2 text-primary-bf"></i>Vista Previa</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="landing-preview-frame">
+                    <div class="landing-preview-header">
+                        <h3 class="fw-800 mb-2" id="lp-titulo">Título de la Landing</h3>
+                        <p class="mb-0 opacity-75" id="lp-descripcion">Descripción de la landing page</p>
+                    </div>
+                    <div class="p-4" id="lp-sections">
+                        <div class="text-center text-gray-400 py-5">
+                            <i class="fa-solid fa-globe d-block mb-2" style="font-size:2rem;"></i>
+                            <p>Vista previa del contenido</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- ============================================================ -->
+<!-- SCRIPTS                                                       -->
+<!-- ============================================================ -->
+<!-- Bootstrap 5.3 JS Bundle -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<!-- jsPDF for PDF Generation -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<!-- App JS -->
+<script src="app.js"></script>
+
+</body>
+</html>
