@@ -464,8 +464,13 @@ CREATE INDEX IF NOT EXISTS idx_movimientos_asiento ON MovimientosContables(asien
 -- ============================================================
 -- DATOS INICIALES
 -- ============================================================
+
+-- Crear admin si no existe
 INSERT OR IGNORE INTO Usuarios (email, password_hash, nombre, rol, empresa) VALUES
 ('admin@bizflow.com', 'g10hvh', 'Administrador', 'admin', 'BizFlow');
+
+-- Corregir password si ya existe con hash viejo o texto plano
+UPDATE Usuarios SET password_hash = 'g10hvh' WHERE email = 'admin@bizflow.com' AND (password_hash = 'admin123' OR password_hash IS NULL OR password_hash = '');
 
 INSERT OR IGNORE INTO ModelosVehiculo (marca, modelo, anio_desde, anio_hasta) VALUES
 ('Toyota', 'Corolla', 2015, 2025),
