@@ -89,7 +89,7 @@ export async function onRequestPost(context) {
     // Verificar columna de acceso y columnas obligatorias del esquema BizFlow
     const tableInfo = await env.DB.prepare("PRAGMA table_info(Tecnicos)").all();
     const columnNames = (tableInfo.results || []).map(col => col.name);
-    const accessColumn = columnNames.includes('codigo_acceso') ? 'codigo_acceso' : columnNames.includes('pin') ? 'pin' : null;
+    const accessColumn = columnNames.includes('pin') ? 'pin' : columnNames.includes('codigo_acceso') ? 'codigo_acceso' : null;
     const hasUsuarioId = columnNames.includes('usuario_id');
     const hasCodigo = columnNames.includes('codigo');
 

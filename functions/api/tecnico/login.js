@@ -73,14 +73,42 @@ export async function onRequestPost(context) {
 }
 
 async function doLogin(env, accessColumn, telefono, pin) {
-  const tecnico = await env.DB.prepare(
-    `SELECT id, nombre, telefono, email FROM Tecnicos WHERE telefono = ? AND ${accessColumn} = ? AND activo = 1`
-  ).bind(telefono, pin).first();
+  // Debug: log qué columna usa y qué valores busca
+  console.log(`Login intent: telefono="${telefono}", pin="${pin}", accessColumn="${accessColumn}"`);
 
-  if (!tecnico) {
+  // Primero buscar solo por teléfono para ver si el técnico existe
+  const tecnicoByPhone = await env.DB.prepare(
+    `SELECT id, nombre, telefono, email, pin, codigo_acceso, activo FROM Tecnicos WHERE telefono = ?`
+  ).bind(telefono).first();
+  console.log(`Tecnico by phone:`, tecnicoByPhone ? { id: tecnicoByPhone.id, nombre: tecnicoByPhone.nombre, pin: tecnicoByPhone.pin, codigo_acceso: tecnicoByPhone.codigo_acceso, activo: tecnicoByPhone.activo } : 'NOT FOUND');
+
+  if (!tecnicoByPhone) {
     return new Response(JSON.stringify({
       success: false,
-      error: 'Credenciales incorrectas o técnico inactivo'
+      error: `No se encontró técnico con teléfono "${telefono}". Verifique que el técnico esté registrado.`
+    }), {
+      headers: { 'Content-Type': 'application/json' },
+      status: 401
+    });
+  }
+
+  // Verificar PIN con la columna correcta
+  const storedPin = tecnicoByPhone[accessColumn] || '';
+  if (storedPin !== pin) {
+    return new Response(JSON.stringify({
+      success: false,
+      error: `PIN incorrecto. Columna usada: ${accessColumn}, PIN guardado: "${storedPin}" vs ingresado: "${pin}"`
+    }), {
+      headers: { 'Content-Type': 'application/json' },
+      status: 401
+    });
+  }
+
+  // Verificar activo
+  if (tecnicoByPhone.activo !== 1 && tecnicoByPhone.activo !== true) {
+    return new Response(JSON.stringify({
+      success: false,
+      error: 'Técnico inactivo. Contacte al administrador.'
     }), {
       headers: { 'Content-Type': 'application/json' },
       status: 401
@@ -89,7 +117,7 @@ async function doLogin(env, accessColumn, telefono, pin) {
 
   return new Response(JSON.stringify({
     success: true,
-    tecnico: tecnico
+    tecnico: { id: tecnicoByPhone.id, nombre: tecnicoByPhone.nombre, telefono: tecnicoByPhone.telefono, email: tecnicoByPhone.email }
   }), {
     headers: { 'Content-Type': 'application/json' }
   });
