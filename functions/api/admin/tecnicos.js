@@ -90,22 +90,25 @@ export async function onRequestPost(context) {
     const tableInfo = await env.DB.prepare("PRAGMA table_info(Tecnicos)").all();
     const columnNames = (tableInfo.results || []).map(col => col.name);
     const accessColumn = columnNames.includes('codigo_acceso') ? 'codigo_acceso' : columnNames.includes('pin') ? 'pin' : null;
+    const hasUsuarioId = columnNames.includes('usuario_id');
 
     if (!accessColumn) {
       throw new Error('Tabla Tecnicos no tiene columna de acceso (codigo_acceso/pin)');
     }
 
     // Crear técnico con comisión
+    const insertCols = hasUsuarioId
+      ? `usuario_id, nombre, telefono, email, ${accessColumn}, activo, comision_porcentaje`
+      : `nombre, telefono, email, ${accessColumn}, activo, comision_porcentaje`;
+    const insertVals = hasUsuarioId ? '1, ?, ?, ?, ?, 1, ?' : '?, ?, ?, ?, 1, ?';
+    const insertParams = hasUsuarioId
+      ? [data.nombre, data.telefono, data.email || null, data.pin, comisionFinal]
+      : [data.nombre, data.telefono, data.email || null, data.pin, comisionFinal];
+
     await env.DB.prepare(`
-      INSERT INTO Tecnicos (nombre, telefono, email, ${accessColumn}, activo, comision_porcentaje)
-      VALUES (?, ?, ?, ?, 1, ?)
-    `).bind(
-      data.nombre,
-      data.telefono,
-      data.email || null,
-      data.pin,
-      comisionFinal
-    ).run();
+      INSERT INTO Tecnicos (${insertCols})
+      VALUES (${insertVals})
+    `).bind(...insertParams).run();
 
     return new Response(JSON.stringify({
       success: true,
