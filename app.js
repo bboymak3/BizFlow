@@ -379,10 +379,6 @@ function initSidebar() {
         overlay.classList.remove('show');
     });
 
-    // Logout
-    const btnLogout = document.getElementById('btn-logout');
-    if (btnLogout) btnLogout.addEventListener('click', () => Auth.logout());
-
     // Notifications
     const btnNotif = document.getElementById('btn-notifications');
     if (btnNotif) btnNotif.addEventListener('click', () => Router.navigate('notificaciones'));
@@ -1848,8 +1844,15 @@ document.addEventListener('DOMContentLoaded', () => {
         if (splash) splash.classList.add('hidden');
     }, 1000);
 
-    Auth.init();
+    // Login deshabilitado - acceso directo al panel
+    currentUser = { nombre: 'Admin', email: 'admin@bizflow.com' };
+    const ini = Utils.initials(currentUser.nombre);
+    Utils.setText('sb-avatar', ini);
+    Utils.setText('sb-name', currentUser.nombre);
+    Utils.setText('tb-avatar', ini);
+    Utils.setText('tb-name', currentUser.nombre);
     initSidebar();
+    Router.init();
 
     // Form submission for nueva orden
     const formNuevaOrden = document.getElementById('form-nueva-orden');

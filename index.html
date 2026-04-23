@@ -299,28 +299,8 @@
     <div class="splash-loader"></div>
 </div>
 
-<!-- ===== LOGIN SCREEN ===== -->
-<div id="login-screen">
-    <div class="login-card">
-        <div class="logo"><i class="fa-solid fa-bolt"></i>BizFlow</div>
-        <p class="text-center mb-4" style="color:#64748b;font-size:0.82rem;">Panel de Administración</p>
-        <form id="login-form" autocomplete="off">
-            <div class="mb-3 position-relative">
-                <i class="fa-regular fa-envelope login-icon"></i>
-                <input type="email" id="login-email" class="login-input" placeholder="Correo electrónico" required>
-            </div>
-            <div class="mb-4 position-relative">
-                <i class="fa-solid fa-lock login-icon"></i>
-                <input type="password" id="login-password" class="login-input" placeholder="Contraseña" required>
-            </div>
-            <button type="submit" class="btn-login"><i class="fa-solid fa-right-to-bracket me-2"></i>Iniciar Sesión</button>
-        </form>
-        <p class="text-center mt-3 mb-0" style="color:#475569;font-size:0.72rem;">&copy; 2025 BizFlow SaaS</p>
-    </div>
-</div>
-
 <!-- ===== MAIN APP ===== -->
-<div id="main-app" style="display:none;">
+<div id="main-app">
 
     <!-- Sidebar Overlay -->
     <div class="bf-sidebar-overlay" id="sidebar-overlay"></div>
@@ -385,7 +365,7 @@
                 <div class="bf-avatar" id="tb-avatar">AD</div>
                 <span class="d-none d-md-inline" id="tb-name">Admin</span>
             </div>
-            <button class="bf-btn-logout" id="btn-logout"><i class="fa-solid fa-right-from-bracket"></i><span class="d-none d-sm-inline">Salir</span></button>
+            <!-- logout oculto -->
         </div>
     </header>
 
