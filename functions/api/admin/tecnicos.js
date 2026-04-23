@@ -86,29 +86,38 @@ export async function onRequestPost(context) {
       });
     }
 
-    // Verificar columna de acceso
+    // Verificar columna de acceso y columnas obligatorias del esquema BizFlow
     const tableInfo = await env.DB.prepare("PRAGMA table_info(Tecnicos)").all();
     const columnNames = (tableInfo.results || []).map(col => col.name);
     const accessColumn = columnNames.includes('codigo_acceso') ? 'codigo_acceso' : columnNames.includes('pin') ? 'pin' : null;
     const hasUsuarioId = columnNames.includes('usuario_id');
+    const hasCodigo = columnNames.includes('codigo');
 
     if (!accessColumn) {
       throw new Error('Tabla Tecnicos no tiene columna de acceso (codigo_acceso/pin)');
     }
 
-    // Crear técnico con comisión
-    const insertCols = hasUsuarioId
-      ? `usuario_id, nombre, telefono, email, ${accessColumn}, activo, comision_porcentaje`
-      : `nombre, telefono, email, ${accessColumn}, activo, comision_porcentaje`;
-    const insertVals = hasUsuarioId ? '1, ?, ?, ?, ?, 1, ?' : '?, ?, ?, ?, 1, ?';
-    const insertParams = hasUsuarioId
-      ? [data.nombre, data.telefono, data.email || null, data.pin, comisionFinal]
-      : [data.nombre, data.telefono, data.email || null, data.pin, comisionFinal];
+    // Generar código único si la columna existe
+    const codigoVal = hasCodigo ? `TC${Date.now().toString(36).toUpperCase()}` : null;
+
+    // Construir INSERT dinámico según columnas disponibles
+    const cols = [];
+    const vals = [];
+    const params = [];
+
+    if (hasUsuarioId) { cols.push('usuario_id'); vals.push('1'); }
+    if (hasCodigo) { cols.push('codigo'); vals.push('?'); params.push(codigoVal); }
+    cols.push('nombre'); vals.push('?'); params.push(data.nombre);
+    cols.push('telefono'); vals.push('?'); params.push(data.telefono);
+    cols.push('email'); vals.push('?'); params.push(data.email || null);
+    cols.push(accessColumn); vals.push('?'); params.push(data.pin);
+    cols.push('activo'); vals.push('1');
+    cols.push('comision_porcentaje'); vals.push('?'); params.push(comisionFinal);
 
     await env.DB.prepare(`
-      INSERT INTO Tecnicos (${insertCols})
-      VALUES (${insertVals})
-    `).bind(...insertParams).run();
+      INSERT INTO Tecnicos (${cols.join(', ')})
+      VALUES (${vals.join(', ')})
+    `).bind(...params).run();
 
     return new Response(JSON.stringify({
       success: true,
