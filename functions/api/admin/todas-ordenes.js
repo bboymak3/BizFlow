@@ -1,169 +1,113 @@
-// ============================================================
-// BizFlow - Todas las Ordenes (All Work Orders) API
-// GET: List all orders paginated with filters
-// ============================================================
+// ============================================
+// API: LISTAR TODAS LAS ÓRDENES
+// Con desglose de costos por categoría
+// Global Pro Automotriz
+// ============================================
 
-import {
-  corsHeaders,
-  handleOptions,
-  successRes,
-  errorRes,
-  chileDate,
-  getFechaColumn,
-  buildFechaWhere,
-  asegurarColumnasFaltantes,
-} from '../../lib/db-helpers.js';
-
-const PAGE_SIZE = 50;
-
-export async function onRequestOptions() {
-  return handleOptions();
-}
+import { asegurarColumnasFaltantes, getFechaColumnEnv as getFechaColumn, getColumnas } from '../../lib/db-helpers.js';
 
 export async function onRequestGet(context) {
-  const { env, request } = context;
-  const url = new URL(request.url);
-
-  const page = parseInt(url.searchParams.get('pagina')) || 1;
-  const estado = url.searchParams.get('estado');
-  const estadoTrabajo = url.searchParams.get('estado_trabajo');
-  const tecnicoId = url.searchParams.get('tecnico_id');
-  const patente = url.searchParams.get('patente');
-  const periodo = url.searchParams.get('periodo');
-  const valor = url.searchParams.get('valor') || chileDate();
-  const negocioId = url.searchParams.get('negocio_id') || '1';
-  const sortBy = url.searchParams.get('sort_by') || 'fecha_creacion';
-  const sortOrder = url.searchParams.get('sort_order') || 'DESC';
+  const { request, env } = context;
 
   try {
     await asegurarColumnasFaltantes(env);
+    const fechaInfo = await getFechaColumn(env);
 
-    // Build WHERE conditions
-    const conditions = ['ot.estado != "Eliminada"'];
-    const params = [];
+    const url = new URL(request.url);
+    const patente = url.searchParams.get('patente');
+    const estado = url.searchParams.get('estado');
+    const tecnico_id = url.searchParams.get('tecnico_id');
+    const desde = url.searchParams.get('desde');
+    const hasta = url.searchParams.get('hasta');
+    const pagina = parseInt(url.searchParams.get('pagina')) || 1;
+    const limite = parseInt(url.searchParams.get('limite')) || 50;
+    const offset = (pagina - 1) * limite;
 
-    // Negocio filter
-    conditions.push('(ot.negocio_id = ? OR ot.negocio_id IS NULL)');
-    params.push(negocioId);
+    let whereClauses = [];
+    let params = [];
 
-    // Estado filter
-    if (estado) {
-      conditions.push('ot.estado = ?');
-      params.push(estado);
-    }
+    // SIEMPRE usar o.fecha_ingreso para filtrar (columna 100% segura)
+    if (patente) { whereClauses.push('UPPER(o.patente_placa) = UPPER(?)'); params.push(patente); }
+    if (estado) { whereClauses.push('o.estado = ?'); params.push(estado); }
+    if (tecnico_id) { whereClauses.push('o.tecnico_asignado_id = ?'); params.push(tecnico_id); }
+    if (desde) { whereClauses.push(`o.fecha_ingreso >= ?`); params.push(desde); }
+    if (hasta) { whereClauses.push(`o.fecha_ingreso <= ?`); params.push(hasta); }
 
-    // Estado trabajo filter
-    if (estadoTrabajo) {
-      conditions.push('ot.estado_trabajo = ?');
-      params.push(estadoTrabajo);
-    }
+    const whereSQL = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
 
-    // Tecnico filter
-    if (tecnicoId) {
-      conditions.push('ot.tecnico_asignado_id = ?');
-      params.push(parseInt(tecnicoId));
-    }
-
-    // Patente search
-    if (patente) {
-      conditions.push('ot.patente LIKE ?');
-      params.push(`%${patente.trim().toUpperCase()}%`);
-    }
-
-    // Date filter
-    if (periodo && periodo !== 'todo') {
-      const fechaCol = await getFechaColumn(env);
-      const fechaWhere = buildFechaWhere(fechaCol, periodo, valor);
-      if (fechaWhere.where) {
-        conditions.push(fechaWhere.where.replace(' AND ', '').replace(/^\(/, '('));
-        params.push(...fechaWhere.params);
-      }
-    }
-
-    const whereClause = `WHERE ${conditions.join(' AND ')}`;
-
-    // Validate sort column
-    const validSortColumns = [
-      'fecha_creacion', 'fecha', 'id', 'numero_orden', 'patente',
-      'monto_base', 'monto_final', 'estado', 'estado_trabajo',
-      'cliente_nombre', 'created_at',
-    ];
-    const finalSortBy = validSortColumns.includes(sortBy) ? sortBy : 'fecha_creacion';
-    const finalSortOrder = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
-
-    // Get total count
     const countResult = await env.DB.prepare(
-      `SELECT COUNT(*) as total FROM OrdenesTrabajo ot ${whereClause}`
+      `SELECT COUNT(*) as total FROM OrdenesTrabajo o LEFT JOIN Clientes c ON o.cliente_id = c.id ${whereSQL}`
     ).bind(...params).first();
 
-    const total = countResult?.total || 0;
-    const totalPages = Math.ceil(total / PAGE_SIZE);
-    const offset = (page - 1) * PAGE_SIZE;
+    // SELECT dinámico según columnas existentes
+    let selectCols = `
+      o.id, o.numero_orden, o.token, o.patente_placa, o.marca, o.modelo, o.anio,
+      o.cilindrada, o.combustible, o.kilometraje, o.fecha_ingreso, o.hora_ingreso,
+      o.recepcionista, o.direccion, o.estado, o.estado_trabajo,
+      o.monto_total, o.monto_abono, o.monto_restante, o.metodo_pago,
+      o.firma_imagen, o.fecha_aprobacion, o.completo,
+      ${fechaInfo.select},
+      o.tecnico_asignado_id,
+      o.trabajo_frenos, o.detalle_frenos, o.trabajo_luces, o.detalle_luces,
+      o.trabajo_tren_delantero, o.detalle_tren_delantero, o.trabajo_correas, o.detalle_correas,
+      o.trabajo_componentes, o.detalle_componentes, o.nivel_combustible,
+      o.check_paragolfe_delantero_der, o.check_puerta_delantera_der,
+      o.check_puerta_trasera_der, o.check_paragolfe_trasero_izq, o.check_otros_carroceria`;
+    if (fechaInfo.tiene_fecha_completado) selectCols += ', o.fecha_completado';
+    if (fechaInfo.tiene_servicios) selectCols += ', o.servicios_seleccionados';
+    if (fechaInfo.tiene_diag_checks) selectCols += ', o.diagnostico_checks';
+    if (fechaInfo.tiene_diag_obs) selectCols += ', o.diagnostico_observaciones';
+    if (fechaInfo.tiene_distancia_km) selectCols += ', o.distancia_km';
+    if (fechaInfo.tiene_cargo_domicilio) selectCols += ', o.cargo_domicilio';
+    if (fechaInfo.tiene_domicilio_modo_cobro) selectCols += ', o.domicilio_modo_cobro';
 
-    // Get orders with joins
-    const query = `
-      SELECT
-        ot.*,
-        c.nombre as cliente_nombre_completo,
-        c.email as cliente_email,
-        c.direccion as cliente_direccion,
-        t.nombre as tecnico_nombre,
-        t.telefono as tecnico_telefono
-      FROM OrdenesTrabajo ot
-      LEFT JOIN Clientes c ON ot.cliente_id = c.id OR (c.telefono = ot.cliente_telefono AND (c.negocio_id = ot.negocio_id OR c.negocio_id IS NULL))
-      LEFT JOIN Tecnicos t ON ot.tecnico_asignado_id = t.id
-      ${whereClause}
-      ORDER BY ot.${finalSortBy} ${finalSortOrder}
+    const { results } = await env.DB.prepare(`
+      SELECT ${selectCols},
+        c.nombre as cliente_nombre, c.rut as cliente_rut, c.telefono as cliente_telefono, c.email as cliente_email,
+        t.nombre as tecnico_nombre, t.telefono as tecnico_telefono,
+        COALESCE(ca.total_mano_obra, 0) as total_costos_mano_obra,
+        COALESCE(ca.total_repuestos, 0) as total_costos_repuestos,
+        (SELECT COALESCE(SUM(monto), 0) FROM CostosAdicionales ca2 WHERE ca2.orden_id = o.id) as total_costos_adicionales,
+        (SELECT COUNT(*) FROM CostosAdicionales ca3 WHERE ca3.orden_id = o.id) as cantidad_costos_adicionales
+      FROM OrdenesTrabajo o
+      LEFT JOIN Clientes c ON o.cliente_id = c.id
+      LEFT JOIN Tecnicos t ON o.tecnico_asignado_id = t.id
+      LEFT JOIN (
+        SELECT orden_id,
+          COALESCE(SUM(CASE WHEN COALESCE(categoria,'Mano de Obra') = 'Mano de Obra' THEN monto ELSE 0 END), 0) as total_mano_obra,
+          COALESCE(SUM(CASE WHEN categoria = 'Repuestos/Materiales' THEN monto ELSE 0 END), 0) as total_repuestos
+        FROM CostosAdicionales GROUP BY orden_id
+      ) ca ON ca.orden_id = o.id
+      ${whereSQL}
+      ORDER BY o.fecha_ingreso DESC
       LIMIT ? OFFSET ?
-    `;
+    `).bind(...params, limite, offset).all();
 
-    const queryParams = [...params, PAGE_SIZE, offset];
-    const result = await env.DB.prepare(query).bind(...queryParams).all();
-    const ordenes = result.results || [];
-
-    // Get services for each order (batch)
-    let serviciosMap = {};
-    try {
-      const ordenIds = ordenes.map(o => o.id);
-      if (ordenIds.length > 0) {
-        // Get services in batches of 100
-        for (let i = 0; i < ordenIds.length; i += 100) {
-          const batch = ordenIds.slice(i, i + 100);
-          const placeholders = batch.map(() => '?').join(',');
-          const servResult = await env.DB.prepare(
-            `SELECT * FROM ServiciosOrden WHERE orden_id IN (${placeholders})`
-          ).bind(...batch).all();
-
-          for (const serv of (servResult.results || [])) {
-            if (!serviciosMap[serv.orden_id]) {
-              serviciosMap[serv.orden_id] = [];
-            }
-            serviciosMap[serv.orden_id].push(serv);
-          }
-        }
-      }
-    } catch {
-      // ServiciosOrden table might not exist
+    const ordenIds = results.map(o => o.id);
+    let costosMap = {};
+    if (ordenIds.length > 0) {
+      const placeholders = ordenIds.map(() => '?').join(',');
+      const { results: costos } = await env.DB.prepare(`SELECT * FROM CostosAdicionales WHERE orden_id IN (${placeholders}) ORDER BY fecha_registro DESC`).bind(...ordenIds).all();
+      costos.forEach(c => {
+        if (!costosMap[c.orden_id]) costosMap[c.orden_id] = [];
+        costosMap[c.orden_id].push(c);
+      });
     }
 
-    // Attach services to orders
-    const ordenesWithServices = ordenes.map(ot => ({
-      ...ot,
-      servicios: serviciosMap[ot.id] || [],
-    }));
-
-    return successRes({
-      ordenes: ordenesWithServices,
-      paginacion: {
-        pagina: page,
-        por_pagina: PAGE_SIZE,
-        total,
-        total_paginas: totalPages,
-        tiene_siguiente: page < totalPages,
-      },
-    });
+    return new Response(JSON.stringify({
+      success: true,
+      total: countResult?.total || 0,
+      pagina, limite,
+      total_paginas: Math.ceil((countResult?.total || 0) / limite),
+      ordenes: results.map(o => ({
+        ...o,
+        costos_adicionales_detalle: costosMap[o.id] || []
+      }))
+    }), { headers: { 'Content-Type': 'application/json' } });
   } catch (error) {
-    console.error('Todas ordenes error:', error);
-    return errorRes('Error listando órdenes: ' + error.message, 500);
+    console.error('Error al listar órdenes:', error);
+    return new Response(JSON.stringify({ success: false, error: error.message }), {
+      headers: { 'Content-Type': 'application/json' }, status: 500
+    });
   }
 }

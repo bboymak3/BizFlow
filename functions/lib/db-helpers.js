@@ -200,8 +200,105 @@ export async function asegurarColumnas(DB, tableName, columns) {
 }
 
 export async function asegurarColumnasFaltantes(env) {
-  // No-op: columns are managed via schema.sql migrations
-  // Kept for compatibility with existing imports
+  try {
+    // Tables that may not exist (from Globalprov2)
+    await env.DB.prepare(`CREATE TABLE IF NOT EXISTS ConfigKV (
+      clave TEXT PRIMARY KEY, valor TEXT, actualizado_en TEXT DEFAULT (datetime('now'))
+    )`).run();
+
+    await env.DB.prepare(`CREATE TABLE IF NOT EXISTS AdminUsers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL, nombre TEXT NOT NULL, activo INTEGER DEFAULT 1, creado_en TEXT
+    )`).run();
+
+    await env.DB.prepare(`CREATE TABLE IF NOT EXISTS SesionesAdmin (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, admin_id INTEGER NOT NULL,
+      token TEXT UNIQUE NOT NULL, expires_at TEXT, creado_en TEXT
+    )`).run();
+
+    await env.DB.prepare(`CREATE TABLE IF NOT EXISTS SeguimientoTrabajo (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, orden_id INTEGER NOT NULL,
+      tecnico_id INTEGER, estado_anterior TEXT DEFAULT '', estado_nuevo TEXT NOT NULL,
+      latitud REAL, longitud REAL, observaciones TEXT,
+      fecha_registro DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`).run();
+
+    // Columns that may be missing in OrdenesTrabajo
+    const colsOT = [
+      'numero_orden INTEGER', 'token TEXT', 'patente_placa TEXT',
+      'fecha_ingreso TEXT', 'hora_ingreso TEXT', 'recepcionista TEXT',
+      'marca TEXT', 'modelo TEXT', 'cilindrada TEXT', 'combustible TEXT',
+      'direccion TEXT', 'trabajo_frenos INTEGER DEFAULT 0', 'detalle_frenos TEXT',
+      'trabajo_luces INTEGER DEFAULT 0', 'detalle_luces TEXT',
+      'trabajo_tren_delantero INTEGER DEFAULT 0', 'detalle_tren_delantero TEXT',
+      'trabajo_correas INTEGER DEFAULT 0', 'detalle_correas TEXT',
+      'trabajo_componentes INTEGER DEFAULT 0', 'detalle_componentes TEXT',
+      'nivel_combustible TEXT',
+      'check_paragolfe_delantero_der INTEGER DEFAULT 0',
+      'check_puerta_delantera_der INTEGER DEFAULT 0',
+      'check_puerta_trasera_der INTEGER DEFAULT 0',
+      'check_paragolfe_trasero_izq INTEGER DEFAULT 0',
+      'check_otros_carroceria TEXT',
+      'monto_total REAL DEFAULT 0', 'monto_abono REAL DEFAULT 0',
+      'monto_restante REAL DEFAULT 0',
+      'firma_imagen TEXT', 'fecha_aprobacion TEXT', 'completo INTEGER DEFAULT 0',
+      'es_express INTEGER DEFAULT 0', 'estado_trabajo TEXT',
+      'tecnico_asignado_id INTEGER', 'cliente_nombre TEXT', 'cliente_telefono TEXT',
+      'motivo_cancelacion TEXT', 'fecha_cancelacion TEXT',
+      'pagado INTEGER DEFAULT 0', 'notas TEXT',
+      'referencia_direccion TEXT', 'distancia_km REAL DEFAULT 0',
+      'cargo_domicilio REAL DEFAULT 0',
+      "domicilio_modo_cobro TEXT DEFAULT 'no_cobrar'",
+      'diagnostico_checks TEXT', 'diagnostico_observaciones TEXT',
+      'servicios_seleccionados TEXT', 'fecha_completado TEXT'
+    ];
+    for (const colDef of colsOT) {
+      try { await env.DB.prepare(`ALTER TABLE OrdenesTrabajo ADD COLUMN ${colDef}`).run(); } catch (e) {}
+    }
+
+    // Columns in Tecnicos
+    try { await env.DB.prepare(`ALTER TABLE Tecnicos ADD COLUMN comision_porcentaje REAL NOT NULL DEFAULT 40`).run(); } catch (e) {}
+    try { await env.DB.prepare(`ALTER TABLE Tecnicos ADD COLUMN password TEXT`).run(); } catch (e) {}
+    try { await env.DB.prepare(`ALTER TABLE Tecnicos ADD COLUMN token TEXT`).run(); } catch (e) {}
+
+    // Columns in CostosAdicionales
+    try { await env.DB.prepare(`ALTER TABLE CostosAdicionales ADD COLUMN monto REAL DEFAULT 0`).run(); } catch (e) {}
+    try { await env.DB.prepare(`ALTER TABLE CostosAdicionales ADD COLUMN categoria TEXT NOT NULL DEFAULT 'Mano de Obra'`).run(); } catch (e) {}
+    try { await env.DB.prepare(`ALTER TABLE CostosAdicionales ADD COLUMN fecha_registro DATETIME DEFAULT CURRENT_TIMESTAMP`).run(); } catch (e) {}
+    try { await env.DB.prepare(`ALTER TABLE CostosAdicionales ADD COLUMN registrado_por TEXT`).run(); } catch (e) {}
+
+    // Columns in ServiciosCatalogo
+    try { await env.DB.prepare(`ALTER TABLE ServiciosCatalogo ADD COLUMN precio_sugerido REAL NOT NULL DEFAULT 0`).run(); } catch (e) {}
+    try { await env.DB.prepare(`ALTER TABLE ServiciosCatalogo ADD COLUMN tipo_comision TEXT NOT NULL DEFAULT 'mano_obra'`).run(); } catch (e) {}
+    try { await env.DB.prepare(`ALTER TABLE ServiciosCatalogo ADD COLUMN fecha_registro DATETIME DEFAULT CURRENT_TIMESTAMP`).run(); } catch (e) {}
+
+    // Columns in GastosNegocio
+    try { await env.DB.prepare(`ALTER TABLE GastosNegocio ADD COLUMN fecha_gasto DATE`).run(); } catch (e) {}
+    try { await env.DB.prepare(`ALTER TABLE GastosNegocio ADD COLUMN observaciones TEXT`).run(); } catch (e) {}
+
+    // Columns in NotificacionesWhatsApp
+    try { await env.DB.prepare(`ALTER TABLE NotificacionesWhatsApp ADD COLUMN telefono TEXT`).run(); } catch (e) {}
+    try { await env.DB.prepare(`ALTER TABLE NotificacionesWhatsApp ADD COLUMN tipo_evento TEXT`).run(); } catch (e) {}
+    try { await env.DB.prepare(`ALTER TABLE NotificacionesWhatsApp ADD COLUMN enviada INTEGER DEFAULT 0`).run(); } catch (e) {}
+    try { await env.DB.prepare(`ALTER TABLE NotificacionesWhatsApp ADD COLUMN fecha_creacion DATETIME DEFAULT CURRENT_TIMESTAMP`).run(); } catch (e) {}
+
+    // Columns in Clientes
+    try { await env.DB.prepare(`ALTER TABLE Clientes ADD COLUMN rut TEXT`).run(); } catch (e) {}
+
+    // Columns in Vehiculos
+    try { await env.DB.prepare(`ALTER TABLE Vehiculos ADD COLUMN patente_placa TEXT`).run(); } catch (e) {}
+    try { await env.DB.prepare(`ALTER TABLE Vehiculos ADD COLUMN cilindrada TEXT`).run(); } catch (e) {}
+    try { await env.DB.prepare(`ALTER TABLE Vehiculos ADD COLUMN combustible TEXT`).run(); } catch (e) {}
+
+    // ConfigKV default rows
+    try { await env.DB.prepare(`INSERT OR IGNORE INTO ConfigKV (clave, valor) VALUES ('negocio_nombre', 'BizFlow')`).run(); } catch (e) {}
+    try { await env.DB.prepare(`INSERT OR IGNORE INTO ConfigKV (clave, valor) VALUES ('ultimo_numero_orden', '0')`).run(); } catch (e) {}
+
+    // Ensure ultimo_numero_orden in Configuracion
+    try { await env.DB.prepare(`ALTER TABLE Configuracion ADD COLUMN ultimo_numero_orden INTEGER DEFAULT 0`).run(); } catch (e) {}
+  } catch (e) {
+    console.log('asegurarColumnasFaltantes:', e.message);
+  }
 }
 
 export async function getColumnas(env, tableName) {
@@ -230,6 +327,26 @@ export function getFechaColumn(tabla) {
   return fechaColumns[tabla] || 'creado_en';
 }
 
+// Globalprov2-compatible version: getFechaColumn(env) - returns column info object
+export async function getFechaColumnEnv(env) {
+  const cols = await getColumnas(env, 'OrdenesTrabajo');
+  const tiene = cols.includes('fecha_creacion');
+  return {
+    col: tiene ? "COALESCE(o.fecha_creacion, o.fecha_ingreso)" : "o.fecha_ingreso",
+    as: tiene ? "COALESCE(o.fecha_creacion, o.fecha_ingreso)" : "o.fecha_ingreso",
+    select: tiene ? "COALESCE(o.fecha_creacion, o.fecha_ingreso) as fecha_creacion" : "o.fecha_ingreso as fecha_creacion",
+    tiene_fecha_creacion: tiene,
+    tiene_fecha_completado: cols.includes('fecha_completado'),
+    tiene_servicios: cols.includes('servicios_seleccionados'),
+    tiene_diag_checks: cols.includes('diagnostico_checks'),
+    tiene_diag_obs: cols.includes('diagnostico_observaciones'),
+    tiene_referencia_dir: cols.includes('referencia_direccion'),
+    tiene_distancia_km: cols.includes('distancia_km'),
+    tiene_cargo_domicilio: cols.includes('cargo_domicilio'),
+    tiene_domicilio_modo_cobro: cols.includes('domicilio_modo_cobro')
+  };
+}
+
 export function buildFechaWhere(tabla, alias = '', desde, hasta) {
   const col = getFechaColumn(tabla);
   const prefix = alias ? `${alias}.` : '';
@@ -237,6 +354,45 @@ export function buildFechaWhere(tabla, alias = '', desde, hasta) {
   if (desde) where += ` AND ${prefix}${col} >= ?`;
   if (hasta) where += ` AND ${prefix}${col} <= ?`;
   return where;
+}
+
+// Globalprov2-compatible version: buildFechaWhere(fechaCol, periodo, valor)
+export function buildFechaWhereGP(fechaCol, periodo, valor) {
+  if (!valor) return { condicion: '', params: [] };
+  switch (periodo) {
+    case 'dia':
+      return { condicion: `date(${fechaCol}) = ?`, params: [valor] };
+    case 'semana': {
+      const [y, w] = valor.split('-').map(Number);
+      return { condicion: `strftime('%Y', ${fechaCol}) = ? AND cast(strftime('%W', ${fechaCol}) as integer) = ?`, params: [String(y), w] };
+    }
+    case 'anio':
+      return { condicion: `strftime('%Y', ${fechaCol}) = ?`, params: [valor] };
+    case 'quincena':
+      return { condicion: `strftime('%Y-%m', ${fechaCol}) = ? AND cast(strftime('%d', ${fechaCol}) as integer) <= 15`, params: [valor] };
+    case 'mes':
+    default:
+      return { condicion: `strftime('%Y-%m', ${fechaCol}) = ?`, params: [valor] };
+  }
+}
+
+// Get technician info (column detection)
+export async function getTecnicosInfo(env) {
+  const cols = await getColumnas(env, 'Tecnicos');
+  return {
+    tiene_comision: cols.includes('comision_porcentaje'),
+    select: cols.includes('comision_porcentaje') ? 't.comision_porcentaje' : '40 as comision_porcentaje'
+  };
+}
+
+// chileNow SQL expression for D1
+export function chileNow() {
+  return "datetime('now', '-3 hours')";
+}
+
+// chileDate SQL expression for D1
+export function chileDateSQL() {
+  return "date('now', '-3 hours')";
 }
 
 // HTML Response helper

@@ -1,148 +1,243 @@
-// ============================================================
-// BizFlow - Costos Adicionales API
-// GET: list costs for ?orden_id
-// POST: add cost { orden_id, concepto, monto, categoria }
-// DELETE: remove by id
-// ============================================================
+// ============================================
+// API: COSTOS ADICIONALES POR ORDEN
+// Con categorización: Mano de Obra / Repuestos-Materiales
+// Global Pro Automotriz
+// ============================================
 
-import {
-  handleOptions,
-  parseBody,
-  successRes,
-  errorRes,
-  chileNowISO,
-  asegurarColumnasFaltantes,
-  validateRequired,
-} from '../../lib/db-helpers.js';
+// Categorías válidas
+const CATEGORIAS_VALIDAS = ['Mano de Obra', 'Repuestos/Materiales'];
 
-export async function onRequestOptions() {
-  return handleOptions();
+async function asegurarColumnaCategoria(env) {
+  try {
+    // Verificar si la columna categoria existe
+    const columns = await env.DB.prepare("PRAGMA table_info(CostosAdicionales)").all();
+    const hasCategoria = columns.results?.some(c => c.name === 'categoria');
+    if (!hasCategoria) {
+      await env.DB.prepare("ALTER TABLE CostosAdicionales ADD COLUMN categoria TEXT NOT NULL DEFAULT 'Mano de Obra'").run();
+    }
+  } catch (e) {
+    console.log('Columna categoria ya existe o error:', e.message);
+  }
 }
 
-// GET - List costs for an order
+// GET: Obtener costos de una orden (con desglose por categoría)
 export async function onRequestGet(context) {
-  const { env, request } = context;
-  const url = new URL(request.url);
-  const ordenId = url.searchParams.get('orden_id');
-
-  if (!ordenId) {
-    return errorRes('orden_id es requerido');
-  }
+  const { request, env } = context;
 
   try {
-    await asegurarColumnasFaltantes(env);
+    await asegurarColumnaCategoria(env);
 
-    const costs = await env.DB.prepare(`
+    const url = new URL(request.url);
+    const ordenId = url.searchParams.get('orden_id');
+
+    if (!ordenId) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Se requiere orden_id'
+      }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 400
+      });
+    }
+
+    const { results } = await env.DB.prepare(`
       SELECT * FROM CostosAdicionales
       WHERE orden_id = ?
-      ORDER BY created_at DESC
+      ORDER BY fecha_registro DESC
     `).bind(ordenId).all();
 
-    // Get total
-    const total = await env.DB.prepare(`
-      SELECT COALESCE(SUM(monto), 0) as total FROM CostosAdicionales WHERE orden_id = ?
-    `).bind(ordenId).first();
+    // Desglose por categoría
+    const totalManoObra = results.reduce((sum, c) => {
+      if (c.categoria === 'Mano de Obra') return sum + Number(c.monto || 0);
+      return sum;
+    }, 0);
+    const totalRepuestos = results.reduce((sum, c) => {
+      if (c.categoria === 'Repuestos/Materiales') return sum + Number(c.monto || 0);
+      return sum;
+    }, 0);
+    const total = totalManoObra + totalRepuestos;
 
-    return successRes({
-      costos: costs.results || [],
-      total: total?.total || 0,
+    return new Response(JSON.stringify({
+      success: true,
+      costos: results,
+      total,
+      desglose: {
+        mano_de_obra: totalManoObra,
+        repuestos_materiales: totalRepuestos
+      }
+    }), {
+      headers: { 'Content-Type': 'application/json' }
     });
+
   } catch (error) {
-    console.error('Costos adicionales list error:', error);
-    return errorRes('Error obteniendo costos: ' + error.message, 500);
+    console.error('Error al obtener costos adicionales:', error);
+    return new Response(JSON.stringify({
+      success: false,
+      error: error.message
+    }), {
+      headers: { 'Content-Type': 'application/json' },
+      status: 500
+    });
   }
 }
 
-// POST - Add cost to order
+// POST: Agregar costo adicional (con categoría obligatoria)
 export async function onRequestPost(context) {
-  const { env, request } = context;
-  const data = await parseBody(request);
-  const { orden_id, concepto, monto, categoria, registrado_por } = data;
-
-  const validation = validateRequired(data, ['orden_id', 'concepto', 'monto']);
-  if (!validation.valid) {
-    return errorRes(`Campos requeridos faltantes: ${validation.missing.join(', ')}`);
-  }
-
-  const montoNum = parseFloat(monto);
-  if (isNaN(montoNum) || montoNum < 0) {
-    return errorRes('Monto debe ser un número positivo');
-  }
+  const { request, env } = context;
 
   try {
-    await asegurarColumnasFaltantes(env);
+    await asegurarColumnaCategoria(env);
 
-    // Verify order exists
-    const orden = await env.DB.prepare(
-      `SELECT id, estado, estado_trabajo FROM OrdenesTrabajo WHERE id = ?`
-    ).bind(orden_id).first();
+    const data = await request.json();
+
+    if (!data.orden_id || !data.concepto || !data.monto) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Faltan datos: orden_id, concepto y monto son obligatorios'
+      }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 400
+      });
+    }
+
+    // Validar categoría
+    const categoria = CATEGORIAS_VALIDAS.includes(data.categoria) ? data.categoria : 'Mano de Obra';
+
+    // VERIFICAR que la orden NO esté Cerrada
+    const orden = await env.DB.prepare(`
+      SELECT estado, estado_trabajo FROM OrdenesTrabajo WHERE id = ?
+    `).bind(data.orden_id).first();
 
     if (!orden) {
-      return errorRes('Orden no encontrada', 404);
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Orden no encontrada'
+      }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 404
+      });
     }
 
-    // Reject if order is closed/cancelled/deleted
-    const estadosCerrados = ['Cerrada', 'cerrada', 'Cancelada', 'Eliminada'];
-    if (estadosCerrados.includes(orden.estado)) {
-      return errorRes(`No se pueden agregar costos a una orden en estado "${orden.estado}"`);
+    if (orden.estado_trabajo === 'Cerrada' || orden.estado === 'Cancelada') {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'No se pueden agregar costos a una orden Cerrada o Cancelada'
+      }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 400
+      });
     }
 
+    // Insertar costo adicional con categoría
     const result = await env.DB.prepare(`
-      INSERT INTO CostosAdicionales (orden_id, concepto, monto, categoria, registrado_por, negocio_id, created_at)
-      VALUES (?, ?, ?, ?, ?, 1, ?)
+      INSERT INTO CostosAdicionales (orden_id, concepto, monto, categoria, registrado_por)
+      VALUES (?, ?, ?, ?, ?)
     `).bind(
-      orden_id,
-      concepto.trim(),
-      montoNum,
-      categoria?.trim() || 'Mano de Obra',
-      registrado_por || null,
-      chileNowISO()
+      data.orden_id,
+      data.concepto,
+      data.monto,
+      categoria,
+      data.registrado_por || 'Admin'
     ).run();
 
-    const costo = await env.DB.prepare(
-      `SELECT * FROM CostosAdicionales WHERE id = ?`
-    ).bind(result.meta.last_row_id).first();
+    const nuevoCostoId = result.meta.last_row_id;
 
-    return successRes(costo, 201);
+    // Obtener el nuevo costo insertado
+    const costo = await env.DB.prepare(
+      'SELECT * FROM CostosAdicionales WHERE id = ?'
+    ).bind(nuevoCostoId).first();
+
+    // Obtener desglose de costos adicionales de la orden
+    const todosCostos = await env.DB.prepare(`
+      SELECT
+        COALESCE(SUM(CASE WHEN categoria = 'Mano de Obra' THEN monto ELSE 0 END), 0) as total_mano_obra,
+        COALESCE(SUM(CASE WHEN categoria = 'Repuestos/Materiales' THEN monto ELSE 0 END), 0) as total_repuestos,
+        COALESCE(SUM(monto), 0) as total_general
+      FROM CostosAdicionales WHERE orden_id = ?
+    `).bind(data.orden_id).first();
+
+    return new Response(JSON.stringify({
+      success: true,
+      costo: { ...costo, categoria },
+      desglose: {
+        mano_de_obra: Number(todosCostos.total_mano_obra || 0),
+        repuestos_materiales: Number(todosCostos.total_repuestos || 0),
+        total_general: Number(todosCostos.total_general || 0)
+      }
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+
   } catch (error) {
-    console.error('Costo adicional create error:', error);
-    return errorRes('Error agregando costo: ' + error.message, 500);
+    console.error('Error al agregar costo adicional:', error);
+    return new Response(JSON.stringify({
+      success: false,
+      error: error.message
+    }), {
+      headers: { 'Content-Type': 'application/json' },
+      status: 500
+    });
   }
 }
 
-// DELETE - Remove cost by id
+// DELETE: Eliminar un costo adicional
 export async function onRequestDelete(context) {
-  const { env, request } = context;
-  const url = new URL(request.url);
-  const id = url.searchParams.get('id');
-
-  if (!id) {
-    return errorRes('ID es requerido');
-  }
+  const { request, env } = context;
 
   try {
-    const costo = await env.DB.prepare(
-      `SELECT ca.*, ot.estado as orden_estado
-       FROM CostosAdicionales ca
-       JOIN OrdenesTrabajo ot ON ca.orden_id = ot.id
-       WHERE ca.id = ?`
-    ).bind(id).first();
+    await asegurarColumnaCategoria(env);
 
-    if (!costo) {
-      return errorRes('Costo no encontrado', 404);
+    const url = new URL(request.url);
+    const costoId = url.searchParams.get('id');
+    const ordenId = url.searchParams.get('orden_id');
+
+    if (!costoId) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Se requiere el ID del costo a eliminar'
+      }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 400
+      });
     }
 
-    // Reject if order is closed
-    const estadosCerrados = ['Cerrada', 'cerrada', 'Cancelada', 'Eliminada'];
-    if (estadosCerrados.includes(costo.orden_estado)) {
-      return errorRes('No se pueden eliminar costos de una orden cerrada');
+    // Eliminar
+    await env.DB.prepare('DELETE FROM CostosAdicionales WHERE id = ?').bind(costoId).run();
+
+    // Obtener nuevo desglose de costos
+    let desglose = { mano_de_obra: 0, repuestos_materiales: 0, total_general: 0 };
+    if (ordenId) {
+      const { results } = await env.DB.prepare(`
+        SELECT
+          COALESCE(SUM(CASE WHEN categoria = 'Mano de Obra' THEN monto ELSE 0 END), 0) as total_mano_obra,
+          COALESCE(SUM(CASE WHEN categoria = 'Repuestos/Materiales' THEN monto ELSE 0 END), 0) as total_repuestos,
+          COALESCE(SUM(monto), 0) as total_general
+        FROM CostosAdicionales WHERE orden_id = ?
+      `).bind(ordenId).all();
+      if (results[0]) {
+        desglose = {
+          mano_de_obra: Number(results[0].total_mano_obra || 0),
+          repuestos_materiales: Number(results[0].total_repuestos || 0),
+          total_general: Number(results[0].total_general || 0)
+        };
+      }
     }
 
-    await env.DB.prepare(`DELETE FROM CostosAdicionales WHERE id = ?`).bind(id).run();
+    return new Response(JSON.stringify({
+      success: true,
+      desglose
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
 
-    return successRes({ deleted: true, id: parseInt(id) });
   } catch (error) {
-    console.error('Costo adicional delete error:', error);
-    return errorRes('Error eliminando costo: ' + error.message, 500);
+    console.error('Error al eliminar costo adicional:', error);
+    return new Response(JSON.stringify({
+      success: false,
+      error: error.message
+    }), {
+      headers: { 'Content-Type': 'application/json' },
+      status: 500
+    });
   }
 }

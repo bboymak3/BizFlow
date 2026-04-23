@@ -1,166 +1,69 @@
-// ============================================================
-// BizFlow Técnico – Service Worker
-// Cache-first para assets estáticos, network-first para API
-// ============================================================
-
-const CACHE_NAME = 'bizflow-tecnico-v1';
-
-const STATIC_ASSETS = [
-  '/tecnico/app.html',
-  '/tecnico/app.js',
-  '/tecnico/manifest.json',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png',
-  'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css',
-  'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css',
-  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.woff2',
-  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-regular-400.woff2',
-  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
-  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+// Service Worker - Global Pro Automotriz (App Tecnico)
+const CACHE_NAME = 'globalpro-v1';
+const ASSETS_TO_CACHE = [
+    '/tecnico/app.html',
+    '/tecnico/app.js',
+    '/tecnico/manifest.json'
 ];
 
-// ── INSTALL ──────────────────────────────────────────────────
+// Instalar: guardar archivos base en cache
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      console.log('[SW] Cacheando assets estáticos');
-      // Cache local assets first, then try CDN assets (don't fail on CDN)
-      return cache.addAll(STATIC_ASSETS.slice(0, 4)).catch(() => {
-        console.warn('[SW] Algunos assets CDN no pudieron cachearse');
-      });
-    })
-  );
-  self.skipWaiting();
+    event.waitUntil(
+        caches.open(CACHE_NAME).then((cache) => {
+            return cache.addAll(ASSETS_TO_CACHE);
+        })
+    );
+    self.skipWaiting();
 });
 
-// ── ACTIVATE ─────────────────────────────────────────────────
+// Activar: limpiar caches viejas
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((cacheNames) =>
-      Promise.all(
-        cacheNames
-          .filter((name) => name !== CACHE_NAME)
-          .map((name) => {
-            console.log('[SW] Eliminando caché antigua:', name);
-            return caches.delete(name);
-          })
-      )
-    )
-  );
-  self.clients.claim();
+    event.waitUntil(
+        caches.keys().then((keys) => {
+            return Promise.all(
+                keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
+            );
+        })
+    );
+    self.clients.claim();
 });
 
-// ── FETCH ────────────────────────────────────────────────────
+// Fetch: Network first, fallback a cache
 self.addEventListener('fetch', (event) => {
-  const { request } = event;
-  const url = new URL(request.url);
-
-  // Network-first para llamadas a la API
-  if (url.pathname.startsWith('/api/')) {
-    event.respondWith(networkFirst(request));
-    return;
-  }
-
-  // Cache-first para assets estáticos (local and CDN)
-  event.respondWith(cacheFirst(request));
-});
-
-// ── Estrategia: Cache First ──────────────────────────────────
-async function cacheFirst(request) {
-  const cached = await caches.match(request);
-  if (cached) {
-    return cached;
-  }
-  try {
-    const response = await fetch(request);
-    if (response.ok) {
-      const cache = await caches.open(CACHE_NAME);
-      cache.put(request, response.clone());
+    // No cachear llamadas a la API (siempre deben ir al servidor)
+    if (event.request.url.includes('/api/')) {
+        return;
     }
-    return response;
-  } catch (err) {
-    // Fallback offline: devolver app.html para navegación
-    if (request.mode === 'navigate') {
-      const cached = await caches.match('/tecnico/app.html');
-      if (cached) return cached;
+
+    // No cachear recursos externos (CDN)
+    if (event.request.url.includes('cdn.jsdelivr.net') ||
+        event.request.url.includes('cdnjs.cloudflare.com')) {
+        return;
     }
-    return new Response('Sin conexión', { status: 503, statusText: 'Offline' });
-  }
-}
 
-// ── Estrategia: Network First ────────────────────────────────
-async function networkFirst(request) {
-  try {
-    const response = await fetch(request);
-    if (response.ok) {
-      const cache = await caches.open(CACHE_NAME);
-      cache.put(request, response.clone());
-    }
-    return response;
-  } catch (err) {
-    const cached = await caches.match(request);
-    if (cached) return cached;
-    return new Response(JSON.stringify({ error: 'Sin conexión' }), {
-      status: 503,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-}
-
-// ── BACKGROUND SYNC STUB ────────────────────────────────────
-self.addEventListener('sync', (event) => {
-  if (event.tag === 'sync-photos') {
-    console.log('[SW] Background sync: sync-photos');
-    event.waitUntil(syncPendingPhotos());
-  }
-  if (event.tag === 'sync-location') {
-    console.log('[SW] Background sync: sync-location');
-    event.waitUntil(syncPendingLocation());
-  }
-});
-
-async function syncPendingPhotos() {
-  // Stub: retrieve pending photo uploads from IndexedDB and retry
-  console.log('[SW] Procesando fotos pendientes...');
-  // Implementation would read from IndexedDB and POST to /api/tecnico/ordenes/[id]/fotos
-}
-
-async function syncPendingLocation() {
-  // Stub: send last known GPS position
-  console.log('[SW] Enviando ubicación pendiente...');
-  // Implementation would read from IndexedDB and PUT to /api/tecnico/ubicacion
-}
-
-// ── PUSH NOTIFICATION STUB ──────────────────────────────────
-self.addEventListener('push', (event) => {
-  console.log('[SW] Push notification recibida');
-  const data = event.data ? event.data.json() : {};
-  const title = data.title || 'BizFlow';
-  const options = {
-    body: data.body || 'Tienes una nueva notificación',
-    icon: '/icons/icon-192.png',
-    badge: '/icons/icon-192.png',
-    vibrate: [200, 100, 200],
-    data: data.data || {},
-    actions: data.actions || [],
-  };
-  event.waitUntil(self.registration.showNotification(title, options));
-});
-
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
-  const data = event.notification.data || {};
-  const urlToOpen = data.url || '/tecnico/app.html';
-  event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      for (const client of clientList) {
-        if (client.url.includes('/tecnico/') && 'focus' in client) {
-          client.focus();
-          return;
-        }
-      }
-      return self.clients.openWindow(urlToOpen);
-    })
-  );
+    event.respondWith(
+        fetch(event.request)
+            .then((response) => {
+                // Si la respuesta es valida, guardar en cache
+                if (response && response.status === 200) {
+                    const responseClone = response.clone();
+                    caches.open(CACHE_NAME).then((cache) => {
+                        cache.put(event.request, responseClone);
+                    });
+                }
+                return response;
+            })
+            .catch(() => {
+                // Si no hay internet, buscar en cache
+                return caches.match(event.request).then((cachedResponse) => {
+                    if (cachedResponse) {
+                        return cachedResponse;
+                    }
+                    // Si no esta en cache y es la pagina principal, mostrar offline
+                    if (event.request.url.includes('app.html')) {
+                        return caches.match('/tecnico/app.html');
+                    }
+                });
+            })
+    );
 });

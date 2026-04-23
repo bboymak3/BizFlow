@@ -1,85 +1,71 @@
-// ============================================================
-// BizFlow - Técnico Orders List API
-// GET /api/tecnico/ordenes?tecnico_id=X&estado=X&page=1&limit=20
-// List orders assigned to a technician
-// ============================================================
+// ============================================
+// API: OBTENER ÓRDENES DEL TÉCNICO
+// Global Pro Automotriz
+// ============================================
 
-import { jsonResponse, errorResponse, handleCors, paginar } from '../../lib/db-helpers.js';
+import { asegurarColumnasFaltantes, getFechaColumnEnv as getFechaColumn } from '../../lib/db-helpers.js';
 
-export async function onRequest(context) {
-  const cors = handleCors(context.request);
-  if (cors) return cors;
-
-  if (context.request.method !== 'GET') {
-    return errorResponse('Método no permitido', 405);
-  }
-
+export async function onRequestGet(context) {
   const { request, env } = context;
-  const { DB } = env;
-  const url = new URL(request.url);
-
-  const tecnicoId = url.searchParams.get('tecnico_id');
-  const estado = url.searchParams.get('estado');
-  const page = parseInt(url.searchParams.get('page') || '1');
-  const limit = parseInt(url.searchParams.get('limit') || '50');
-
-  if (!tecnicoId) {
-    return errorResponse('Parámetro tecnico_id es obligatorio');
-  }
 
   try {
-    // Build query with filters
-    let sql = `
-      SELECT
-        ot.id, ot.numero, ot.estado, ot.tipo, ot.prioridad,
-        ot.titulo, ot.descripcion, ot.fecha_creacion, ot.fecha_inicio, ot.fecha_fin,
-        ot.latitud_ubicacion, ot.longitud_ubicacion,
-        c.nombre as cliente_nombre, c.telefono as cliente_telefono,
-        c.direccion as cliente_direccion,
-        v.placa, v.marca as vehiculo_marca, v.modelo as vehiculo_modelo,
-        t.nombre as tecnico_nombre
-      FROM OrdenesTrabajo ot
-      LEFT JOIN Clientes c ON ot.cliente_id = c.id
-      LEFT JOIN Vehiculos v ON ot.vehiculo_id = v.id
-      LEFT JOIN Tecnicos t ON ot.tecnico_id = t.id
-      WHERE ot.tecnico_id = ?
-    `;
-    const params = [parseInt(tecnicoId)];
+    await asegurarColumnasFaltantes(env);
+    const fechaInfo = await getFechaColumn(env);
 
-    if (estado && estado !== 'todas') {
-      if (estado === 'en_proceso') {
-        sql += ` AND ot.estado IN ('en_proceso', 'pausada', 'asignada')`;
-      } else {
-        sql += ` AND ot.estado = ?`;
-        params.push(estado);
-      }
+    const url = new URL(request.url);
+    const tecnicoId = url.searchParams.get('tecnico_id');
+
+    if (!tecnicoId) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Falta ID del técnico'
+      }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 400
+      });
     }
 
-    // Exclude cancelled
-    sql += ` AND ot.estado != 'cancelada'`;
+    // Columnas de domicilio dinámicas (solo si existen en la tabla)
+    let domicilioCols = '';
+    if (fechaInfo.tiene_distancia_km) domicilioCols += ', o.distancia_km';
+    if (fechaInfo.tiene_cargo_domicilio) domicilioCols += ', o.cargo_domicilio';
+    if (fechaInfo.tiene_domicilio_modo_cobro) domicilioCols += ', o.domicilio_modo_cobro';
 
-    sql += ` ORDER BY ot.fecha_creacion DESC`;
+    // Buscar órdenes asignadas a este técnico
+    const ordenes = await env.DB.prepare(`
+      SELECT
+        o.id, o.numero_orden, o.patente_placa, o.marca, o.modelo, o.anio,
+        o.direccion, o.estado_trabajo,
+        c.nombre as cliente_nombre, c.telefono as cliente_telefono,
+        o.trabajo_frenos, o.detalle_frenos,
+        o.trabajo_luces, o.detalle_luces,
+        o.trabajo_tren_delantero, o.detalle_tren_delantero,
+        o.trabajo_correas, o.detalle_correas,
+        o.trabajo_componentes, o.detalle_componentes,
+        o.firma_imagen, o.fecha_aprobacion,
+        o.diagnostico_observaciones, o.notas
+        ${domicilioCols}
+      FROM OrdenesTrabajo o
+      LEFT JOIN Clientes c ON o.cliente_id = c.id
+      WHERE o.tecnico_asignado_id = ?
+      ORDER BY o.fecha_ingreso DESC
+    `).bind(tecnicoId).all();
 
-    // Apply pagination
-    const pag = paginar(sql, page, limit);
-    const result = await DB.prepare(pag.sql).bind(...params, ...pag.params).all();
-
-    // Get total count for pagination info
-    const countSql = sql.replace(/SELECT[\s\S]+?FROM/, 'SELECT COUNT(*) as total FROM');
-    const countResult = await DB.prepare(countSql).bind(...params).first();
-    const total = countResult?.total || 0;
-
-    return jsonResponse({
-      ordenes: result.results || [],
-      paginacion: {
-        page: pag.page,
-        limit: pag.limit,
-        total,
-        total_pages: Math.ceil(total / pag.limit),
-      },
+    return new Response(JSON.stringify({
+      success: true,
+      ordenes: ordenes.results || []
+    }), {
+      headers: { 'Content-Type': 'application/json' }
     });
+
   } catch (error) {
-    console.error('[ORDENES] Error:', error);
-    return errorResponse('Error al obtener las órdenes de trabajo', 500);
+    console.error('Error al obtener órdenes del técnico:', error);
+    return new Response(JSON.stringify({
+      success: false,
+      error: error.message
+    }), {
+      headers: { 'Content-Type': 'application/json' },
+      status: 500
+    });
   }
 }

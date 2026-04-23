@@ -1,153 +1,131 @@
 // ============================================
-// BIZFLOW - Close Order
-// POST /api/tecnico/cerrar-orden
-// Cerrar completamente una orden de trabajo
+// API: CERRAR ORDEN (TÉCNICO)
+// Global Pro Automotriz
 // ============================================
 
-import {
-  corsHeaders,
-  handleOptions,
-  parseBody,
-  validateRequired,
-  successResponse,
-  errorResponse,
-  chileNowStr,
-  getConfig,
-  sendWhatsApp,
-  generarMensajeWhatsApp,
-} from '../../lib/db-helpers.js';
+import { chileNow } from '../../lib/db-helpers.js';
 
-export async function onRequestOptions(context) {
-  return handleOptions();
-}
 
 export async function onRequestPost(context) {
   const { request, env } = context;
-  const body = await parseBody(request);
-
-  if (!body) {
-    return errorResponse('Body de la petición inválido');
-  }
-
-  const { valid, missing } = validateRequired(body, ['orden_id', 'tecnico_id']);
-  if (!valid) {
-    return errorResponse(`Faltan campos obligatorios: ${missing.join(', ')}`);
-  }
-
-  const { orden_id, tecnico_id, notas, estado_pago, metodo_pago } = body;
-  const now = chileNowStr();
 
   try {
-    // 1. Get current order
-    const orden = await env.DB.prepare(`
-      SELECT * FROM OrdenesTrabajo WHERE id = ?
-    `).bind(parseInt(orden_id)).first();
-
-    if (!orden) {
-      return errorResponse('Orden de trabajo no encontrada', 404);
-    }
-
-    // 2. Verify technician assignment
-    if (orden.tecnico_asignado_id !== parseInt(tecnico_id)) {
-      return errorResponse('Esta orden no está asignada a este técnico', 403);
-    }
-
-    // 3. Check if order can be closed (must be Completada or No Completada)
-    const estadosPermitidos = ['Completada', 'No Completada', 'Cerrada'];
-    if (!estadosPermitidos.includes(orden.estado_trabajo)) {
-      return errorResponse(
-        `La orden no puede ser cerrada. Estado actual: "${orden.estado_trabajo}". ` +
-        `Debe estar en: ${estadosPermitidos.join(', ')}`
-      );
-    }
-
-    // 4. Build update clauses
-    const updateClauses = ['estado_trabajo = ?', 'estado = ?'];
-    const updateParams = ['Cerrada', 'Cerrada'];
-
-    // Save closing notes
-    if (notas) {
-      // Append to existing notes
-      const existingNotas = orden.notas ? orden.notas + '\n\n' : '';
-      updateClauses.push('notas = ?');
-      updateParams.push(`${existingNotas}[CIERRE - ${now}]\n${notas}`);
-    }
-
-    // Save payment status and method
-    if (estado_pago) {
-      updateClauses.push('estado_pago = ?');
-      updateParams.push(estado_pago);
-    }
-    if (metodo_pago) {
-      updateClauses.push('metodo_pago = ?');
-      updateParams.push(metodo_pago);
-    }
-
-    // Set close timestamp
-    updateClauses.push('fecha_completado = ?');
-    updateParams.push(now);
-
-    // 5. Execute update
-    updateParams.push(parseInt(orden_id));
-    const sqlUpdate = `UPDATE OrdenesTrabajo SET ${updateClauses.join(', ')} WHERE id = ?`;
-    await env.DB.prepare(sqlUpdate).bind(...updateParams).run();
-
-    // 6. Insert tracking record
-    await env.DB.prepare(`
-      INSERT INTO SeguimientoOT (orden_id, tecnico_id, estado_anterior, estado_nuevo, observaciones, fecha_evento)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).bind(
-      parseInt(orden_id),
-      parseInt(tecnico_id),
-      orden.estado_trabajo,
-      'Cerrada',
-      notas || 'Orden cerrada por técnico',
-      now
-    ).run();
-
-    // 7. If there are additional notes, save them as a work note too
-    if (notas) {
-      await env.DB.prepare(`
-        INSERT INTO NotasTrabajo (orden_id, tecnico_id, nota, fecha_nota)
-        VALUES (?, ?, ?, ?)
-      `).bind(
-        parseInt(orden_id),
-        parseInt(tecnico_id),
-        `[CIERRE] ${notas}`,
-        now
-      ).run();
-    }
-
-    // 8. Send WhatsApp notification
-    const tecnico = await env.DB.prepare(`
-      SELECT nombre FROM Tecnicos WHERE id = ?
-    `).bind(parseInt(tecnico_id)).first();
-
-    const cliente = await env.DB.prepare(`
-      SELECT nombre, telefono FROM Clientes WHERE id = ?
-    `).bind(orden.cliente_id).first();
-
-    if (cliente?.telefono) {
-      const config = await getConfig(env.DB);
-      const mensaje = generarMensajeWhatsApp('cerrada', orden, tecnico, cliente);
-      await sendWhatsApp(env.DB, config, {
-        orden_id: parseInt(orden_id),
-        telefono: cliente.telefono,
-        mensaje,
-        tipo_evento: 'cerrada',
-        negocio_id: orden.negocio_id,
+    const data = await request.json();
+    if (!data.orden_id || !data.tecnico_id) {
+      return new Response(JSON.stringify({ success: false, error: 'Faltan datos: orden_id y tecnico_id' }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 400
       });
     }
 
-    return successResponse({
-      orden_id: parseInt(orden_id),
-      estado_anterior: orden.estado_trabajo,
-      estado_nuevo: 'Cerrada',
-      fecha_cierre: now,
-      mensaje: 'Orden cerrada exitosamente',
+    const orden = await env.DB.prepare(
+      'SELECT id, estado, estado_trabajo, firma_imagen, token, tecnico_asignado_id, notas FROM OrdenesTrabajo WHERE id = ? AND tecnico_asignado_id = ?'
+    ).bind(data.orden_id, data.tecnico_id).first();
+
+    if (!orden) {
+      return new Response(JSON.stringify({ success: false, error: 'Orden no encontrada o no asignada a este técnico' }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 404
+      });
+    }
+
+    if (!orden.firma_imagen) {
+      return new Response(JSON.stringify({ success: false, error: 'No se puede cerrar la orden: cliente no ha firmado aún' }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 400
+      });
+    }
+
+    if (orden.estado_trabajo === 'Cerrada') {
+      return new Response(JSON.stringify({ success: false, error: 'La orden ya está cerrada' }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 400
+      });
+    }
+
+    if (!orden.firma_imagen) {
+      return new Response(JSON.stringify({ success: false, error: 'No se puede cerrar la orden: cliente no ha firmado aún' }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 400
+      });
+    }
+
+    if (orden.estado !== 'Aprobada' && orden.estado_trabajo !== 'Aprobada') {
+      return new Response(JSON.stringify({ success: false, error: 'No se puede cerrar la orden porque no está aprobada' }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 400
+      });
+    }
+
+    const notasCierre = (data.notas_cierre || '').trim();
+    if (!notasCierre) {
+      return new Response(JSON.stringify({ success: false, error: 'Las notas de cierre son obligatorias' }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 400
+      });
+    }
+
+    if (data.pago_completado === undefined || data.pago_completado === null) {
+      return new Response(JSON.stringify({ success: false, error: 'Debe indicar si el cliente pagó o no' }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 400
+      });
+    }
+
+    const pagoCompletado = !!data.pago_completado;
+    let metodoPago = data.metodo_pago ? data.metodo_pago.trim() : null;
+
+    if (pagoCompletado) {
+      if (!metodoPago) {
+        return new Response(JSON.stringify({ success: false, error: 'Debe seleccionar el método de pago' }), {
+          headers: { 'Content-Type': 'application/json' },
+          status: 400
+        });
+      }
+    } else {
+      if (!metodoPago) {
+        return new Response(JSON.stringify({ success: false, error: 'Debe seleccionar el motivo del pago pendiente' }), {
+          headers: { 'Content-Type': 'application/json' },
+          status: 400
+        });
+      }
+      metodoPago = `Pago pendiente: ${metodoPago}`;
+    }
+
+    const notasActualizadas = ((orden.notas || '').trim() ? `${orden.notas.trim()}\nCierre: ${notasCierre}` : `Cierre: ${notasCierre}`);
+
+    // Si pago completado y monto restante existe, dejamos en 0, sino conservamos saldo
+    const nuevoMontoRestante = pagoCompletado ? 0 : (orden.monto_restante || 0);
+
+    await env.DB.prepare(
+      `UPDATE OrdenesTrabajo SET estado = ?, estado_trabajo = ?, fecha_completado = ${chileNow()}, notas = ?, pagado = ?, metodo_pago = ?, monto_restante = ? WHERE id = ?`
+    ).bind('Aprobada', 'Cerrada', notasActualizadas, pagoCompletado ? 1 : 0, metodoPago, nuevoMontoRestante, data.orden_id).run();
+
+    await env.DB.prepare(`
+      INSERT INTO SeguimientoTrabajo (orden_id, tecnico_id, estado_anterior, estado_nuevo, observaciones)
+      VALUES (?, ?, ?, ?, ?)
+    `).bind(
+      data.orden_id,
+      data.tecnico_id,
+      orden.estado_trabajo,
+      'Cerrada',
+      notasCierre ? `Cierre: ${notasCierre}` : 'Cierre sin notas'
+    ).run();
+
+    return new Response(JSON.stringify({
+      success: true,
+      mensaje: 'Orden cerrada correctamente',
+      orden_id: data.orden_id,
+      notas: notasActualizadas
+    }), {
+      headers: { 'Content-Type': 'application/json' }
     });
+
   } catch (error) {
-    console.error('Error closing order:', error);
-    return errorResponse('Error al cerrar la orden de trabajo', 500);
+    console.error('Error al cerrar orden:', error);
+    return new Response(JSON.stringify({ success: false, error: error.message }), {
+      headers: { 'Content-Type': 'application/json' },
+      status: 500
+    });
   }
 }

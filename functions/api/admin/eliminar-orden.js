@@ -1,99 +1,64 @@
-// ============================================================
-// BizFlow - Eliminar Orden (Delete Work Order) API
-// DELETE: Soft delete (estado='Eliminada') or hard delete
-// ============================================================
+// ============================================
+// API: ELIMINAR ORDEN DE TRABAJO
+// Global Pro Automotriz
+// ============================================
 
-import {
-  corsHeaders,
-  handleOptions,
-  parseBody,
-  successRes,
-  errorRes,
-  chileNowISO,
-  asegurarColumnasFaltantes,
-  getColumnas,
-} from '../../lib/db-helpers.js';
-
-export async function onRequestOptions() {
-  return handleOptions();
-}
-
-export async function onRequestDelete(context) {
-  const { env, request } = context;
-  const url = new URL(request.url);
-  const id = url.searchParams.get('id');
-  const hardDelete = url.searchParams.get('hard') === 'true';
-
-  if (!id) {
-    return errorRes('ID de orden es requerido');
-  }
+export async function onRequestPost(context) {
+  const { request, env } = context;
 
   try {
-    await asegurarColumnasFaltantes(env);
+    const data = await request.json();
+    const ordenId = data.orden_id;
 
-    const orden = await env.DB.prepare(
-      `SELECT * FROM OrdenesTrabajo WHERE id = ?`
-    ).bind(id).first();
+    if (!ordenId) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Se requiere el ID de la orden'
+      }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 400
+      });
+    }
+
+    // Verificar que la orden existe
+    const orden = await env.DB.prepare(`
+      SELECT id, numero_orden, estado, estado_trabajo
+      FROM OrdenesTrabajo
+      WHERE id = ?
+    `).bind(ordenId).first();
 
     if (!orden) {
-      return errorRes('Orden no encontrada', 404);
-    }
-
-    if (orden.estado === 'Eliminada' && !hardDelete) {
-      return errorRes('La orden ya fue eliminada');
-    }
-
-    if (hardDelete) {
-      // Hard delete: remove from all related tables
-      const relatedTables = [
-        'ServiciosOrden', 'CostosAdicionales', 'Pagos',
-        'FotosTrabajo', 'NotasTrabajo', 'SeguimientoOT',
-        'NotificacionesWhatsApp',
-      ];
-
-      for (const table of relatedTables) {
-        try {
-          await env.DB.prepare(`DELETE FROM ${table} WHERE orden_id = ?`).bind(id).run();
-        } catch {
-          // Table might not exist, that's fine
-        }
-      }
-
-      // Delete the order itself
-      await env.DB.prepare(`DELETE FROM OrdenesTrabajo WHERE id = ?`).bind(id).run();
-
-      return successRes({
-        deleted: true,
-        id: parseInt(id),
-        mode: 'hard',
-      });
-    } else {
-      // Soft delete: set estado to 'Eliminada'
-      const columns = await getColumnas(env, 'OrdenesTrabajo');
-      const now = chileNowISO();
-
-      const updates = ["estado = 'Eliminada'"];
-      const params = [];
-
-      if (columns.includes('updated_at')) { updates.push('updated_at = ?'); params.push(now); }
-      if (columns.includes('fecha_actualizacion')) { updates.push('fecha_actualizacion = ?'); params.push(now); }
-      if (columns.includes('fecha_eliminacion')) { updates.push('fecha_eliminacion = ?'); params.push(now); }
-
-      params.push(id);
-
-      await env.DB.prepare(
-        `UPDATE OrdenesTrabajo SET ${updates.join(', ')} WHERE id = ?`
-      ).bind(...params).run();
-
-      return successRes({
-        deleted: true,
-        id: parseInt(id),
-        mode: 'soft',
-        estado: 'Eliminada',
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Orden no encontrada'
+      }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 404
       });
     }
+
+    // Cualquier orden puede ser eliminada (solo no se pueden editar las cerradas)
+    // Eliminar costos adicionales asociados
+    await env.DB.prepare(`DELETE FROM CostosAdicionales WHERE orden_id = ?`).bind(ordenId).run();
+
+    // Eliminar la orden
+    await env.DB.prepare(`DELETE FROM OrdenesTrabajo WHERE id = ?`).bind(ordenId).run();
+
+    return new Response(JSON.stringify({
+      success: true,
+      message: `Orden #${String(orden.numero_orden).padStart(6, '0')} eliminada correctamente`
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+
   } catch (error) {
-    console.error('Eliminar orden error:', error);
-    return errorRes('Error eliminando orden: ' + error.message, 500);
+    console.error('Error al eliminar orden:', error);
+    return new Response(JSON.stringify({
+      success: false,
+      error: error.message
+    }), {
+      headers: { 'Content-Type': 'application/json' },
+      status: 500
+    });
   }
 }

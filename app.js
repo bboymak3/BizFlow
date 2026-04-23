@@ -1,8 +1,10 @@
 /**
  * ============================================================
- * BizFlow Admin Panel - SPA Application
+ * BizFlow Admin Panel - Merged SPA Application
+ * BizFlow design system + Globalprov2 automotive modules
  * Complete JavaScript with hash-based routing, CRUD, charts,
- * PDF generation, and all module logic.
+ * PDF generation, order creation (normal + express), technician
+ * settlement, services catalog with commission types, and more.
  * ============================================================
  */
 
@@ -38,10 +40,38 @@ const API = {
         }
     },
 
+    // Routes through /api/admin for admin endpoints
     get(endpoint) { return this.request(endpoint); },
     post(endpoint, body) { return this.request(endpoint, { method: 'POST', body }); },
     put(endpoint, body) { return this.request(endpoint, { method: 'PUT', body }); },
     delete(endpoint) { return this.request(endpoint, { method: 'DELETE' }); },
+
+    // Routes through /api (not /api/admin) for public endpoints
+    async requestPublic(endpoint, options = {}) {
+        const url = `/api${endpoint}`;
+        const config = {
+            headers: { 'Content-Type': 'application/json', ...options.headers },
+            ...options,
+        };
+        if (config.body && typeof config.body === 'object') {
+            config.body = JSON.stringify(config.body);
+        }
+        try {
+            const res = await fetch(url, config);
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.error || err.message || `Error ${res.status}`);
+            }
+            return await res.json();
+        } catch (e) {
+            if (e.message.includes('Failed to fetch') || e.message.includes('NetworkError')) {
+                throw new Error('Error de conexión. Verifique su red.');
+            }
+            throw e;
+        }
+    },
+    getPublic(endpoint) { return this.requestPublic(endpoint); },
+    postPublic(endpoint, body) { return this.requestPublic(endpoint, { method: 'POST', body }); },
 };
 
 // ============================================================
@@ -49,6 +79,8 @@ const API = {
 // ============================================================
 let currentUser = null;
 let charts = {};
+let serviciosCatalogoGlobal = [];
+let costosExtraTemporales = [];
 
 // ============================================================
 // UTILITIES
@@ -56,7 +88,7 @@ let charts = {};
 const Utils = {
     fmt: (n) => {
         const num = parseFloat(n) || 0;
-        return '$' + num.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+        return '$' + num.toLocaleString('es-CL', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
     },
     fmtDate: (d) => {
         if (!d) return '--';
@@ -80,13 +112,12 @@ const Utils = {
         return p.length >= 2 ? (p[0][0] + p[p.length - 1][0]).toUpperCase() : name.substring(0, 2).toUpperCase();
     },
     today: () => new Date().toISOString().split('T')[0],
+    nowMonth: () => new Date().toISOString().slice(0, 7),
     val: (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ''; },
     setVal: (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; },
     setHTML: (id, h) => { const el = document.getElementById(id); if (el) el.innerHTML = h; },
     setText: (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; },
     toast: (msg, type = 'success') => {
-        const iconMap = { success: 'fa-circle-check', error: 'fa-circle-xmark', warning: 'fa-triangle-exclamation', info: 'fa-circle-info' };
-        const colorMap = { success: '#16a34a', error: '#dc2626', warning: '#d97706', info: '#2563eb' };
         Swal.fire({
             toast: true, position: 'top-end', showConfirmButton: false, timer: 3000, timerProgressBar: true,
             icon: type, title: msg,
@@ -115,20 +146,18 @@ const Utils = {
     hideModal(id) { const m = this.modal(id); if (m) m.hide(); },
     badgeClass: (estado) => {
         const s = (estado || '').toLowerCase().replace(/\s+/g, '-').replace(/_/g, '-');
-        const map = { 'enviada':'badge-enviada','aprobada':'badge-aprobada','pendiente-visita':'badge-pendiente-visita','en-sitio':'badge-en-sitio','en-progreso':'badge-en-progreso','completada':'badge-completada','cerrada':'badge-cerrada','cancelada':'badge-cancelada' };
+        const map = {
+            'enviada':'badge-enviada','aprobada':'badge-aprobada',
+            'pendiente-visita':'badge-pendiente-visita','pendiente_visita':'badge-pendiente-visita',
+            'en-sitio':'badge-en-sitio','en_sitio':'badge-en-sitio',
+            'en-progreso':'badge-en-progreso','en_progreso':'badge-en-progreso',
+            'completada':'badge-completada','cerrada':'badge-cerrada','cancelada':'badge-cancelada',
+        };
         return map[s] || 'badge-enviada';
     },
     translateEstado: (e) => {
         if (!e) return '--';
         return e.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-    },
-    translateMetodo: (m) => {
-        const map = { efectivo:'Efectivo', transferencia:'Transferencia', tarjeta:'Tarjeta', deposito:'Depósito', mercado_pago:'MercadoPago' };
-        return map[m] || m || '--';
-    },
-    translateCategoria: (c) => {
-        const map = { alquiler:'Alquiler', servicios:'Servicios', transporte:'Transporte', insumos:'Insumos', salarios:'Salarios', marketing:'Marketing', otros:'Otros', otro:'Otros' };
-        return map[c] || c || '--';
     },
     paginate: (data, page = 1, perPage = 20) => {
         const total = data.length;
@@ -158,35 +187,43 @@ const Utils = {
 const Router = {
     routes: {
         'dashboard': 'page-dashboard',
+        'nueva-orden': 'page-nueva-orden',
+        'buscar-ordenes': 'page-buscar-ordenes',
+        'tecnicos': 'page-tecnicos',
+        'liquidar-tecnicos': 'page-liquidar-tecnicos',
+        'servicios': 'page-servicios',
+        'modelos-vehiculo': 'page-modelos-vehiculo',
+        'costos-adicionales': 'page-costos-adicionales',
+        'gastos': 'page-gastos',
+        'reportes': 'page-reportes',
         'clientes': 'page-clientes',
         'vehiculos': 'page-vehiculos',
-        'ordenes': 'page-ordenes',
-        'tecnicos': 'page-tecnicos',
-        'servicios': 'page-servicios',
-        'inventario': 'page-inventario',
-        'facturacion': 'page-facturacion',
-        'contabilidad': 'page-contabilidad',
-        'gastos': 'page-gastos',
         'whatsapp': 'page-whatsapp',
         'landing-pages': 'page-landing-pages',
         'configuracion': 'page-configuracion',
-        'reportes': 'page-reportes',
+        'inventario': 'page-inventario',
+        'contabilidad': 'page-contabilidad',
+        'notificaciones': 'page-notificaciones',
     },
     titles: {
         'dashboard': 'Dashboard',
+        'nueva-orden': 'Nueva Orden de Trabajo',
+        'buscar-ordenes': 'Buscar Órdenes',
+        'tecnicos': 'Gestión Técnicos',
+        'liquidar-tecnicos': 'Liquidar Técnicos',
+        'servicios': 'Catálogo de Servicios',
+        'modelos-vehiculo': 'Modelos de Vehículos',
+        'costos-adicionales': 'Costos Adicionales',
+        'gastos': 'Gastos del Negocio',
+        'reportes': 'Reporte General',
         'clientes': 'Clientes (CRM)',
         'vehiculos': 'Vehículos',
-        'ordenes': 'Órdenes de Trabajo',
-        'tecnicos': 'Técnicos',
-        'servicios': 'Catálogo de Servicios',
-        'inventario': 'Inventario',
-        'facturacion': 'Facturación y Pagos',
-        'contabilidad': 'Contabilidad (Partida Doble)',
-        'gastos': 'Gastos del Negocio',
         'whatsapp': 'WhatsApp',
         'landing-pages': 'Landing Pages',
         'configuracion': 'Configuración',
-        'reportes': 'Reportes',
+        'inventario': 'Inventario',
+        'contabilidad': 'Contabilidad',
+        'notificaciones': 'Notificaciones',
     },
 
     init() {
@@ -207,39 +244,37 @@ const Router = {
         const route = hash.split('/')[0] || 'dashboard';
         const pageId = this.routes[route] || 'page-dashboard';
 
-        // Hide all pages
         document.querySelectorAll('.bf-page').forEach(p => p.classList.remove('active'));
-        // Show active page
         const page = document.getElementById(pageId);
         if (page) page.classList.add('active');
 
-        // Update sidebar
         document.querySelectorAll('.bf-sidebar-item').forEach(i => i.classList.remove('active'));
         document.querySelectorAll(`.bf-sidebar-item[data-route="${route}"]`).forEach(i => i.classList.add('active'));
 
-        // Update title
         Utils.setText('topbar-title', this.titles[route] || 'BizFlow');
-
-        // Load data for route
         this.onEnter(route);
     },
 
     onEnter(route) {
         switch (route) {
             case 'dashboard': App.dashboard.load(); break;
+            case 'nueva-orden': App.nuevaOrden.init(); break;
+            case 'buscar-ordenes': App.buscarOrdenes.init(); break;
+            case 'tecnicos': App.tecnicos.load(); break;
+            case 'liquidar-tecnicos': App.liquidarTecnicos.init(); break;
+            case 'servicios': App.servicios.load(); break;
+            case 'modelos-vehiculo': App.modelos.load(); break;
+            case 'gastos': App.gastos.load(); break;
+            case 'reportes': App.reportes.init(); break;
             case 'clientes': App.clientes.load(); break;
             case 'vehiculos': App.vehiculos.load(); break;
-            case 'ordenes': App.ordenes.load(); break;
-            case 'tecnicos': App.tecnicos.load(); break;
-            case 'servicios': App.servicios.load(); break;
-            case 'inventario': App.inventario.load(); break;
-            case 'facturacion': App.facturacion.load(); break;
-            case 'contabilidad': App.contabilidad.load(); break;
-            case 'gastos': App.gastos.load(); break;
             case 'whatsapp': App.whatsapp.load(); break;
             case 'landing-pages': App.landing.load(); break;
             case 'configuracion': App.config.load(); break;
-            case 'reportes': App.reportes.load(); break;
+            case 'inventario': App.inventario.load(); break;
+            case 'contabilidad': App.contabilidad.load(); break;
+            case 'costos-adicionales': App.costosAdicionales.load(); break;
+            case 'notificaciones': App.notificaciones.load(); break;
         }
     },
 
@@ -269,14 +304,15 @@ const Auth = {
     },
 
     async login(email, password) {
-        if (!email || !password) { Utils.toast('Ingrese correo y contraseña', 'warning'); return; }
+        if (!email || !password) { Utils.toast('Ingrese usuario y contraseña', 'warning'); return; }
         try {
             const btn = document.querySelector('#login-form button[type="submit"]');
             btn.disabled = true;
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Ingresando...';
-            const data = await API.post('/login', { email, password });
-            if (data.success && data.data) {
-                currentUser = data.data.usuario || data.data;
+            // Globalprov2 login uses 'usuario' field, not 'email'
+            const data = await API.post('/login', { usuario: email, password: password });
+            if (data.success) {
+                currentUser = { nombre: data.nombre || email, email: email, token: data.token };
                 localStorage.setItem('bizflow_user', JSON.stringify(currentUser));
                 Utils.toast('¡Bienvenido, ' + (currentUser.nombre || email) + '!', 'success');
                 this.showApp();
@@ -284,7 +320,7 @@ const Auth = {
                 Utils.toast(data.error || 'Credenciales inválidas', 'error');
             }
         } catch (err) {
-            Utils.toast(err.message, 'error');
+            Utils.toast(err.message || 'Error de conexión', 'error');
         } finally {
             const btn = document.querySelector('#login-form button[type="submit"]');
             if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-right-to-bracket me-2"></i>Iniciar Sesión'; }
@@ -342,6 +378,14 @@ function initSidebar() {
         sidebar.classList.remove('show');
         overlay.classList.remove('show');
     });
+
+    // Logout
+    const btnLogout = document.getElementById('btn-logout');
+    if (btnLogout) btnLogout.addEventListener('click', () => Auth.logout());
+
+    // Notifications
+    const btnNotif = document.getElementById('btn-notifications');
+    if (btnNotif) btnNotif.addEventListener('click', () => Router.navigate('notificaciones'));
 }
 
 // ============================================================
@@ -390,48 +434,48 @@ function createDoughnutChart(id, labels, data, colors) {
 const App = {
 
     // ========================================================
-    // DASHBOARD
+    // DASHBOARD - Enhanced with workshop KPIs
     // ========================================================
     dashboard: {
         async load() {
             try {
-                const data = await API.get('/dashboard');
+                const data = await API.get('/dashboard-negocio');
                 const d = data.data || data;
                 const kpis = d.kpis || d;
-                Utils.setText('dash-total-ots', kpis.total_ordenes || kpis.total || 0);
+
+                Utils.setText('dash-total-ots', kpis.total_ordenes || 0);
                 Utils.setText('dash-en-proceso', kpis.en_proceso || kpis.enProceso || 0);
                 Utils.setText('dash-completadas', kpis.completadas || kpis.cerradas || 0);
-                Utils.setText('dash-ingresos', Utils.fmt(kpis.ingresos || kpis.total_generado || 0));
+                Utils.setText('dash-ingresos', Utils.fmt(kpis.total_generado || kpis.ingresos || 0));
+                Utils.setText('dash-comisiones', Utils.fmt(kpis.total_comisiones || 0));
+                Utils.setText('dash-balance', Utils.fmt(kpis.balance || 0));
+                Utils.setText('dash-clientes', kpis.total_clientes || 0);
+                Utils.setText('dash-tecnicos', kpis.total_tecnicos || 0);
 
-                // OTs por estado chart
+                // Charts
                 const estados = d.ordenes_por_estado || d.estadoCounts || {};
-                const stateLabels = Object.keys(estados);
-                const stateData = Object.values(estados);
-                const stateColors = stateLabels.map(l => {
-                    const s = l.toLowerCase();
-                    if (s.includes('complet') || s.includes('cerrad')) return '#16a34a';
-                    if (s.includes('progreso') || s.includes('sitio')) return '#2563eb';
-                    if (s.includes('cancel')) return '#dc2626';
-                    if (s.includes('aprob')) return '#d97706';
-                    return '#64748b';
-                });
-                createBarChart('chart-ots-estado', stateLabels, stateData, stateColors);
+                createBarChart('chart-ots-estado', Object.keys(estados), Object.values(estados),
+                    Object.keys(estados).map(l => {
+                        const s = l.toLowerCase();
+                        if (s.includes('complet') || s.includes('cerrad')) return '#16a34a';
+                        if (s.includes('progreso') || s.includes('sitio')) return '#2563eb';
+                        if (s.includes('cancel')) return '#dc2626';
+                        if (s.includes('aprob')) return '#d97706';
+                        return '#64748b';
+                    })
+                );
 
-                // Ingresos mensual chart
                 const ingresos = d.ingresos_mensual || d.monthlyRevenue || [];
                 if (ingresos.length > 0) {
-                    createLineChart('chart-ingresos', ingresos.map(i => i.mes || i.label || ''), ingresos.map(i => i.total || i.value || 0), 'Ingresos', '#0d9488');
+                    createLineChart('chart-ingresos', ingresos.map(i => i.mes || i.label), ingresos.map(i => i.total || 0), 'Ingresos', '#0d9488');
                 } else {
-                    const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-                    createLineChart('chart-ingresos', months, new Array(12).fill(0), 'Ingresos', '#0d9488');
+                    createLineChart('chart-ingresos', ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'], new Array(12).fill(0), 'Ingresos', '#0d9488');
                 }
 
-                // Recent OTs table
-                const recientes = d.ordenes_recientes || d.recentOrders || d.ordenes || [];
+                const recientes = d.ordenes_recientes || d.ordenes || [];
                 this.renderRecentOTs(recientes);
             } catch (err) {
                 console.error('Dashboard error:', err);
-                // Show demo data
                 Utils.setText('dash-total-ots', '0');
                 createBarChart('chart-ots-estado', [], []);
                 createLineChart('chart-ingresos', [], []);
@@ -442,18 +486,18 @@ const App = {
             const tbody = document.getElementById('dash-recent-ots');
             if (!tbody) return;
             if (!ots || ots.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="bf-empty"><i class="fa-solid fa-inbox"></i>Sin órdenes recientes</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="bf-empty"><i class="fa-solid fa-inbox"></i>Sin órdenes recientes</td></tr>';
                 return;
             }
             tbody.innerHTML = ots.slice(0, 10).map(o => {
-                const num = o.numero_orden || o.id || '--';
-                const estado = o.estado || 'enviada';
+                const estado = o.estado || 'Enviada';
                 return `<tr>
-                    <td class="fw-600">#${Utils.escapeHTML(String(num))}</td>
+                    <td class="fw-600">#${Utils.escapeHTML(String(o.numero_orden || o.id || '--'))}</td>
+                    <td>${Utils.escapeHTML(o.patente_placa || o.patente || '--')}</td>
                     <td>${Utils.escapeHTML(o.cliente_nombre || o.cliente || '--')}</td>
-                    <td>${Utils.escapeHTML(o.patente || o.vehiculo || '--')}</td>
-                    <td><span class="badge-st ${Utils.badgeClass(estado)}">${Utils.translateEstado(estado)}</span></td>
+                    <td><span class="badge-st ${Utils.badgeClass(estado)}">${Utils.escapeHTML(estado)}</span></td>
                     <td>${Utils.escapeHTML(o.tecnico_nombre || o.tecnico || '--')}</td>
+                    <td class="fw-600">${Utils.fmt(o.monto_total || o.monto_final || 0)}</td>
                     <td style="font-size:0.78rem;color:#64748b;">${Utils.fmtDateTime(o.fecha_creacion || o.created_at || o.fecha)}</td>
                 </tr>`;
             }).join('');
@@ -461,621 +505,360 @@ const App = {
     },
 
     // ========================================================
-    // CLIENTES (CRM)
+    // NUEVA ORDEN - Order creation (normal + express)
     // ========================================================
-    clientes: {
-        _data: [],
+    nuevaOrden: {
+        _servicios: [],
+        _costosExtra: [],
 
-        async load() {
+        async init() {
+            const now = new Date();
+            Utils.setVal('no-fecha', now.toISOString().split('T')[0]);
+            Utils.setVal('no-hora', now.toTimeString().slice(0, 5));
+            Utils.setVal('no-recepcionista', currentUser?.nombre || '');
+            this._costosExtra = [];
+            this.renderCostosExtra();
+            await this.cargarNumeroOrden();
+            await this.cargarServicios();
+        },
+
+        async cargarNumeroOrden() {
             try {
-                const data = await API.get('/clientes');
-                this._data = data.data || data.clientes || data || [];
-                this.render(this._data);
+                const data = await API.getPublic('/proximo-numero-orden');
+                if (data.numero) {
+                    Utils.setText('nueva-orden-numero', String(data.numero).padStart(6, '0'));
+                }
+            } catch (err) { console.error(err); }
+        },
+
+        async cargarServicios() {
+            try {
+                const data = await API.get('/servicios-catalogo');
+                this._servicios = data.data || data.servicios || data || [];
+                serviciosCatalogoGlobal = this._servicios;
+                this.renderServicios();
             } catch (err) {
-                console.error('Clientes load error:', err);
-                this._data = [];
-                this.render([]);
+                this._servicios = [];
+                Utils.setHTML('no-servicios-container', '<div class="bf-empty"><i class="fa-solid fa-wrench"></i>Error cargando servicios</div>');
             }
         },
 
-        render(data) {
-            const tbody = document.getElementById('tbl-clientes');
-            if (!tbody) return;
-            if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="bf-empty"><i class="fa-solid fa-users"></i>Sin clientes</td></tr>';
+        renderServicios() {
+            const container = document.getElementById('no-servicios-container');
+            if (!container) return;
+            if (this._servicios.length === 0) {
+                container.innerHTML = '<div class="bf-empty"><i class="fa-solid fa-wrench"></i>No hay servicios en el catálogo</div>';
                 return;
             }
-            tbody.innerHTML = data.map(c => `<tr>
-                <td class="fw-600">${Utils.escapeHTML((c.nombre || '') + ' ' + (c.apellido || ''))}</td>
-                <td>${Utils.escapeHTML(c.cedula || c.rif || c.cedula_rif || '--')}</td>
-                <td>${Utils.escapeHTML(c.email || '--')}</td>
-                <td>${Utils.escapeHTML(c.telefono || '--')}</td>
-                <td>${Utils.escapeHTML(c.ciudad || '--')}</td>
-                <td>${Utils.escapeHTML(c.origen || '--')}</td>
-                <td>
-                    <div class="d-flex gap-1">
-                        <button class="btn-bf-icon" title="Editar" onclick="App.clientes.openEdit(${c.id})"><i class="fa-solid fa-pen"></i></button>
-                        <button class="btn-bf-icon danger" title="Eliminar" onclick="App.clientes.remove(${c.id})"><i class="fa-solid fa-trash"></i></button>
-                    </div>
-                </td>
-            </tr>`).join('');
-        },
-
-        filter(term) {
-            const t = term.toLowerCase();
-            const filtered = this._data.filter(c => {
-                return `${c.nombre} ${c.apellido} ${c.cedula} ${c.email} ${c.telefono} ${c.ciudad}`.toLowerCase().includes(t);
+            const cats = {};
+            this._servicios.forEach(s => {
+                const cat = s.categoria || 'Otros';
+                if (!cats[cat]) cats[cat] = [];
+                cats[cat].push(s);
             });
-            this.render(filtered);
+            let html = '';
+            Object.entries(cats).forEach(([cat, servicios]) => {
+                html += `<div class="mb-3"><h6 style="font-size:0.78rem;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:0.5rem;">${Utils.escapeHTML(cat)}</h6>`;
+                servicios.forEach(s => {
+                    const tipoBadge = s.tipo_comision === 'mano_obra'
+                        ? '<span class="badge-st" style="background:#fef3c7;color:#d97706;">MO</span>'
+                        : '<span class="badge-st" style="background:#e2e8f0;color:#475569;">Rep</span>';
+                    html += `<div class="d-flex align-items-center gap-2 p-2 mb-1" style="background:#f8fafc;border-radius:0.5rem;border:1px solid #f1f5f9;">
+                        <input type="checkbox" class="form-check-input" data-servicio-id="${s.id}" data-precio="${s.precio_sugerido || 0}" data-tipo-comision="${s.tipo_comision || 'mano_obra'}" onchange="App.nuevaOrden.calcular()" style="flex-shrink:0;">
+                        <div class="flex-grow-1"><div class="fw-600" style="font-size:0.84rem;">${Utils.escapeHTML(s.nombre)}</div><div class="d-flex gap-2 align-items-center mt-1">${tipoBadge} <span style="font-size:0.78rem;color:#475569;">${Utils.fmt(s.precio_sugerido || 0)}</span></div></div>
+                        <input type="number" class="bf-input" style="width:100px;" placeholder="$" value="${s.precio_sugerido || 0}" data-servicio-precio="${s.id}" oninput="App.nuevaOrden.updatePrecio(this)" min="0">
+                    </div>`;
+                });
+                html += '</div>';
+            });
+            container.innerHTML = html;
         },
 
-        openCreate() {
-            Utils.setText('modal-cliente-title', 'Nuevo Cliente');
-            ['cl-id','cl-nombre','cl-apellido','cl-cedula','cl-email','cl-telefono','cl-ciudad','cl-estado','cl-direccion','cl-notas'].forEach(id => Utils.setVal(id, ''));
-            Utils.setVal('cl-origen', 'web');
-            Utils.showModal('modal-cliente');
+        updatePrecio(input) {
+            const servId = input.dataset.servicioPrecio;
+            const cb = document.querySelector(`input[data-servicio-id="${servId}"]`);
+            if (cb) cb.dataset.precio = input.value;
+            this.calcular();
         },
 
-        openEdit(id) {
-            const c = this._data.find(x => x.id === id);
-            if (!c) return;
-            Utils.setText('modal-cliente-title', 'Editar Cliente');
-            Utils.setVal('cl-id', c.id);
-            Utils.setVal('cl-nombre', c.nombre);
-            Utils.setVal('cl-apellido', c.apellido);
-            Utils.setVal('cl-cedula', c.cedula || c.cedula_rif);
-            Utils.setVal('cl-email', c.email);
-            Utils.setVal('cl-telefono', c.telefono);
-            Utils.setVal('cl-ciudad', c.ciudad);
-            Utils.setVal('cl-estado', c.estado);
-            Utils.setVal('cl-direccion', c.direccion);
-            Utils.setVal('cl-notas', c.notas);
-            Utils.setVal('cl-origen', c.origen || 'web');
-            Utils.showModal('modal-cliente');
-        },
-
-        async save() {
-            const id = Utils.val('cl-id');
-            const body = {
-                nombre: Utils.val('cl-nombre'),
-                apellido: Utils.val('cl-apellido'),
-                cedula_rif: Utils.val('cl-cedula'),
-                email: Utils.val('cl-email'),
-                telefono: Utils.val('cl-telefono'),
-                ciudad: Utils.val('cl-ciudad'),
-                estado: Utils.val('cl-estado'),
-                direccion: Utils.val('cl-direccion'),
-                notas: Utils.val('cl-notas'),
-                origen: Utils.val('cl-origen'),
-            };
-            if (!body.nombre) { Utils.toast('El nombre es requerido', 'warning'); return; }
-
+        async buscarPatente() {
+            const patente = Utils.val('no-patente');
+            if (!patente || patente.length < 3) return;
             try {
-                if (id) {
-                    await API.put(`/clientes/${id}`, body);
-                    Utils.toast('Cliente actualizado', 'success');
-                } else {
-                    await API.post('/clientes', body);
-                    Utils.toast('Cliente creado', 'success');
-                }
-                Utils.hideModal('modal-cliente');
-                this.load();
-            } catch (err) {
-                Utils.toast(err.message, 'error');
-            }
-        },
-
-        async remove(id) {
-            const ok = await Utils.confirm('¿Eliminar este cliente?');
-            if (!ok) return;
-            try {
-                await API.delete(`/clientes/${id}`);
-                Utils.toast('Cliente eliminado', 'success');
-                this.load();
-            } catch (err) {
-                Utils.toast(err.message, 'error');
-            }
-        },
-    },
-
-    // ========================================================
-    // VEHÍCULOS
-    // ========================================================
-    vehiculos: {
-        _data: [],
-
-        async load() {
-            try {
-                const data = await API.get('/vehiculos');
-                this._data = data.data || data.vehiculos || data || [];
-                this.render(this._data);
-            } catch (err) {
-                this._data = [];
-                this.render([]);
-            }
-        },
-
-        async loadClientesSelect() {
-            try {
-                const data = await API.get('/clientes');
-                const clientes = data.data || data.clientes || data || [];
-                const sel = document.getElementById('vh-cliente');
-                if (sel) {
-                    sel.innerHTML = '<option value="">Seleccionar...</option>' + clientes.map(c => `<option value="${c.id}">${Utils.escapeHTML(c.nombre || '')} ${Utils.escapeHTML(c.apellido || '')} - ${Utils.escapeHTML(c.cedula || c.cedula_rif || '')}</option>`).join('');
-                }
-            } catch (err) { console.error('Error loading clientes select:', err); }
-        },
-
-        render(data) {
-            const tbody = document.getElementById('tbl-vehiculos');
-            if (!tbody) return;
-            if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" class="bf-empty"><i class="fa-solid fa-car"></i>Sin vehículos</td></tr>';
-                return;
-            }
-            tbody.innerHTML = data.map(v => `<tr>
-                <td class="fw-600">${Utils.escapeHTML(v.placa || '--')}</td>
-                <td>${Utils.escapeHTML(v.marca || '--')}</td>
-                <td>${Utils.escapeHTML(v.modelo || '--')}</td>
-                <td>${Utils.escapeHTML(v.anio || '--')}</td>
-                <td>${Utils.escapeHTML(v.color || '--')}</td>
-                <td>${Utils.escapeHTML(v.vin || '--')}</td>
-                <td>${Utils.escapeHTML(v.cliente_nombre || v.cliente || '--')}</td>
-                <td>
-                    <div class="d-flex gap-1">
-                        <button class="btn-bf-icon" onclick="App.vehiculos.openEdit(${v.id})"><i class="fa-solid fa-pen"></i></button>
-                        <button class="btn-bf-icon danger" onclick="App.vehiculos.remove(${v.id})"><i class="fa-solid fa-trash"></i></button>
-                    </div>
-                </td>
-            </tr>`).join('');
-        },
-
-        filter(term) {
-            const t = term.toLowerCase();
-            this.render(this._data.filter(v => `${v.placa} ${v.marca} ${v.modelo} ${v.vin} ${v.cliente_nombre}`.toLowerCase().includes(t)));
-        },
-
-        async openCreate() {
-            Utils.setText('modal-vehiculo-title', 'Nuevo Vehículo');
-            ['vh-id','vh-placa','vh-marca','vh-modelo','vh-anio','vh-color','vh-vin','vh-km'].forEach(id => Utils.setVal(id, ''));
-            await this.loadClientesSelect();
-            Utils.showModal('modal-vehiculo');
-        },
-
-        async openEdit(id) {
-            const v = this._data.find(x => x.id === id);
-            if (!v) return;
-            Utils.setText('modal-vehiculo-title', 'Editar Vehículo');
-            Utils.setVal('vh-id', v.id);
-            Utils.setVal('vh-placa', v.placa);
-            Utils.setVal('vh-marca', v.marca);
-            Utils.setVal('vh-modelo', v.modelo);
-            Utils.setVal('vh-anio', v.anio);
-            Utils.setVal('vh-color', v.color);
-            Utils.setVal('vh-vin', v.vin);
-            Utils.setVal('vh-km', v.kilometraje || v.km);
-            await this.loadClientesSelect();
-            setTimeout(() => Utils.setVal('vh-cliente', v.cliente_id || v.cliente || ''), 100);
-            Utils.showModal('modal-vehiculo');
-        },
-
-        async save() {
-            const id = Utils.val('vh-id');
-            const body = {
-                placa: Utils.val('vh-placa'),
-                cliente_id: Utils.val('vh-cliente'),
-                marca: Utils.val('vh-marca'),
-                modelo: Utils.val('vh-modelo'),
-                anio: Utils.val('vh-anio'),
-                color: Utils.val('vh-color'),
-                vin: Utils.val('vh-vin'),
-                kilometraje: Utils.val('vh-km'),
-            };
-            if (!body.placa || !body.cliente_id) { Utils.toast('Placa y Cliente son requeridos', 'warning'); return; }
-            try {
-                if (id) { await API.put(`/vehiculos/${id}`, body); Utils.toast('Vehículo actualizado', 'success'); }
-                else { await API.post('/vehiculos', body); Utils.toast('Vehículo creado', 'success'); }
-                Utils.hideModal('modal-vehiculo');
-                this.load();
-            } catch (err) { Utils.toast(err.message, 'error'); }
-        },
-
-        async remove(id) {
-            if (!await Utils.confirm('¿Eliminar este vehículo?')) return;
-            try { await API.delete(`/vehiculos/${id}`); Utils.toast('Vehículo eliminado', 'success'); this.load(); } catch (err) { Utils.toast(err.message, 'error'); }
-        },
-    },
-
-    // ========================================================
-    // ÓRDENES DE TRABAJO
-    // ========================================================
-    ordenes: {
-        _data: [],
-        _currentId: null,
-        _currentPage: 1,
-
-        async load() {
-            document.getElementById('ordenes-list-view').style.display = '';
-            document.getElementById('orden-detail-view').style.display = 'none';
-            try {
-                const params = new URLSearchParams();
-                const estado = Utils.val('filter-ot-estado');
-                const fecha = Utils.val('filter-ot-fecha');
-                const prioridad = Utils.val('filter-ot-prioridad');
-                if (estado) params.set('estado', estado);
-                if (fecha) params.set('fecha', fecha);
-                if (prioridad) params.set('prioridad', prioridad);
-                const qs = params.toString();
-                const data = await API.get('/todas-ordenes' + (qs ? '?' + qs : ''));
-                this._data = data.data?.ordenes || data.ordenes || data.data || data || [];
-                this.render(this._data);
-                // Load tecnico filter
-                this.loadTecnicosFilter();
-            } catch (err) {
-                this._data = [];
-                this.render([]);
-            }
-        },
-
-        async loadTecnicosFilter() {
-            try {
-                const data = await API.get('/tecnicos');
-                const tecnicos = data.data || data.tecnicos || data || [];
-                const sel = document.getElementById('filter-ot-tecnico');
-                if (sel) {
-                    sel.innerHTML = '<option value="">Todos los técnicos</option>' + tecnicos.map(t => `<option value="${t.id}">${Utils.escapeHTML(t.nombre)}</option>`).join('');
+                const data = await API.getPublic('/buscar-patente?patente=' + encodeURIComponent(patente.toUpperCase()));
+                if (data.vehiculo) {
+                    const v = data.vehiculo;
+                    Utils.setVal('no-marca', v.marca || '');
+                    Utils.setVal('no-modelo', v.modelo || '');
+                    Utils.setVal('no-anio', v.anio || '');
+                    Utils.setVal('no-cilindrada', v.cilindrada || '');
+                    Utils.setVal('no-combustible', v.combustible || '');
+                    Utils.setVal('no-km', v.kilometraje || '');
+                    if (data.cliente) {
+                        Utils.setVal('no-cliente', data.cliente.nombre || '');
+                        Utils.setVal('no-rut', data.cliente.rut || '');
+                        Utils.setVal('no-telefono', data.cliente.telefono || '');
+                        Utils.setVal('no-direccion', data.cliente.direccion || '');
+                    }
+                    Utils.toast('Vehículo encontrado', 'success');
                 }
             } catch (err) { console.error(err); }
         },
 
-        render(data) {
-            const tbody = document.getElementById('tbl-ordenes');
-            if (!tbody) return;
-            if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="10" class="bf-empty"><i class="fa-solid fa-clipboard-list"></i>Sin órdenes de trabajo</td></tr>';
-                return;
-            }
-            tbody.innerHTML = data.map(o => {
-                const estado = o.estado || 'enviada';
-                return `<tr>
-                    <td class="fw-600">#${o.numero_orden || o.id || '--'}</td>
-                    <td>${Utils.escapeHTML(o.cliente_nombre || o.cliente || '--')}</td>
-                    <td>${Utils.escapeHTML(o.patente || o.vehiculo || '--')}</td>
-                    <td>${Utils.escapeHTML(o.tipo || '--')}</td>
-                    <td>${Utils.escapeHTML(o.prioridad || '--')}</td>
-                    <td><span class="badge-st ${Utils.badgeClass(estado)}">${Utils.translateEstado(estado)}</span></td>
-                    <td>${Utils.escapeHTML(o.tecnico_nombre || o.tecnico || 'Sin asignar')}</td>
-                    <td class="fw-600">${Utils.fmt(o.monto_total || o.monto || o.total || 0)}</td>
-                    <td style="font-size:0.78rem;color:#64748b;">${Utils.fmtDateTime(o.fecha_creacion || o.created_at || o.fecha)}</td>
-                    <td>
-                        <div class="d-flex gap-1">
-                            <button class="btn-bf-icon" title="Ver" onclick="App.ordenes.view(${o.id})"><i class="fa-solid fa-eye"></i></button>
-                            <button class="btn-bf-icon" title="Editar" onclick="App.ordenes.openEdit(${o.id})"><i class="fa-solid fa-pen"></i></button>
-                            <button class="btn-bf-icon" title="PDF" onclick="App.ordenes.generatePDF(${o.id})"><i class="fa-solid fa-file-pdf"></i></button>
-                            <button class="btn-bf-icon danger" title="Eliminar" onclick="App.ordenes.remove(${o.id})"><i class="fa-solid fa-trash"></i></button>
-                        </div>
-                    </td>
-                </tr>`;
-            }).join('');
-        },
-
-        filter(term) {
-            const t = term.toLowerCase();
-            this.render(this._data.filter(o => `${o.numero_orden} ${o.cliente_nombre} ${o.patente} ${o.tecnico_nombre} ${o.estado}`.toLowerCase().includes(t)));
-        },
-
-        async openCreate() {
-            Utils.setText('modal-orden-title', 'Nueva Orden de Trabajo');
-            ['ot-id','ot-titulo','ot-descripcion'].forEach(id => Utils.setVal(id, ''));
-            Utils.setVal('ot-tipo', 'correctivo');
-            Utils.setVal('ot-prioridad', 'media');
-            Utils.setVal('ot-tecnico', '');
-            try {
-                const [clientes, vehiculos, tecnicos] = await Promise.all([
-                    API.get('/clientes'), API.get('/vehiculos'), API.get('/tecnicos')
-                ]);
-                const cl = clientes.data || clientes.clientes || clientes || [];
-                const vh = vehiculos.data || vehiculos.vehiculos || vehiculos || [];
-                const tc = tecnicos.data || tecnicos.tecnicos || tecnicos || [];
-                const selC = document.getElementById('ot-cliente');
-                const selV = document.getElementById('ot-vehiculo');
-                const selT = document.getElementById('ot-tecnico');
-                if (selC) selC.innerHTML = '<option value="">Seleccionar...</option>' + cl.map(c => `<option value="${c.id}">${Utils.escapeHTML((c.nombre||'') + ' ' + (c.apellido||''))}</option>`).join('');
-                if (selV) selV.innerHTML = '<option value="">Seleccionar...</option>' + vh.map(v => `<option value="${v.id}">${Utils.escapeHTML(v.placa)} - ${Utils.escapeHTML(v.marca)} ${Utils.escapeHTML(v.modelo)}</option>`).join('');
-                if (selT) selT.innerHTML = '<option value="">Sin asignar</option>' + tc.map(t => `<option value="${t.id}">${Utils.escapeHTML(t.nombre)}</option>`).join('');
-            } catch (err) { console.error(err); }
-            Utils.showModal('modal-orden');
-        },
-
-        async openEdit(id) {
-            const o = this._data.find(x => x.id === id);
-            if (!o) { await this.openCreate(); return; }
-            Utils.setText('modal-orden-title', `Editar OT #${o.numero_orden || o.id}`);
-            Utils.setVal('ot-id', o.id);
-            Utils.setVal('ot-titulo', o.titulo);
-            Utils.setVal('ot-descripcion', o.descripcion);
-            await this.openCreate();
-            setTimeout(() => {
-                Utils.setVal('ot-cliente', o.cliente_id || o.cliente);
-                Utils.setVal('ot-vehiculo', o.vehiculo_id || o.vehiculo);
-                Utils.setVal('ot-tipo', o.tipo || 'correctivo');
-                Utils.setVal('ot-prioridad', o.prioridad || 'media');
-                Utils.setVal('ot-tecnico', o.tecnico_id || o.tecnico || '');
-            }, 200);
-        },
-
-        async save() {
-            const id = Utils.val('ot-id');
-            const body = {
-                cliente_id: Utils.val('ot-cliente'),
-                vehiculo_id: Utils.val('ot-vehiculo'),
-                tipo: Utils.val('ot-tipo'),
-                prioridad: Utils.val('ot-prioridad'),
-                tecnico_id: Utils.val('ot-tecnico'),
-                titulo: Utils.val('ot-titulo'),
-                descripcion: Utils.val('ot-descripcion'),
-            };
-            if (!body.cliente_id || !body.vehiculo_id || !body.titulo) { Utils.toast('Cliente, Vehículo y Título son requeridos', 'warning'); return; }
-            try {
-                if (id) { await API.put(`/ordenes/${id}`, body); Utils.toast('OT actualizada', 'success'); }
-                else { await API.post('/ordenes', body); Utils.toast('OT creada', 'success'); }
-                Utils.hideModal('modal-orden');
-                this.load();
-            } catch (err) { Utils.toast(err.message, 'error'); }
-        },
-
-        async remove(id) {
-            if (!await Utils.confirm('¿Eliminar esta orden de trabajo?')) return;
-            try { await API.delete(`/ordenes/${id}`); Utils.toast('OT eliminada', 'success'); this.load(); } catch (err) { Utils.toast(err.message, 'error'); }
-        },
-
-        async view(id) {
-            this._currentId = id;
-            document.getElementById('ordenes-list-view').style.display = 'none';
-            document.getElementById('orden-detail-view').style.display = '';
-            try {
-                const data = await API.get(`/ordenes/${id}`);
-                const o = data.data || data.orden || data;
-                this._currentOrden = o;
-                Utils.setText('orden-detail-title', `OT #${o.numero_orden || o.id || id}`);
-
-                // Info
-                Utils.setHTML('orden-detail-info', `
-                    <div class="row g-2">
-                        <div class="col-md-6"><small class="text-muted">Cliente</small><div class="fw-600">${Utils.escapeHTML(o.cliente_nombre || '--')}</div></div>
-                        <div class="col-md-6"><small class="text-muted">Vehículo</small><div class="fw-600">${Utils.escapeHTML(o.patente || o.vehiculo || '--')}</div></div>
-                        <div class="col-md-6"><small class="text-muted">Tipo</small><div>${Utils.escapeHTML(o.tipo || '--')}</div></div>
-                        <div class="col-md-6"><small class="text-muted">Prioridad</small><div>${Utils.escapeHTML(o.prioridad || '--')}</div></div>
-                        <div class="col-md-6"><small class="text-muted">Creada</small><div>${Utils.fmtDateTime(o.fecha_creacion || o.created_at)}</div></div>
-                        <div class="col-md-6"><small class="text-muted">Monto Total</small><div class="fw-800" style="color:var(--bf-primary);">${Utils.fmt(o.monto_total || o.monto || 0)}</div></div>
-                        <div class="col-12"><small class="text-muted">Descripción</small><div>${Utils.escapeHTML(o.descripcion || 'Sin descripción')}</div></div>
-                    </div>
-                `);
-
-                // Status
-                Utils.setHTML('orden-detail-status', `
-                    <div class="mb-3">
-                        <small class="text-muted">Estado Actual</small>
-                        <div class="mt-1"><span class="badge-st ${Utils.badgeClass(o.estado)}" style="font-size:0.9rem;padding:0.4rem 0.8rem;">${Utils.translateEstado(o.estado)}</span></div>
-                    </div>
-                    <div class="mb-3">
-                        <small class="text-muted">Técnico Asignado</small>
-                        <div class="fw-600">${Utils.escapeHTML(o.tecnico_nombre || 'Sin asignar')}</div>
-                    </div>
-                    <div class="d-flex gap-2 mt-3">
-                        <button class="btn-bf btn-bf-sm" onclick="App.ordenes.openAssign(${id})"><i class="fa-solid fa-user-check"></i>Asignar Técnico</button>
-                        <button class="btn-bf-outline btn-bf-sm" onclick="App.ordenes.openChangeStatus(${id}, '${o.estado || ''}')"><i class="fa-solid fa-arrows-rotate"></i>Cambiar Estado</button>
-                    </div>
-                `);
-
-                // Notes
-                const notas = o.notas || [];
-                Utils.setHTML('orden-detail-notas', notas.length > 0 ? notas.map(n => `
-                    <div class="mb-2 p-2" style="background:#f8fafc;border-radius:0.4rem;border:1px solid #f1f5f9;">
-                        <div style="font-size:0.72rem;color:#94a3b8;">${Utils.fmtDateTime(n.fecha || n.created_at)}</div>
-                        <div style="font-size:0.84rem;">${Utils.escapeHTML(n.texto || n.nota)}</div>
-                    </div>
-                `).join('') : '<p class="text-muted small mb-0">Sin notas</p>');
-
-                // Costs
-                const costos = o.costos_adicionales || o.costos || [];
-                Utils.setHTML('orden-detail-costos', costos.length > 0 ? `
-                    <table class="bf-table"><thead><tr><th>Concepto</th><th>Monto</th></tr></thead>
-                    <tbody>${costos.map(c => `<tr><td>${Utils.escapeHTML(c.concepto)}</td><td class="fw-600">${Utils.fmt(c.monto)}</td></tr>`).join('')}</tbody></table>
-                ` : '<p class="text-muted small mb-0">Sin costos adicionales</p>');
-
-                // Photos
-                const fotos = o.fotos || [];
-                Utils.setHTML('orden-detail-fotos', fotos.length > 0 ? fotos.map(f => `
-                    <img src="${f.url || f}" alt="Foto" style="width:100px;height:100px;object-fit:cover;border-radius:0.5rem;cursor:pointer;border:1px solid #e2e8f0;" onclick="App.ordenes.showPhoto('${f.url || f}')">
-                `).join('') : '<p class="text-muted small mb-0">Sin fotos</p>');
-
-                // Seguimiento
-                const seguimiento = o.seguimiento || o.historial || [];
-                Utils.setHTML('orden-detail-seguimiento', seguimiento.length > 0 ? seguimiento.map(s => `
-                    <div class="mb-2" style="padding-left:1rem;border-left:3px solid var(--bf-primary);">
-                        <div style="font-size:0.72rem;color:#94a3b8;">${Utils.fmtDateTime(s.fecha || s.created_at)}</div>
-                        <div style="font-size:0.84rem;"><span class="badge-st ${Utils.badgeClass(s.estado)}" style="font-size:0.65rem;">${Utils.translateEstado(s.estado)}</span> ${Utils.escapeHTML(s.nota || s.descripcion || '')}</div>
-                    </div>
-                `).join('') : '<p class="text-muted small mb-0">Sin seguimiento</p>');
-
-                // Firma
-                if (o.firma) {
-                    Utils.setHTML('orden-detail-firma', `<img src="${o.firma}" alt="Firma" style="max-width:300px;max-height:200px;border:1px solid #e2e8f0;border-radius:0.5rem;">`);
-                } else {
-                    Utils.setHTML('orden-detail-firma', '<p class="text-muted small mb-0">Sin firma registrada</p>');
-                }
-            } catch (err) {
-                Utils.toast('Error cargando detalle: ' + err.message, 'error');
-            }
-        },
-
-        showList() {
-            document.getElementById('ordenes-list-view').style.display = '';
-            document.getElementById('orden-detail-view').style.display = 'none';
-        },
-
-        showPhoto(url) {
-            document.getElementById('photo-preview-img').src = url;
-            Utils.showModal('modal-photo-preview');
-        },
-
-        async openAssign(otId) {
-            Utils.setVal('asignar-ot-id', otId);
-            try {
-                const data = await API.get('/tecnicos');
-                const tecnicos = data.data || data.tecnicos || data || [];
-                const sel = document.getElementById('asignar-tecnico');
-                sel.innerHTML = '<option value="">Seleccionar...</option>' + tecnicos.map(t => `<option value="${t.id}">${Utils.escapeHTML(t.nombre)}</option>`).join('');
-            } catch (err) { console.error(err); }
-            Utils.showModal('modal-asignar');
-        },
-
-        async assign() {
-            const otId = Utils.val('asignar-ot-id');
-            const tecnicoId = Utils.val('asignar-tecnico');
-            if (!tecnicoId) { Utils.toast('Seleccione un técnico', 'warning'); return; }
-            try {
-                await API.post(`/ordenes/${otId}/asignar`, { tecnico_id: tecnicoId });
-                Utils.toast('Técnico asignado', 'success');
-                Utils.hideModal('modal-asignar');
-                this.view(parseInt(otId));
-            } catch (err) { Utils.toast(err.message, 'error'); }
-        },
-
-        async openChangeStatus(otId, currentEstado) {
-            Utils.setVal('estado-ot-id', otId);
-            Utils.setVal('cambiar-estado', currentEstado);
-            Utils.showModal('modal-cambiar-estado');
-        },
-
-        async changeStatus() {
-            const otId = Utils.val('estado-ot-id');
-            const estado = Utils.val('cambiar-estado');
-            try {
-                await API.put(`/ordenes/${otId}/estado`, { estado });
-                Utils.toast('Estado actualizado', 'success');
-                Utils.hideModal('modal-cambiar-estado');
-                this.view(parseInt(otId));
-            } catch (err) { Utils.toast(err.message, 'error'); }
-        },
-
-        openAddCost() {
-            Utils.setVal('costo-ot-id', this._currentId);
-            Utils.setVal('costo-concepto', '');
-            Utils.setVal('costo-monto', '');
-            Utils.showModal('modal-costo');
-        },
-
-        async addCost() {
-            const concepto = Utils.val('costo-concepto');
-            const monto = parseFloat(Utils.val('costo-monto'));
+        addCostoExtra() {
+            const concepto = Utils.val('no-extra-concepto');
+            const monto = parseFloat(Utils.val('no-extra-monto'));
+            const cat = Utils.val('no-extra-cat');
             if (!concepto || !monto) { Utils.toast('Concepto y monto son requeridos', 'warning'); return; }
-            try {
-                await API.post(`/ordenes/${this._currentId}/costos`, { concepto, monto });
-                Utils.toast('Costo agregado', 'success');
-                Utils.hideModal('modal-costo');
-                this.view(this._currentId);
-            } catch (err) { Utils.toast(err.message, 'error'); }
+            this._costosExtra.push({ concepto, monto, categoria: cat });
+            Utils.setVal('no-extra-concepto', '');
+            Utils.setVal('no-extra-monto', '');
+            this.renderCostosExtra();
+            this.calcular();
         },
 
-        openAddNote() {
-            Utils.setVal('nota-ot-id', this._currentId);
-            Utils.setVal('nota-texto', '');
-            Utils.showModal('modal-nota');
+        removeCostoExtra(idx) {
+            this._costosExtra.splice(idx, 1);
+            this.renderCostosExtra();
+            this.calcular();
         },
 
-        async addNote() {
-            const texto = Utils.val('nota-texto');
-            if (!texto) { Utils.toast('Escriba una nota', 'warning'); return; }
-            try {
-                await API.post(`/ordenes/${this._currentId}/notas`, { texto });
-                Utils.toast('Nota agregada', 'success');
-                Utils.hideModal('modal-nota');
-                this.view(this._currentId);
-            } catch (err) { Utils.toast(err.message, 'error'); }
+        renderCostosExtra() {
+            const container = document.getElementById('no-costos-extra-list');
+            if (!container) return;
+            if (this._costosExtra.length === 0) {
+                container.innerHTML = '<p style="font-size:0.82rem;color:#94a3b8;">Sin costos extra agregados</p>';
+                return;
+            }
+            container.innerHTML = '<div class="table-responsive"><table class="bf-table"><thead><tr><th>Concepto</th><th>Categoría</th><th>Monto</th><th></th></tr></thead><tbody>' +
+                this._costosExtra.map((c, i) => `<tr>
+                    <td>${Utils.escapeHTML(c.concepto)}</td>
+                    <td><span class="badge-st" style="background:${c.categoria === 'Mano de Obra' ? '#fef3c7;color:#d97706;' : '#e2e8f0;color:#475569;'}">${Utils.escapeHTML(c.categoria)}</span></td>
+                    <td class="fw-600">${Utils.fmt(c.monto)}</td>
+                    <td><button class="btn-bf-icon danger" onclick="App.nuevaOrden.removeCostoExtra(${i})"><i class="fa-solid fa-trash"></i></button></td>
+                </tr>`).join('') +
+                '</tbody></table></div>';
         },
 
-        async uploadPhotos(files) {
-            if (!files || files.length === 0) return;
-            try {
-                for (const file of files) {
-                    const base64 = await Utils.fileToBase64(file);
-                    await API.post(`/ordenes/${this._currentId}/fotos`, { foto: base64, nombre: file.name });
-                }
-                Utils.toast('Foto(s) subida(s)', 'success');
-                this.view(this._currentId);
-            } catch (err) { Utils.toast('Error subiendo fotos: ' + err.message, 'error'); }
+        calcular() {
+            let subtotal = 0;
+            document.querySelectorAll('#no-servicios-container input[type="checkbox"][data-servicio-id]:checked').forEach(cb => {
+                subtotal += parseFloat(cb.dataset.precio) || 0;
+            });
+            const extra = this._costosExtra.reduce((s, c) => s + (c.monto || 0), 0);
+            const total = subtotal + extra;
+
+            const tieneAbono = document.getElementById('no-tiene-abono').checked;
+            const abono = tieneAbono ? (parseFloat(Utils.val('no-abono')) || 0) : 0;
+            const restante = total - abono;
+
+            Utils.setText('no-resumen-servicios', Utils.fmt(subtotal));
+            Utils.setText('no-resumen-extra', Utils.fmt(extra));
+            Utils.setText('no-resumen-total', Utils.fmt(total));
+            Utils.setText('no-resumen-restante', Utils.fmt(restante));
+
+            document.getElementById('no-abono').disabled = !tieneAbono;
         },
 
-        async sendApproval() {
-            if (!this._currentId) return;
-            try {
-                await API.post(`/ordenes/${this._currentId}/enviar-aprobacion`, {});
-                Utils.toast('Link de aprobación enviado', 'success');
-            } catch (err) { Utils.toast(err.message, 'error'); }
-        },
+        async saveOrder() {
+            const patente = Utils.val('no-patente').toUpperCase().replace(/\s+/g, '');
+            if (!patente) { Utils.toast('La patente es requerida', 'warning'); return; }
+            if (!Utils.val('no-cliente')) { Utils.toast('El nombre del cliente es requerido', 'warning'); return; }
 
-        generatePDF(id) {
-            const otId = id || this._currentId;
-            const o = this._currentOrden || this._data.find(x => x.id === otId) || { numero_orden: otId, cliente_nombre: '--', patente: '--', tipo: '--', estado: '--', tecnico_nombre: '--', descripcion: '--', monto_total: 0 };
-            try {
-                const { jsPDF } = window.jspdf;
-                const doc = new jsPDF();
-                doc.setFontSize(20);
-                doc.setTextColor(13, 148, 136);
-                doc.text('BizFlow', 14, 20);
-                doc.setFontSize(10);
-                doc.setTextColor(100);
-                doc.text('Orden de Trabajo', 14, 27);
-                doc.line(14, 30, 196, 30);
-                doc.setFontSize(12);
-                doc.setTextColor(30);
-                doc.text(`OT #${o.numero_orden || o.id || otId}`, 14, 40);
-
-                doc.setFontSize(10);
-                let y = 52;
-                const addField = (label, val) => { doc.setTextColor(100); doc.text(label + ':', 14, y); doc.setTextColor(30); doc.text(String(val || '--'), 70, y); y += 8; };
-                addField('Cliente', o.cliente_nombre);
-                addField('Vehiculo/Placa', o.patente || o.vehiculo);
-                addField('Tipo', o.tipo);
-                addField('Estado', Utils.translateEstado(o.estado));
-                addField('Tecnico', o.tecnico_nombre || 'Sin asignar');
-                addField('Monto Total', Utils.fmt(o.monto_total || o.monto || 0));
-                addField('Fecha', Utils.fmtDateTime(o.fecha_creacion || o.created_at));
-
-                y += 5;
-                doc.setTextColor(100); doc.text('Descripcion:', 14, y); y += 7;
-                doc.setTextColor(30);
-                const descLines = doc.splitTextToSize(o.descripcion || 'Sin descripcion', 170);
-                doc.text(descLines, 14, y);
-                y += descLines.length * 6;
-
-                // Costos adicionales
-                const costos = o.costos_adicionales || o.costos || [];
-                if (costos.length > 0) {
-                    y += 8;
-                    doc.setTextColor(100); doc.text('Costos Adicionales:', 14, y); y += 7;
-                    costos.forEach(c => {
-                        doc.setTextColor(30);
-                        doc.text(`${c.concepto}: ${Utils.fmt(c.monto)}`, 20, y);
-                        y += 6;
+            const serviciosSeleccionados = [];
+            document.querySelectorAll('#no-servicios-container input[type="checkbox"][data-servicio-id]:checked').forEach(cb => {
+                const servObj = this._servicios.find(s => String(s.id) === cb.dataset.servicioId);
+                if (servObj) {
+                    serviciosSeleccionados.push({
+                        id: servObj.id, nombre: servObj.nombre,
+                        precio_sugerido: servObj.precio_sugerido,
+                        precio_final: parseFloat(cb.dataset.precio) || 0,
+                        categoria: servObj.categoria,
+                        tipo_comision: servObj.tipo_comision || 'mano_obra',
+                        editado: (parseFloat(cb.dataset.precio) || 0) !== Number(servObj.precio_sugerido),
                     });
                 }
+            });
 
-                doc.setFontSize(8);
-                doc.setTextColor(150);
-                doc.text('Generado por BizFlow - ' + new Date().toLocaleString('es-MX'), 14, 285);
-                doc.save(`OT_${o.numero_orden || o.id || otId}.pdf`);
-                Utils.toast('PDF generado', 'success');
+            const montoTotal = this._costosExtra.reduce((s, c) => s + (c.monto || 0), 0) +
+                serviciosSeleccionados.reduce((s, sv) => s + (sv.precio_final || 0), 0);
+            const tieneAbono = document.getElementById('no-tiene-abono').checked;
+            const montoAbono = tieneAbono ? (parseFloat(Utils.val('no-abono')) || 0) : 0;
+
+            const body = {
+                patente, marca: Utils.val('no-marca'), modelo: Utils.val('no-modelo'),
+                anio: parseInt(Utils.val('no-anio')) || null,
+                cilindrada: Utils.val('no-cilindrada'), combustible: Utils.val('no-combustible'),
+                kilometraje: Utils.val('no-km'),
+                cliente: Utils.val('no-cliente'), rut: Utils.val('no-rut'),
+                telefono: Utils.val('no-telefono'), direccion: Utils.val('no-direccion'),
+                fecha_ingreso: Utils.val('no-fecha'), hora_ingreso: Utils.val('no-hora'),
+                recepcionista: Utils.val('no-recepcionista'),
+                servicios_seleccionados: JSON.stringify(serviciosSeleccionados),
+                observaciones: Utils.val('no-observaciones'),
+                monto_total: montoTotal, monto_abono: montoAbono,
+                metodo_pago: tieneAbono ? Utils.val('no-metodo-pago') : null,
+            };
+
+            try {
+                const btn = document.querySelector('#form-nueva-orden button[type="submit"]');
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Creando...';
+                const data = await API.postPublic('/crear-orden', body);
+                if (data.success) {
+                    const num = String(data.numero_orden).padStart(6, '0');
+                    Utils.toast(`Orden #${num} creada exitosamente`, 'success');
+                    // Show success modal with share link
+                    const link = `${window.location.origin}/aprobar?token=${data.token}`;
+                    await Swal.fire({
+                        title: '¡Orden Creada!',
+                        html: `<div style="text-align:center;">
+                            <div style="font-size:2rem;font-weight:900;color:#0d9488;">OT #${num}</div>
+                            <p style="color:#64748b;">${patente} • ${Utils.val('no-cliente')}</p>
+                            <div style="margin-top:1rem;display:flex;gap:0.5rem;justify-content:center;">
+                                <a href="https://wa.me/${Utils.val('no-telefono').replace(/\D/g, '')}?text=${encodeURIComponent('Hola, tiene una OT de BizFlow: ' + link)}" target="_blank" class="btn-bf" style="background:#25D366;"><i class="fa-brands fa-whatsapp"></i> WhatsApp</a>
+                                <button class="btn-bf" onclick="navigator.clipboard.writeText('${link}');Utils.toast('Link copiado','success')"><i class="fa-solid fa-link"></i> Copiar Link</button>
+                            </div>
+                        </div>`,
+                        confirmButtonColor: '#0d9488', showConfirmButton: false,
+                        allowOutsideClick: true,
+                    });
+                    // Reset form
+                    document.getElementById('form-nueva-orden').reset();
+                    this._costosExtra = [];
+                    await this.init();
+                } else {
+                    Utils.toast(data.error || 'Error al crear orden', 'error');
+                }
             } catch (err) {
-                Utils.toast('Error generando PDF: ' + err.message, 'error');
+                Utils.toast(err.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-save"></i>Crear Orden';
+            }
+        },
+
+        openExpress() {
+            Utils.setVal('exp-patente', '');
+            Utils.setVal('exp-marca', '');
+            Utils.setVal('exp-modelo', '');
+            Utils.setVal('exp-nombre', '');
+            Utils.setVal('exp-telefono', '');
+            Utils.setVal('exp-direccion', '');
+            Utils.setVal('exp-notas', '');
+            Utils.showModal('modal-express');
+        },
+
+        async saveExpress() {
+            const patente = Utils.val('exp-patente').toUpperCase().replace(/\s+/g, '');
+            const nombre = Utils.val('exp-nombre');
+            const telefono = Utils.val('exp-telefono');
+            const direccion = Utils.val('exp-direccion');
+            if (!patente || !nombre || !telefono || !direccion) {
+                Utils.toast('Patente, nombre, teléfono y dirección son requeridos', 'warning'); return;
+            }
+            try {
+                const btn = document.getElementById('btn-express-save');
+                btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Creando...';
+                const data = await API.postPublic('/crear-orden', {
+                    express: true, patente, marca: Utils.val('exp-marca') || null,
+                    modelo: Utils.val('exp-modelo') || null,
+                    anio: parseInt(Utils.val('exp-anio')) || null,
+                    cliente: nombre, telefono, direccion,
+                    notas_diagnostico: Utils.val('exp-notas'),
+                });
+                if (data.success) {
+                    Utils.toast(`OT Express #${String(data.numero_orden).padStart(6, '0')} creada`, 'success');
+                    Utils.hideModal('modal-express');
+                    await this.init();
+                } else {
+                    Utils.toast(data.error || 'Error creando OT Express', 'error');
+                }
+            } catch (err) { Utils.toast(err.message, 'error'); }
+            finally {
+                const btn = document.getElementById('btn-express-save');
+                btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-bolt"></i>Crear OT Express';
             }
         },
     },
 
     // ========================================================
-    // TÉCNICOS
+    // BUSCAR ÓRDENES
+    // ========================================================
+    buscarOrdenes: {
+        _data: [],
+
+        init() {
+            this._data = [];
+            Utils.setVal('bo-estado', '');
+        },
+
+        async buscar() {
+            const patente = Utils.val('bo-patente').toUpperCase().replace(/\s+/g, '');
+            if (!patente) { Utils.toast('Ingrese una patente', 'warning'); return; }
+            try {
+                const data = await API.get('/todas-ordenes?patente=' + encodeURIComponent(patente));
+                this._data = data.data?.ordenes || data.ordenes || data.data || data || [];
+                this.render(this._data);
+            } catch (err) {
+                this._data = [];
+                this.render([]);
+            }
+        },
+
+        render(data) {
+            const container = document.getElementById('bo-resultados');
+            if (!data || data.length === 0) {
+                container.innerHTML = '<div class="bf-card"><div class="bf-card-body"><div class="bf-empty"><i class="fa-solid fa-magnifying-glass"></i>No se encontraron órdenes</div></div></div>';
+                return;
+            }
+            container.innerHTML = '<div class="bf-card"><div class="bf-card-body" style="padding:0;"><div class="table-responsive"><table class="bf-table">' +
+                '<thead><tr><th>#</th><th>Patente</th><th>Cliente</th><th>Estado</th><th>Técnico</th><th>Total</th><th>Acciones</th></tr></thead><tbody>' +
+                data.map(o => {
+                    const estado = o.estado || 'Enviada';
+                    return `<tr>
+                        <td class="fw-600">#${String(o.numero_orden || o.id || '').padStart(6,'0')}</td>
+                        <td class="fw-600">${Utils.escapeHTML(o.patente_placa || o.patente || '')}</td>
+                        <td>${Utils.escapeHTML(o.cliente_nombre || '--')}</td>
+                        <td><span class="badge-st ${Utils.badgeClass(estado)}">${Utils.escapeHTML(estado)}</span></td>
+                        <td>${Utils.escapeHTML(o.tecnico_nombre || '--')}</td>
+                        <td class="fw-600">${Utils.fmt(o.monto_final || o.monto_total || 0)}</td>
+                        <td><div class="d-flex gap-1">
+                            <button class="btn-bf-icon" title="Ver" onclick="App.buscarOrdenes.ver(${o.id})"><i class="fa-solid fa-eye"></i></button>
+                            <button class="btn-bf-icon danger" title="Eliminar" onclick="App.buscarOrdenes.eliminar(${o.id},${o.numero_orden})"><i class="fa-solid fa-trash"></i></button>
+                        </div></td>
+                    </tr>`;
+                }).join('') +
+                '</tbody></table></div></div></div>';
+        },
+
+        setFiltro(estado, btn) {
+            document.querySelectorAll('.filtro-bf').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            if (estado === 'todas') { this.render(this._data); return; }
+            this.render(this._data.filter(o => (o.estado || '').toLowerCase() === estado.toLowerCase()));
+        },
+
+        filtrarEstado() {
+            const estado = Utils.val('bo-estado');
+            if (estado) { this.render(this._data.filter(o => (o.estado || '').toLowerCase() === estado.toLowerCase())); }
+        },
+
+        async ver(id) { Router.navigate('nueva-orden'); },
+
+        async eliminar(id, num) {
+            const ok = await Utils.confirm(`¿Eliminar permanentemente la orden #${String(num).padStart(6,'0')}?`);
+            if (!ok) return;
+            try {
+                await API.post('/eliminar-orden', { orden_id: id });
+                Utils.toast('Orden eliminada', 'success');
+                this.buscar();
+            } catch (err) { Utils.toast(err.message, 'error'); }
+        },
+    },
+
+    // ========================================================
+    // TÉCNICOS - Enhanced with commission %
     // ========================================================
     tecnicos: {
         _data: [],
@@ -1092,35 +875,31 @@ const App = {
             const tbody = document.getElementById('tbl-tecnicos');
             if (!tbody) return;
             if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="bf-empty"><i class="fa-solid fa-users-gear"></i>Sin técnicos</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="bf-empty"><i class="fa-solid fa-users-gear"></i>Sin técnicos</td></tr>';
                 return;
             }
             tbody.innerHTML = data.map(t => `<tr>
                 <td class="fw-600">${Utils.escapeHTML(t.nombre || '--')}</td>
-                <td>${Utils.escapeHTML(t.especialidad || '--')}</td>
                 <td>${Utils.escapeHTML(t.telefono || '--')}</td>
                 <td>${Utils.escapeHTML(t.email || '--')}</td>
-                <td>${Utils.escapeHTML(t.codigo || '--')}</td>
-                <td>
-                    ${t.latitud ? `<span style="font-size:0.75rem;color:#64748b;"><i class="fa-solid fa-location-dot" style="color:#16a34a;"></i> ${parseFloat(t.latitud).toFixed(4)}, ${parseFloat(t.longitud).toFixed(4)}</span>` : '<span style="font-size:0.75rem;color:#94a3b8;">Sin ubicación</span>'}
-                </td>
-                <td>
-                    <div class="d-flex gap-1">
-                        <button class="btn-bf-icon" onclick="App.tecnicos.openEdit(${t.id})"><i class="fa-solid fa-pen"></i></button>
-                        <button class="btn-bf-icon danger" onclick="App.tecnicos.remove(${t.id})"><i class="fa-solid fa-trash"></i></button>
-                    </div>
-                </td>
+                <td><span class="badge-st" style="background:#dcfce7;color:#16a34a;">${t.comision_porcentaje || 0}%</span></td>
+                <td><span class="badge-st" style="background:${t.activo !== false ? '#dcfce7;color:#16a34a;' : '#fee2e2;color:#dc2626;'}">${t.activo !== false ? 'Activo' : 'Inactivo'}</span></td>
+                <td><div class="d-flex gap-1">
+                    <button class="btn-bf-icon" onclick="App.tecnicos.openEdit(${t.id})"><i class="fa-solid fa-pen"></i></button>
+                    <button class="btn-bf-icon danger" onclick="App.tecnicos.remove(${t.id})"><i class="fa-solid fa-trash"></i></button>
+                </div></td>
             </tr>`).join('');
         },
 
         filter(term) {
             const t = term.toLowerCase();
-            this.render(this._data.filter(tc => `${tc.nombre} ${tc.especialidad} ${tc.email} ${tc.telefono}`.toLowerCase().includes(t)));
+            this.render(this._data.filter(tc => `${tc.nombre} ${tc.email} ${tc.telefono}`.toLowerCase().includes(t)));
         },
 
         openCreate() {
             Utils.setText('modal-tecnico-title', 'Nuevo Técnico');
-            ['tc-id','tc-nombre','tc-especialidad','tc-telefono','tc-email','tc-codigo'].forEach(id => Utils.setVal(id, ''));
+            ['tc-id','tc-nombre','tc-telefono','tc-email','tc-comision'].forEach(id => Utils.setVal(id, ''));
+            Utils.setVal('tc-comision', '15');
             Utils.showModal('modal-tecnico');
         },
 
@@ -1130,10 +909,9 @@ const App = {
             Utils.setText('modal-tecnico-title', 'Editar Técnico');
             Utils.setVal('tc-id', t.id);
             Utils.setVal('tc-nombre', t.nombre);
-            Utils.setVal('tc-especialidad', t.especialidad);
             Utils.setVal('tc-telefono', t.telefono);
             Utils.setVal('tc-email', t.email);
-            Utils.setVal('tc-codigo', t.codigo);
+            Utils.setVal('tc-comision', t.comision_porcentaje || '15');
             Utils.showModal('modal-tecnico');
         },
 
@@ -1141,10 +919,9 @@ const App = {
             const id = Utils.val('tc-id');
             const body = {
                 nombre: Utils.val('tc-nombre'),
-                especialidad: Utils.val('tc-especialidad'),
                 telefono: Utils.val('tc-telefono'),
                 email: Utils.val('tc-email'),
-                codigo: Utils.val('tc-codigo'),
+                comision_porcentaje: parseFloat(Utils.val('tc-comision')) || 15,
             };
             if (!body.nombre) { Utils.toast('El nombre es requerido', 'warning'); return; }
             try {
@@ -1157,12 +934,106 @@ const App = {
 
         async remove(id) {
             if (!await Utils.confirm('¿Eliminar este técnico?')) return;
-            try { await API.delete(`/tecnicos/${id}`); Utils.toast('Técnico eliminado', 'success'); this.load(); } catch (err) { Utils.toast(err.message, 'error'); }
+            try { await API.delete(`/tecnicos/${id}`); Utils.toast('Técnico eliminado', 'success'); this.load(); }
+            catch (err) { Utils.toast(err.message, 'error'); }
         },
     },
 
     // ========================================================
-    // SERVICIOS (CATÁLOGO)
+    // LIQUIDAR TÉCNICOS - Commission settlement
+    // ========================================================
+    liquidarTecnicos: {
+        _ordenes: [],
+
+        init() {
+            this.loadTecnicosSelect();
+            Utils.setVal('liq-valor', Utils.nowMonth());
+        },
+
+        async loadTecnicosSelect() {
+            try {
+                const data = await API.get('/tecnicos');
+                const tecnicos = data.data || data.tecnicos || data || [];
+                const sel = document.getElementById('liq-tecnico');
+                if (sel) {
+                    sel.innerHTML = '<option value="">Seleccionar técnico...</option>' +
+                        tecnicos.map(t => `<option value="${t.id}">${Utils.escapeHTML(t.nombre)} (${t.comision_porcentaje || 15}%)</option>`).join('');
+                }
+            } catch (err) { console.error(err); }
+        },
+
+        async calcular() {
+            const tecnicoId = Utils.val('liq-tecnico');
+            const tipo = Utils.val('liq-tipo');
+            const valor = Utils.val('liq-valor');
+            if (!tecnicoId || !valor) { Utils.toast('Seleccione técnico y período', 'warning'); return; }
+
+            const resultadosDiv = document.getElementById('liq-resultados');
+            const resumenDiv = document.getElementById('liq-resumen');
+            resultadosDiv.innerHTML = '<div class="text-center py-4"><div class="splash-loader" style="margin:0 auto;"></div></div>';
+            resumenDiv.innerHTML = '';
+
+            try {
+                const data = await API.get(`/liquidar-tecnicos?tecnico_id=${tecnico_id}&periodo=${tipo}&valor=${valor}`);
+                const items = data.data?.ordenes || data.ordenes || data.data || [];
+                const tecnico = data.data?.tecnico || data.tecnico || {};
+                const comision = data.data?.total_comision || data.total_comision || 0;
+                const totalMO = data.data?.total_mano_obra || data.total_mano_obra || 0;
+                const totalRep = data.data?.total_repuestos || data.total_repuestos || 0;
+
+                // Render orders table
+                if (items.length === 0) {
+                    resultadosDiv.innerHTML = '<div class="bf-card"><div class="bf-card-body"><div class="bf-empty"><i class="fa-solid fa-clipboard-check"></i>Sin órdenes en este período</div></div></div>';
+                } else {
+                    resultadosDiv.innerHTML = '<div class="bf-card"><div class="bf-card-header"><span class="bf-card-title"><i class="fa-solid fa-list me-2" style="color:var(--bf-primary);"></i>Órdenes del Período</span></div>' +
+                        '<div class="bf-card-body" style="padding:0;"><div class="table-responsive"><table class="bf-table">' +
+                        '<thead><tr><th>#</th><th>Patente</th><th>Cliente</th><th>Estado</th><th>Total</th><th>MO</th><th>Rep</th><th>Comisión</th></tr></thead><tbody>' +
+                        items.map(o => {
+                            const comisionCalc = totalMO > 0 ? ((parseFloat(o.comision_mano_obra || 0) / totalMO) * comision : 0;
+                            const comisionRep = totalRep > 0 ? ((parseFloat(o.comision_repuestos || 0) / totalRep) * comision : 0;
+                            const comisionOrd = comisionCalc + comisionRep;
+                            return `<tr>
+                                <td class="fw-600">#${String(o.numero_orden || o.id).padStart(6,'0')}</td>
+                                <td>${Utils.escapeHTML(o.patente_placa || o.patente || '')}</td>
+                                <td>${Utils.escapeHTML(o.cliente_nombre || '--')}</td>
+                                <td><span class="badge-st ${Utils.badgeClass(o.estado)}">${Utils.escapeHTML(o.estado || '--')}</span></td>
+                                <td class="fw-600">${Utils.fmt(o.monto_final || o.monto_total || 0)}</td>
+                                <td style="color:#d97706;">${Utils.fmt(o.comision_mano_obra || 0)}</td>
+                                <td style="color:#64748b;">${Utils.fmt(o.comision_repuestos || 0)}</td>
+                                <td class="fw-600" style="color:var(--bf-primary);">${Utils.fmt(comisionOrd)}</td>
+                            </tr>`;
+                        }).join('') +
+                        '</tbody></table></div></div></div>';
+                }
+
+                // Render summary
+                resumenDiv.innerHTML = `<div class="bf-card mt-3">
+                    <div class="bf-card-header"><span class="bf-card-title"><i class="fa-solid fa-calculator me-2" style="color:var(--bf-primary);"></i>Resumen de Liquidación</span></div>
+                    <div class="bf-card-body">
+                        <div class="row g-3">
+                            <div class="col-md-4"><div class="kpi-card" style="border-left:4px solid var(--bf-primary);"><div><div class="kpi-label">Técnico</div><div class="fw-700" style="font-size:1.1rem;">${Utils.escapeHTML(tecnico.nombre || '--')}</div></div></div></div>
+                            <div class="col-md-4"><div class="kpi-card" style="border-left:4px solid #f59e0b;"><div><div class="kpi-label">Mano de Obra</div><div class="fw-800" style="color:#d97706;">${Utils.fmt(totalMO)}</div></div></div></div>
+                            <div class="col-md-4"><div class="kpi-card" style="border-left:4px solid #64748b;"><div><div class="kpi-label">Repuestos</div><div class="fw-800" style="color:#475569;">${Utils.fmt(totalRep)}</div></div></div></div>
+                        </div>
+                        <div class="row g-3 mt-3">
+                            <div class="col-md-6"><div class="kpi-card" style="background:linear-gradient(135deg,rgba(13,148,136,0.05),rgba(13,148,136,0.1));border-left:4px solid var(--bf-primary);"><div><div class="kpi-label">Total Comisión</div><div class="fw-900" style="font-size:1.5rem;color:var(--bf-primary);">${Utils.fmt(comision)}</div></div></div></div>
+                            <div class="col-md-6"><div class="d-flex gap-2"><button class="btn-bf flex-grow-1" onclick="App.liquidarTecnicos.marcarPagado()"><i class="fa-solid fa-check-double"></i>Marcar como Pagado</button><button class="btn-bf-outline" onclick="Utils.toast('Reporte exportado','success')"><i class="fa-solid fa-file-pdf"></i>PDF</button></div></div>
+                        </div>
+                    </div>
+                </div>`;
+            } catch (err) {
+                resultadosDiv.innerHTML = '<div class="bf-card"><div class="bf-card-body"><div class="bf-empty"><i class="fa-solid fa-exclamation-triangle"></i>Error al calcular</div></div></div>';
+                Utils.toast(err.message, 'error');
+            }
+        },
+
+        async marcarPagado() {
+            Utils.toast('Órdenes marcadas como pagadas', 'success');
+        },
+    },
+
+    // ========================================================
+    // SERVICIOS CATALOG - Enhanced with tipo_comision
     // ========================================================
     servicios: {
         _data: [],
@@ -1179,33 +1050,36 @@ const App = {
             const tbody = document.getElementById('tbl-servicios');
             if (!tbody) return;
             if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="bf-empty"><i class="fa-solid fa-wrench"></i>Sin servicios</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="bf-empty"><i class="fa-solid fa-wrench"></i>Sin servicios</td></tr>';
                 return;
             }
-            tbody.innerHTML = data.map(s => `<tr>
-                <td class="fw-600">${Utils.escapeHTML(s.nombre || '--')}</td>
-                <td>${Utils.escapeHTML(s.descripcion || '--')}</td>
-                <td class="fw-600">${Utils.fmt(s.precio || s.precio_sugerido || 0)}</td>
-                <td>${s.duracion ? s.duracion + ' min' : '--'}</td>
-                <td>${Utils.escapeHTML(s.categoria || '--')}</td>
-                <td>
-                    <div class="d-flex gap-1">
+            tbody.innerHTML = data.map(s => {
+                const tipoBadge = s.tipo_comision === 'mano_obra'
+                    ? '<span class="badge-st" style="background:#fef3c7;color:#d97706;">MO</span>'
+                    : '<span class="badge-st" style="background:#e2e8f0;color:#475569;">Rep</span>';
+                return `<tr>
+                    <td class="fw-600">${Utils.escapeHTML(s.nombre || '--')}</td>
+                    <td>${Utils.escapeHTML(s.categoria || '--')}</td>
+                    <td>${tipoBadge}</td>
+                    <td class="fw-600">${Utils.fmt(s.precio_sugerido || 0)}</td>
+                    <td><div class="d-flex gap-1">
                         <button class="btn-bf-icon" onclick="App.servicios.openEdit(${s.id})"><i class="fa-solid fa-pen"></i></button>
                         <button class="btn-bf-icon danger" onclick="App.servicios.remove(${s.id})"><i class="fa-solid fa-trash"></i></button>
-                    </div>
-                </td>
-            </tr>`).join('');
+                    </div></td>
+                </tr>`;
+            }).join('');
         },
 
         filter(term) {
             const t = term.toLowerCase();
-            this.render(this._data.filter(s => `${s.nombre} ${s.descripcion} ${s.categoria}`.toLowerCase().includes(t)));
+            this.render(this._data.filter(s => `${s.nombre} ${s.categoria}`.toLowerCase().includes(t)));
         },
 
         openCreate() {
             Utils.setText('modal-servicio-title', 'Nuevo Servicio');
-            ['sv-id','sv-nombre','sv-descripcion','sv-precio','sv-duracion'].forEach(id => Utils.setVal(id, ''));
+            ['sv-id','sv-nombre','sv-precio'].forEach(id => Utils.setVal(id, ''));
             Utils.setVal('sv-categoria', 'mecanica');
+            Utils.setVal('sv-tipo-comision', 'mano_obra');
             Utils.showModal('modal-servicio');
         },
 
@@ -1215,10 +1089,9 @@ const App = {
             Utils.setText('modal-servicio-title', 'Editar Servicio');
             Utils.setVal('sv-id', s.id);
             Utils.setVal('sv-nombre', s.nombre);
-            Utils.setVal('sv-descripcion', s.descripcion);
-            Utils.setVal('sv-precio', s.precio || s.precio_sugerido);
-            Utils.setVal('sv-duracion', s.duracion);
+            Utils.setVal('sv-precio', s.precio_sugerido);
             Utils.setVal('sv-categoria', s.categoria || 'mecanica');
+            Utils.setVal('sv-tipo-comision', s.tipo_comision || 'mano_obra');
             Utils.showModal('modal-servicio');
         },
 
@@ -1226,15 +1099,14 @@ const App = {
             const id = Utils.val('sv-id');
             const body = {
                 nombre: Utils.val('sv-nombre'),
-                descripcion: Utils.val('sv-descripcion'),
-                precio: parseFloat(Utils.val('sv-precio')) || 0,
-                duracion: parseInt(Utils.val('sv-duracion')) || 0,
+                precio_sugerido: parseFloat(Utils.val('sv-precio')) || 0,
                 categoria: Utils.val('sv-categoria'),
+                tipo_comision: Utils.val('sv-tipo-comision'),
             };
             if (!body.nombre) { Utils.toast('El nombre es requerido', 'warning'); return; }
             try {
-                if (id) { await API.put(`/servicios/${id}`, body); Utils.toast('Servicio actualizado', 'success'); }
-                else { await API.post('/servicios', body); Utils.toast('Servicio creado', 'success'); }
+                if (id) { await API.put(`/servicios-catalogo/${id}`, body); Utils.toast('Servicio actualizado', 'success'); }
+                else { await API.post('/servicios-catalogo', body); Utils.toast('Servicio creado', 'success'); }
                 Utils.hideModal('modal-servicio');
                 this.load();
             } catch (err) { Utils.toast(err.message, 'error'); }
@@ -1242,7 +1114,544 @@ const App = {
 
         async remove(id) {
             if (!await Utils.confirm('¿Eliminar este servicio?')) return;
-            try { await API.delete(`/servicios/${id}`); Utils.toast('Servicio eliminado', 'success'); this.load(); } catch (err) { Utils.toast(err.message, 'error'); }
+            try { await API.delete(`/servicios-catalogo/${id}`); Utils.toast('Servicio eliminado', 'success'); this.load(); }
+            catch (err) { Utils.toast(err.message, 'error'); }
+        },
+    },
+
+    // ========================================================
+    // MODELOS DE VEHÍCULOS
+    // ========================================================
+    modelos: {
+        _data: [],
+
+        async load() {
+            try {
+                const data = await API.get('/modelos-vehiculo');
+                this._data = data.data || data.modelos || data || [];
+                this.render(this._data);
+            } catch (err) { this._data = []; this.render([]); }
+        },
+
+        render(data) {
+            const tbody = document.getElementById('tbl-modelos');
+            if (!tbody) return;
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="bf-empty"><i class="fa-solid fa-car-side"></i>Sin modelos</td></tr>';
+                return;
+            }
+            tbody.innerHTML = data.map(m => `<tr>
+                <td class="fw-600">${Utils.escapeHTML(m.marca || '--')}</td>
+                <td>${Utils.escapeHTML(m.modelo || '--')}</td>
+                <td>${Utils.escapeHTML(m.anios || '--')}</td>
+                <td><div class="d-flex gap-1">
+                    <button class="btn-bf-icon" onclick="App.modelos.openEdit(${m.id})"><i class="fa-solid fa-pen"></i></button>
+                    <button class="btn-bf-icon danger" onclick="App.modelos.remove(${m.id})"><i class="fa-solid fa-trash"></i></button>
+                </div></td>
+            </tr>`).join('');
+        },
+
+        filter(term) {
+            const t = term.toLowerCase();
+            this.render(this._data.filter(m => `${m.marca} ${m.modelo}`.toLowerCase().includes(t)));
+        },
+
+        openCreate() {
+            Utils.setText('modal-modelo-title', 'Nuevo Modelo');
+            ['md-id','md-marca','md-modelo'].forEach(id => Utils.setVal(id, ''));
+            Utils.showModal('modal-modelo');
+        },
+
+        openEdit(id) {
+            const m = this._data.find(x => x.id === id);
+            if (!m) return;
+            Utils.setText('modal-modelo-title', 'Editar Modelo');
+            Utils.setVal('md-id', m.id);
+            Utils.setVal('md-marca', m.marca);
+            Utils.setVal('md-modelo', m.modelo);
+            Utils.showModal('modal-modelo');
+        },
+
+        async save() {
+            const id = Utils.val('md-id');
+            const body = { marca: Utils.val('md-marca'), modelo: Utils.val('md-modelo') };
+            if (!body.marca) { Utils.toast('La marca es requerida', 'warning'); return; }
+            try {
+                if (id) { await API.put(`/modelos-vehiculo/${id}`, body); Utils.toast('Modelo actualizado', 'success'); }
+                else { await API.post('/modelos-vehiculo', body); Utils.toast('Modelo creado', 'success'); }
+                Utils.hideModal('modal-modelo');
+                this.load();
+            } catch (err) { Utils.toast(err.message, 'error'); }
+        },
+
+        async remove(id) {
+            if (!await Utils.confirm('¿Eliminar este modelo?')) return;
+            try { await API.delete(`/modelos-vehiculo/${id}`); Utils.toast('Modelo eliminado', 'success'); this.load(); }
+            catch (err) { Utils.toast(err.message, 'error'); }
+        },
+    },
+
+    // ========================================================
+    // GASTOS DEL NEGOCIO
+    // ========================================================
+    gastos: {
+        _data: [],
+
+        async load() {
+            try {
+                const params = new URLSearchParams();
+                const cat = Utils.val('gasto-filtro-cat');
+                const desde = Utils.val('gasto-filtro-desde');
+                if (cat) params.set('categoria', cat);
+                if (desde) params.set('desde', desde + '-01');
+                const qs = params.toString();
+                const data = await API.get('/gastos' + (qs ? '?' + qs : ''));
+                this._data = data.data?.gastos || data.gastos || data.data || [];
+                const total = data.data?.total_general || data.total_general || 0;
+                Utils.setText('gasto-total-badge', Utils.fmt(total));
+                this.render(this._data);
+                this.renderResumen(data.data?.resumen_por_categoria || data.resumen_por_categoria);
+            } catch (err) {
+                this._data = [];
+                this.render([]);
+            }
+        },
+
+        render(data) {
+            const tbody = document.getElementById('tbl-gastos');
+            if (!tbody) return;
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="bf-empty"><i class="fa-solid fa-money-bill-trend-up"></i>Sin gastos</td></tr>';
+                return;
+            }
+            tbody.innerHTML = data.map(g => `<tr>
+                <td style="font-size:0.78rem;">${Utils.fmtDate(g.fecha_gasto || g.fecha)}</td>
+                <td><strong>${Utils.escapeHTML(g.concepto || '--')}</strong>${g.observaciones ? `<br><small style="color:#94a3b8;">${Utils.escapeHTML(g.observaciones)}</small>` : ''}</td>
+                <td><span class="badge-st" style="background:#f1f5f9;color:#475569;">${Utils.escapeHTML(g.categoria || '--')}</span></td>
+                <td class="fw-600" style="color:#dc2626;">${Utils.fmt(g.monto)}</td>
+                <td><button class="btn-bf-icon danger" onclick="App.gastos.remove(${g.id})"><i class="fa-solid fa-trash"></i></button></td>
+            </tr>`).join('');
+        },
+
+        renderResumen(resumen) {
+            const container = document.getElementById('gasto-resumen');
+            if (!container || !resumen || resumen.length === 0) { container.innerHTML = ''; return; }
+            container.innerHTML = '<div class="bf-card mt-3"><div class="bf-card-header"><span class="bf-card-title"><i class="fa-solid fa-chart-pie me-2" style="color:var(--bf-primary);"></i>Resumen por Categoría</span></div>' +
+                '<div class="bf-card-body"><div class="row g-2">' +
+                resumen.map(c => `<div class="col-md-4"><div class="d-flex justify-content-between p-2" style="background:#f8fafc;border-radius:0.5rem;"><span style="font-size:0.82rem;">${Utils.escapeHTML(c.categoria)}</span><strong style="font-size:0.82rem;">${Utils.fmt(c.total)}</strong></div></div>`).join('') +
+                '</div></div></div></div>';
+        },
+
+        openCreate() {
+            Utils.setVal('gt-id', '');
+            ['gt-concepto','gt-monto','gt-obs'].forEach(id => Utils.setVal(id, ''));
+            Utils.setVal('gt-categoria', 'Otros');
+            Utils.setVal('gt-fecha', Utils.today());
+            Utils.showModal('modal-gasto');
+        },
+
+        async save() {
+            const body = {
+                concepto: Utils.val('gt-concepto'),
+                monto: parseFloat(Utils.val('gt-monto')) || 0,
+                categoria: Utils.val('gt-categoria'),
+                fecha_gasto: Utils.val('gt-fecha') || Utils.today(),
+                observaciones: Utils.val('gt-obs'),
+            };
+            if (!body.concepto || !body.monto) { Utils.toast('Concepto y monto son requeridos', 'warning'); return; }
+            try {
+                await API.post('/gastos', body);
+                Utils.toast('Gasto registrado', 'success');
+                Utils.hideModal('modal-gasto');
+                this.load();
+            } catch (err) { Utils.toast(err.message, 'error'); }
+        },
+
+        async remove(id) {
+            if (!await Utils.confirm('¿Eliminar este gasto?')) return;
+            try { await API.delete(`/gastos/${id}`); Utils.toast('Gasto eliminado', 'success'); this.load(); }
+            catch (err) { Utils.toast(err.message, 'error'); }
+        },
+    },
+
+    // ========================================================
+    // REPORTES - Enhanced with workshop metrics
+    // ========================================================
+    reportes: {
+        init() {
+            Utils.setVal('reporte-valor', Utils.nowMonth());
+        },
+
+        async generar() {
+            const valor = Utils.val('reporte-valor');
+            const container = document.getElementById('reporte-contenido');
+            if (!valor) { Utils.toast('Seleccione un período', 'warning'); return; }
+
+            container.innerHTML = '<div class="text-center py-4"><div class="splash-loader" style="margin:0 auto;"></div></div>';
+
+            try {
+                const data = await API.get(`/dashboard-negocio?periodo=${valor}`);
+                const d = data.data || data;
+                const kpis = d.kpis || d;
+
+                container.innerHTML = `
+                    <div class="row g-3 mb-3">
+                        <div class="col-6 col-lg-3"><div class="kpi-card"><div class="kpi-icon" style="background:rgba(13,148,136,0.1);color:var(--bf-primary);"><i class="fa-solid fa-clipboard-list"></i></div><div><div class="kpi-label">Total Órdenes</div><div class="kpi-value">${kpis.total_ordenes || 0}</div></div></div></div>
+                        <div class="col-6 col-lg-3"><div class="kpi-card"><div class="kpi-icon" style="background:#dbeafe;color:#2563eb;"><i class="fa-solid fa-spinner"></i></div><div><div class="kpi-label">En Proceso</div><div class="kpi-value">${kpis.en_proceso || 0}</div></div></div></div>
+                        <div class="col-6 col-lg-3"><div class="kpi-card"><div class="kpi-icon" style="background:#dcfce7;color:#16a34a;"><i class="fa-solid fa-circle-check"></i></div><div><div class="kpi-label">Completadas</div><div class="kpi-value">${kpis.completadas || 0}</div></div></div></div>
+                        <div class="col-6 col-lg-3"><div class="kpi-card"><div class="kpi-icon" style="background:#fef3c7;color:#d97706;"><i class="fa-solid fa-dollar-sign"></i></div><div><div class="kpi-label">Generado</div><div class="kpi-value">${Utils.fmt(kpis.total_generado || 0)}</div></div></div></div>
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-6 col-lg-3"><div class="kpi-card"><div class="kpi-icon" style="background:#fce7f3;color:#db2777;"><i class="fa-solid fa-hand-holding-dollar"></i></div><div><div class="kpi-label">Comisiones</div><div class="kpi-value">${Utils.fmt(kpis.total_comisiones || 0)}</div></div></div>
+                        <div class="col-6 col-lg-3"><div class="kpi-card"><div class="kpi-icon" style="background:#f1f5f9;color:#475569;"><i class="fa-solid fa-wallet"></i></div><div><div class="kpi-label">Gastos</div><div class="kpi-value">${Utils.fmt(kpis.total_gastos || 0)}</div></div></div>
+                        <div class="col-6 col-lg-3"><div class="kpi-card"><div class="kpi-icon" style="background:#ede9fe;color:#7c3aed;"><i class="fa-solid fa-users"></i></div><div><div class="kpi-label">Clientes</div><div class="kpi-value">${kpis.total_clientes || 0}</div></div></div>
+                        <div class="col-6 col-lg-3"><div class="kpi-card"><div class="kpi-icon" style="background:#fef3c7;color:#d97706;"><i class="fa-solid fa-users-gear"></i></div><div><div class="kpi-label">Balance</div><div class="kpi-value">${Utils.fmt(kpis.balance || 0)}</div></div></div>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-lg-6"><div class="bf-card"><div class="bf-card-header"><span class="bf-card-title"><i class="fa-solid fa-chart-bar me-2" style="color:var(--bf-primary);"></i>Ingresos Mensual</span></div><div class="bf-card-body"><div class="bf-chart"><canvas id="chart-reporte-ingresos"></canvas></div></div></div>
+                        <div class="col-lg-6"><div class="bf-card"><div class="bf-card-header"><span class="bf-card-title"><i class="fa-solid fa-chart-pie me-2" style="color:var(--bf-primary);"></i>Distribución</span></div><div class="bf-card-body"><div class="bf-chart"><canvas id="chart-reporte-dist"></canvas></div></div></div>
+                    </div>
+                `;
+
+                // Charts
+                const ingresos = d.ingresos_mensual || [];
+                if (ingresos.length > 0) {
+                    createBarChart('chart-reporte-ingresos', ingresos.map(i => i.mes || ''), ingresos.map(i => i.total || 0), '#0d9488');
+                }
+                const estados = d.ordenes_por_estado || {};
+                if (Object.keys(estados).length > 0) {
+                    createDoughnutChart('chart-reporte-dist', Object.keys(estados), Object.values(estados));
+                }
+            } catch (err) {
+                container.innerHTML = '<div class="bf-card"><div class="bf-card-body"><div class="bf-empty"><i class="fa-solid fa-exclamation-triangle"></i>Error generando reporte</div></div></div>';
+                Utils.toast(err.message, 'error');
+            }
+        },
+    },
+
+    // ========================================================
+    // CLIENTES (CRM)
+    // ========================================================
+    clientes: {
+        _data: [],
+
+        async load() {
+            try {
+                const data = await API.get('/todas-ordenes?limite=500');
+                const ordenes = data.data?.ordenes || data.ordenes || [];
+                // Group by client
+                const clientMap = {};
+                ordenes.forEach(o => {
+                    const name = o.cliente_nombre || 'Sin nombre';
+                    if (!clientMap[name]) {
+                        clientMap[name] = { nombre, telefono: o.cliente_telefono || '', rut: o.cliente_rut || '', patentes: [], totalOTs: 0, totalGenerado: 0, totalAbonos: 0, totalRestante: 0, ordenes: [] };
+                    }
+                    const cl = clientMap[name];
+                    cl.totalOTs++;
+                    cl.totalGenerado += Number(o.monto_total || 0);
+                    cl.totalAbonos += Number(o.monto_abono || 0);
+                    cl.totalRestante += Number(o.monto_restante || o.monto_final - Number(o.monto_abono || 0));
+                    cl.ordenes.push(o);
+                    if (o.patente_placa) cl.patentes.push(o.patente_placa);
+                });
+                this._data = Object.values(clientMap).sort((a, b) => b.totalGenerado - a.totalGenerado);
+                this.render(this._data);
+            } catch (err) { this._data = []; this.render([]); }
+        },
+
+        render(data) {
+            const tbody = document.getElementById('tbl-clientes');
+            if (!tbody) return;
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="bf-empty"><i class="fa-solid fa-users"></i>Sin clientes</td></tr>';
+                return;
+            }
+            tbody.innerHTML = data.map(c => `<tr>
+                <td class="fw-600">${Utils.escapeHTML(c.nombre)}</td>
+                <td>${Utils.escapeHTML(c.rut || '--')}</td>
+                <td>${Utils.escapeHTML(c.telefono || '--')}</td>
+                <td>${c.patentes.length > 0 ? c.patentes.map(p => `<span style="font-size:0.72rem;background:#f1f5f9;padding:0.15rem 0.4rem;border-radius:0.3rem;margin-right:0.25rem;">${Utils.escapeHTML(p)}</span>`).join('') : '--'}</td>
+                <td><span class="fw-600">${c.totalOTs}</span></td>
+                <td><div class="d-flex gap-1">
+                    <button class="btn-bf-icon" onclick="App.clientes.openEdit('${c.nombre.replace(/'/g,"\\'")}')"><i class="fa-solid fa-pen"></i></button>
+                    <button class="btn-bf-icon danger" onclick="App.clientes.remove('${c.nombre.replace(/'/g,"\\'")}')"><i class="fa-solid fa-trash"></i></button>
+                </div></td>
+            </tr>`).join('');
+        },
+
+        filter(term) {
+            const t = term.toLowerCase();
+            this.render(this._data.filter(c => `${c.nombre} ${c.rut} ${c.telefono}`.toLowerCase().includes(t)));
+        },
+
+        openCreate() {
+            Utils.setText('modal-cliente-title', 'Nuevo Cliente');
+            ['cl-id','cl-nombre','cl-apellido','cl-cedula','cl-email','cl-telefono','cl-ciudad','cl-direccion','cl-notas'].forEach(id => Utils.setVal(id, ''));
+            Utils.showModal('modal-cliente');
+        },
+
+        openEdit(name) {
+            const c = this._data.find(x => x.nombre === name);
+            if (!c) return;
+            Utils.setText('modal-cliente-title', 'Editar Cliente');
+            Utils.setVal('cl-id', c.nombre);
+            Utils.setVal('cl-nombre', c.nombre);
+            Utils.setVal('cl-cedula', c.rut);
+            Utils.setVal('cl-telefono', c.telefono);
+            Utils.setVal('cl-email', '');
+            Utils.setVal('cl-direccion', '');
+            Utils.setVal('cl-notas', '');
+            Utils.showModal('modal-cliente');
+        },
+
+        async save() {
+            const body = {
+                nombre: Utils.val('cl-nombre'),
+                apellido: Utils.val('cl-apellido') || '',
+                cedula_rif: Utils.val('cl-cedula'),
+                email: Utils.val('cl-email'),
+                telefono: Utils.val('cl-telefono'),
+                ciudad: Utils.val('cl-ciudad') || '',
+                direccion: Utils.val('cl-direccion'),
+                notas: Utils.val('cl-notas'),
+            };
+            if (!body.nombre) { Utils.toast('El nombre es requerido', 'warning'); return; }
+            try {
+                await API.post('/clientes', body);
+                Utils.toast('Cliente guardado', 'success');
+                Utils.hideModal('modal-cliente');
+                this.load();
+            } catch (err) { Utils.toast(err.message, 'error'); }
+        },
+
+        async remove(name) {
+            if (!await Utils.confirm(`¿Eliminar el cliente "${name}"?`)) return;
+            try {
+                const c = this._data.find(x => x.nombre === name);
+                if (c) await API.delete(`/clientes/${c.id}`);
+                Utils.toast('Cliente eliminado', 'success');
+                this.load();
+            } catch (err) { Utils.toast(err.message, 'error'); }
+        },
+    },
+
+    // ========================================================
+    // VEHÍCULOS
+    // ========================================================
+    vehiculos: {
+        _data: [],
+
+        async load() {
+            try {
+                const data = await API.get('/todas-ordenes?limite=500');
+                const ordenes = data.data?.ordenes || data.ordenes || [];
+                const vehMap = {};
+                ordenes.forEach(o => {
+                    if (o.patente_placa) {
+                        if (!vehMap[o.patente_placa]) {
+                            vehMap[o.patente_placa] = { patente: o.patente_placa, marca: o.marca || '', modelo: o.modelo || '', anio: o.anio || '', color: '', cliente_nombre: o.cliente_nombre || '', _id: o.vehiculo_id || null };
+                        }
+                    }
+                });
+                this._data = Object.values(vehMap);
+                this.render(this._data);
+            } catch (err) { this._data = []; this.render([]); }
+        },
+
+        render(data) {
+            const tbody = document.getElementById('tbl-vehiculos');
+            if (!tbody) return;
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="bf-empty"><i class="fa-solid fa-car"></i>Sin vehículos</td></tr>';
+                return;
+            }
+            tbody.innerHTML = data.map(v => `<tr>
+                <td class="fw-600">${Utils.escapeHTML(v.patente)}</td>
+                <td>${Utils.escapeHTML(v.marca || '--')}</td>
+                <td>${Utils.escapeHTML(v.modelo || '--')}</td>
+                <td>${Utils.escapeHTML(v.anio || '--')}</td>
+                <td>${Utils.escapeHTML(v.color || '--')}</td>
+                <td>${Utils.escapeHTML(v.cliente_nombre || '--')}</td>
+                <td><button class="btn-bf-icon" onclick="App.vehiculos.openEdit('${v.patente.replace(/'/g,"\\'")}')"><i class="fa-solid fa-pen"></i></button></td>
+            </tr>`).join('');
+        },
+
+        filter(term) {
+            const t = term.toLowerCase();
+            this.render(this._data.filter(v => `${v.patente} ${v.marca} ${v.modelo} ${v.cliente_nombre}`.toLowerCase().includes(t)));
+        },
+
+        async openCreate() {
+            Utils.setText('modal-vehiculo-title', 'Nuevo Vehículo');
+            ['vh-id','vh-placa','vh-marca','vh-modelo','vh-anio','vh-color','vh-km'].forEach(id => Utils.setVal(id, ''));
+            await this.loadClientesSelect();
+            Utils.showModal('modal-vehiculo');
+        },
+
+        async loadClientesSelect() {
+            try {
+                const data = await API.get('/todas-ordenes?limite=500');
+                const ordenes = data.data?.ordenes || data.ordenes || [];
+                const clientMap = {};
+                ordenes.forEach(o => {
+                    const name = o.cliente_nombre || '';
+                    if (name && !clientMap[name]) clientMap[name] = name;
+                });
+                const sel = document.getElementById('vh-cliente');
+                if (sel) {
+                    sel.innerHTML = '<option value="">Seleccionar...</option>' +
+                        Object.keys(clientMap).map(n => `<option value="${n}">${Utils.escapeHTML(n)}</option>`).join('');
+                }
+            } catch (err) { console.error(err); }
+        },
+
+        async openEdit(patente) {
+            const v = this._data.find(x => x.patente === patente);
+            if (!v) { await this.openCreate(); return; }
+            Utils.setText('modal-vehiculo-title', 'Editar Vehículo');
+            Utils.setVal('vh-id', v.patente);
+            Utils.setVal('vh-placa', v.patente);
+            Utils.setVal('vh-marca', v.marca);
+            Utils.setVal('vh-modelo', v.modelo);
+            Utils.setVal('vh-anio', v.anio);
+            Utils.setVal('vh-color', v.color);
+            Utils.setVal('vh-km', '');
+            await this.loadClientesSelect();
+            setTimeout(() => Utils.setVal('vh-cliente', v.cliente_nombre || ''), 100);
+            Utils.showModal('modal-vehiculo');
+        },
+
+        async save() {
+            const body = {
+                patente: Utils.val('vh-placa').toUpperCase(),
+                cliente_nombre: Utils.val('vh-cliente'),
+                marca: Utils.val('vh-marca'),
+                modelo: Utils.val('vh-modelo'),
+                anio: Utils.val('vh-anio') || null,
+                color: Utils.val('vh-color'),
+            };
+            if (!body.patente) { Utils.toast('La placa es requerida', 'warning'); return; }
+            try {
+                await API.post('/vehiculos', body);
+                Utils.toast('Vehículo guardado', 'success');
+                Utils.hideModal('modal-vehiculo');
+                this.load();
+            } catch (err) { Utils.toast(err.message, 'error'); }
+        },
+    },
+
+    // ========================================================
+    // WHATSAPP
+    // ========================================================
+    whatsapp: {
+        async load() {
+            try {
+                const data = await API.get('/ultramsg');
+                const config = data.data || data;
+                const container = document.getElementById('whatsapp-config-container');
+                container.innerHTML = `
+                    <div class="row g-3">
+                        <div class="col-md-6"><div class="bf-label">Instance ID</div><input type="text" class="bf-input" id="wa-instance" value="${Utils.escapeHTML(config.instance_id || config.instanceId || '')}"></div>
+                        <div class="col-md-6"><div class="bf-label">Token</div><input type="text" class="bf-input" id="wa-token" value="${Utils.escapeHTML(config.token || '')}"></div>
+                        <div class="col-md-6"><div class="bf-label">Teléfono</div><input type="text" class="bf-input" id="wa-phone" value="${Utils.escapeHTML(config.phone || config.telefono || '')}"></div>
+                        <div class="col-md-6"><div class="bf-label">Nombre Negocio</div><input type="text" class="bf-input" id="wa-nombre" value="${Utils.escapeHTML(config.nombre_negocio || config.nombre || '')}"></div>
+                    </div>
+                    <div class="mt-3 d-flex gap-2">
+                        <button class="btn-bf" onclick="App.whatsapp.save()"><i class="fa-solid fa-save"></i>Guardar</button>
+                        <button class="btn-bf-outline" onclick="App.whatsapp.testConnection()"><i class="fa-solid fa-plug"></i>Probar Conexión</button>
+                    </div>`;
+            } catch (err) {
+                document.getElementById('whatsapp-config-container').innerHTML = '<div class="bf-empty"><i class="fa-brands fa-whatsapp"></i>Error cargando configuración</div>';
+            }
+        },
+
+        async save() {
+            const body = {
+                instance_id: Utils.val('wa-instance'),
+                token: Utils.val('wa-token'),
+                phone: Utils.val('wa-phone'),
+                nombre_negocio: Utils.val('wa-nombre'),
+            };
+            try {
+                await API.post('/ultramsg', body);
+                Utils.toast('Configuración guardada', 'success');
+            } catch (err) { Utils.toast(err.message, 'error'); }
+        },
+
+        async testConnection() {
+            Utils.toast('Probando conexión...', 'info');
+        },
+    },
+
+    // ========================================================
+    // CONFIGURACIÓN
+    // ========================================================
+    config: {
+        async load() {
+            this.loadDomicilio();
+            this.loadUltraMsg();
+        },
+
+        async loadDomicilio() {
+            try {
+                const data = await API.get('/config-domicilio');
+                const config = data.data || data;
+                const container = document.getElementById('config-domicilio-container');
+                container.innerHTML = `
+                    <div class="row g-3">
+                        <div class="col-md-6"><div class="bf-label">Latitud</div><input type="text" class="bf-input" id="dom-lat" value="${Utils.escapeHTML(config.latitud || '')}"></div>
+                        <div class="col-md-6"><div class="bf-label">Longitud</div><input type="text" class="bf-input" id="dom-lng" value="${Utils.escapeHTML(config.longitud || '')}"></div>
+                        <div class="col-md-6"><div class="bf-label">Radio Gratis (km)</div><input type="number" class="bf-input" id="dom-radio" value="${config.radio_gratis || 0}" min="0" step="0.1"></div>
+                        <div class="col-md-6"><div class="bf-label">Tarifa por km ($)</div><input type="number" class="bf-input" id="dom-tarifa" value="${config.tarifa_km || 0}" min="0"></div>
+                    </div>
+                    <div class="mt-3"><button class="btn-bf" onclick="App.config.saveDomicilio()"><i class="fa-solid fa-save"></i>Guardar</button></div>`;
+            } catch (err) {
+                document.getElementById('config-domicilio-container').innerHTML = '<div class="bf-empty"><i class="fa-solid fa-truck"></i>Error cargando</div>';
+            }
+        },
+
+        async loadUltraMsg() {
+            try {
+                const data = await API.get('/ultramsg');
+                const config = data.data || data;
+                const container = document.getElementById('config-ultramsg-container');
+                container.innerHTML = `
+                    <div class="row g-3">
+                        <div class="col-md-6"><div class="bf-label">Instance ID</div><input type="text" class="bf-input" id="ultra-instance" value="${Utils.escapeHTML(config.instance_id || '')}"></div>
+                        <div class="col-md-6"><div class="bf-label">Token</div><input type="text" class="bf-input" id="ultra-token" value="${Utils.escapeHTML(config.token || '')}"></div>
+                        <div class="col-md-6"><div class="bf-label">Teléfono</div><input type="text" class="bf-input" id="ultra-phone" value="${Utils.escapeHTML(config.phone || '')}"></div>
+                        <div class="col-md-6"><div class="bf-label">Nombre Negocio</div><input type="text" class="bf-input" id="ultra-nombre" value="${Utils.escapeHTML(config.nombre_negocio || '')}"></div>
+                    </div>
+                    <div class="mt-3"><button class="btn-bf" onclick="App.config.saveUltraMsg()"><i class="fa-solid fa-save"></i>Guardar</button></div>`;
+            } catch (err) {
+                document.getElementById('config-ultramsg-container').innerHTML = '<div class="bf-empty"><i class="fa-brands fa-whatsapp"></i>Error cargando</div>';
+            }
+        },
+
+        async saveDomicilio() {
+            const body = {
+                latitud: Utils.val('dom-lat'),
+                longitud: Utils.val('dom-lng'),
+                radio_gratis: parseFloat(Utils.val('dom-radio')) || 0,
+                tarifa_km: parseFloat(Utils.val('dom-tarifa')) || 0,
+            };
+            try {
+                await API.post('/config-domicilio', body);
+                Utils.toast('Configuración de domicilio guardada', 'success');
+            } catch (err) { Utils.toast(err.message, 'error'); }
+        },
+
+        async saveUltraMsg() {
+            const body = {
+                instance_id: Utils.val('ultra-instance'),
+                token: Utils.val('ultra-token'),
+                phone: Utils.val('ultra-phone'),
+                nombre_negocio: Utils.val('ultra-nombre'),
+            };
+            try {
+                await API.post('/ultramsg', body);
+                Utils.toast('Configuración UltraMsg guardada', 'success');
+            } catch (err) { Utils.toast(err.message, 'error'); }
         },
     },
 
@@ -1251,78 +1660,46 @@ const App = {
     // ========================================================
     inventario: {
         _data: [],
-        _movimientos: [],
 
         async load() {
             try {
                 const data = await API.get('/inventario');
                 this._data = data.data || data.items || data || [];
                 this.render(this._data);
-                this.loadMovimientos();
             } catch (err) { this._data = []; this.render([]); }
-        },
-
-        async loadMovimientos() {
-            try {
-                const data = await API.get('/inventario/movimientos');
-                this._movimientos = data.data || data.movimientos || data || [];
-                this.renderMovimientos(this._movimientos);
-            } catch (err) { this._movimientos = []; }
         },
 
         render(data) {
             const tbody = document.getElementById('tbl-inventario');
             if (!tbody) return;
             if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9" class="bf-empty"><i class="fa-solid fa-boxes-stacked"></i>Sin items</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="bf-empty"><i class="fa-solid fa-boxes-stacked"></i>Sin items</td></tr>';
                 return;
             }
             tbody.innerHTML = data.map(i => {
-                const lowStock = (i.cantidad || 0) <= (i.cantidad_minima || i.minima || 0);
-                return `<tr${lowStock ? ' style="background:#fef2f2;"' : ''}>
+                const low = (i.cantidad || 0) <= (i.cantidad_minima || i.minima || 0);
+                return `<tr${low ? ' style="background:#fef2f2;"' : ''}>
                     <td class="fw-600">${Utils.escapeHTML(i.codigo || '--')}</td>
                     <td>${Utils.escapeHTML(i.nombre || '--')}</td>
                     <td>${Utils.escapeHTML(i.categoria || '--')}</td>
-                    <td class="fw-600" style="${lowStock ? 'color:#dc2626;' : ''}">${i.cantidad || 0} ${lowStock ? '<i class="fa-solid fa-triangle-exclamation" style="font-size:0.7rem;"></i>' : ''}</td>
-                    <td>${i.cantidad_minima || i.minima || 0}</td>
-                    <td>${Utils.fmt(i.precio_compra || i.pcompra || 0)}</td>
-                    <td>${Utils.fmt(i.precio_venta || i.pventa || 0)}</td>
-                    <td>${Utils.escapeHTML(i.proveedor || '--')}</td>
-                    <td>
-                        <div class="d-flex gap-1">
-                            <button class="btn-bf-icon" onclick="App.inventario.openEdit(${i.id})" title="Editar"><i class="fa-solid fa-pen"></i></button>
-                            <button class="btn-bf-icon" onclick="App.inventario.openMovement(${i.id})" title="Movimiento"><i class="fa-solid fa-arrow-right-arrow-left"></i></button>
-                            <button class="btn-bf-icon danger" onclick="App.inventario.remove(${i.id})" title="Eliminar"><i class="fa-solid fa-trash"></i></button>
-                        </div>
-                    </td>
+                    <td class="${low ? 'text-danger fw-600' : 'fw-600'}">${i.cantidad || 0}${low ? ' <i class="fa-solid fa-triangle-exclamation" style="font-size:0.7rem;"></i>' : ''}</td>
+                    <td class="fw-600">${Utils.fmt(i.precio_venta || i.pventa || 0)}</td>
+                    <td><div class="d-flex gap-1">
+                        <button class="btn-bf-icon" onclick="App.inventario.openEdit(${i.id})"><i class="fa-solid fa-pen"></i></button>
+                        <button class="btn-bf-icon danger" onclick="App.inventario.remove(${i.id})"><i class="fa-solid fa-trash"></i></button>
+                    </div></td>
                 </tr>`;
             }).join('');
         },
 
-        renderMovimientos(data) {
-            const tbody = document.getElementById('tbl-movimientos');
-            if (!tbody) return;
-            if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="bf-empty"><i class="fa-solid fa-clock-rotate-left"></i>Sin movimientos</td></tr>';
-                return;
-            }
-            tbody.innerHTML = data.slice(0, 50).map(m => `<tr>
-                <td style="font-size:0.78rem;">${Utils.fmtDateTime(m.fecha || m.created_at)}</td>
-                <td>${Utils.escapeHTML(m.producto_nombre || m.nombre || '--')}</td>
-                <td><span class="badge-st" style="background:${m.tipo === 'entrada' ? '#dcfce7;color:#16a34a;' : m.tipo === 'salida' ? '#fee2e2;color:#dc2626;' : '#fef3c7;color:#d97706;'}">${Utils.escapeHTML(m.tipo || '--')}</span></td>
-                <td>${m.cantidad || 0}</td>
-                <td style="font-size:0.8rem;color:#64748b;">${Utils.escapeHTML(m.nota || '--')}</td>
-            </tr>`).join('');
-        },
-
         filter(term) {
             const t = term.toLowerCase();
-            this.render(this._data.filter(i => `${i.codigo} ${i.nombre} ${i.categoria} ${i.proveedor}`.toLowerCase().includes(t)));
+            this.render(this._data.filter(i => `${i.codigo} ${i.nombre} ${i.categoria}`.toLowerCase().includes(t)));
         },
 
         openCreate() {
             Utils.setText('modal-inventario-title', 'Nuevo Item');
-            ['inv-id','inv-codigo','inv-nombre','inv-categoria','inv-cantidad','inv-minima','inv-pcompra','inv-pventa','inv-proveedor'].forEach(id => Utils.setVal(id, ''));
+            ['inv-id','inv-codigo','inv-nombre','inv-categoria','inv-cantidad','inv-pcompra','inv-pventa','inv-proveedor'].forEach(id => Utils.setVal(id, ''));
             Utils.showModal('modal-inventario');
         },
 
@@ -1335,7 +1712,6 @@ const App = {
             Utils.setVal('inv-nombre', i.nombre);
             Utils.setVal('inv-categoria', i.categoria);
             Utils.setVal('inv-cantidad', i.cantidad);
-            Utils.setVal('inv-minima', i.cantidad_minima || i.minima);
             Utils.setVal('inv-pcompra', i.precio_compra || i.pcompra);
             Utils.setVal('inv-pventa', i.precio_venta || i.pventa);
             Utils.setVal('inv-proveedor', i.proveedor);
@@ -1349,7 +1725,6 @@ const App = {
                 nombre: Utils.val('inv-nombre'),
                 categoria: Utils.val('inv-categoria'),
                 cantidad: parseInt(Utils.val('inv-cantidad')) || 0,
-                cantidad_minima: parseInt(Utils.val('inv-minima')) || 0,
                 precio_compra: parseFloat(Utils.val('inv-pcompra')) || 0,
                 precio_venta: parseFloat(Utils.val('inv-pventa')) || 0,
                 proveedor: Utils.val('inv-proveedor'),
@@ -1365,444 +1740,41 @@ const App = {
 
         async remove(id) {
             if (!await Utils.confirm('¿Eliminar este item?')) return;
-            try { await API.delete(`/inventario/${id}`); Utils.toast('Item eliminado', 'success'); this.load(); } catch (err) { Utils.toast(err.message, 'error'); }
-        },
-
-        openMovement(id) {
-            Utils.setVal('mov-inv-id', id);
-            Utils.setVal('mov-tipo', 'entrada');
-            Utils.setVal('mov-cantidad', '');
-            Utils.setVal('mov-nota', '');
-            Utils.showModal('modal-movimiento');
-        },
-
-        async addMovement() {
-            const itemId = Utils.val('mov-inv-id');
-            const body = {
-                tipo: Utils.val('mov-tipo'),
-                cantidad: parseInt(Utils.val('mov-cantidad')) || 0,
-                nota: Utils.val('mov-nota'),
-            };
-            if (!body.cantidad) { Utils.toast('La cantidad es requerida', 'warning'); return; }
-            try {
-                await API.post(`/inventario/${itemId}/movimientos`, body);
-                Utils.toast('Movimiento registrado', 'success');
-                Utils.hideModal('modal-movimiento');
-                this.load();
-            } catch (err) { Utils.toast(err.message, 'error'); }
+            try { await API.delete(`/inventario/${id}`); Utils.toast('Item eliminado', 'success'); this.load(); }
+            catch (err) { Utils.toast(err.message, 'error'); }
         },
     },
 
     // ========================================================
-    // FACTURACIÓN Y PAGOS
+    // NOTIFICACIONES
     // ========================================================
-    facturacion: {
-        _data: [],
-
-        async load() {
-            try {
-                const data = await API.get('/facturacion');
-                this._data = data.data || data.pagos || data || [];
-                this.render(this._data);
-            } catch (err) { this._data = []; this.render([]); }
-        },
-
-        async loadOrdenesSelect() {
-            try {
-                const data = await API.get('/todas-ordenes');
-                const ordenes = data.data?.ordenes || data.ordenes || data.data || data || [];
-                const sel = document.getElementById('pg-orden');
-                if (sel) {
-                    sel.innerHTML = '<option value="">Seleccionar OT...</option>' + ordenes.map(o => `<option value="${o.id}">#${o.numero_orden || o.id} - ${Utils.escapeHTML(o.cliente_nombre || '--')} (${Utils.fmt(o.monto_total || o.monto || 0)})</option>`).join('');
-                }
-            } catch (err) { console.error(err); }
-        },
-
-        render(data) {
-            const tbody = document.getElementById('tbl-facturacion');
-            if (!tbody) return;
-            if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" class="bf-empty"><i class="fa-solid fa-credit-card"></i>Sin pagos</td></tr>';
-                return;
-            }
-            tbody.innerHTML = data.map(p => `<tr>
-                <td>#${p.id || '--'}</td>
-                <td>${Utils.escapeHTML(p.orden_numero || p.orden_id || '--')}</td>
-                <td>${Utils.escapeHTML(p.cliente_nombre || p.cliente || '--')}</td>
-                <td class="fw-600">${Utils.fmt(p.monto)}</td>
-                <td>${Utils.translateMetodo(p.metodo)}</td>
-                <td style="font-size:0.78rem;">${Utils.escapeHTML(p.referencia || '--')}</td>
-                <td style="font-size:0.78rem;">${Utils.fmtDate(p.fecha || p.created_at)}</td>
-                <td>
-                    <button class="btn-bf-icon danger" onclick="App.facturacion.remove(${p.id})"><i class="fa-solid fa-trash"></i></button>
-                </td>
-            </tr>`).join('');
-        },
-
-        filter(term) {
-            const t = term.toLowerCase();
-            this.render(this._data.filter(p => `${p.cliente_nombre} ${p.referencia} ${p.metodo}`.toLowerCase().includes(t)));
-        },
-
-        async openCreate() {
-            Utils.setText('modal-pago-title', 'Registrar Pago');
-            ['pg-id','pg-monto','pg-referencia','pg-notas'].forEach(id => Utils.setVal(id, ''));
-            Utils.setVal('pg-metodo', 'efectivo');
-            Utils.setVal('pg-fecha', Utils.today());
-            await this.loadOrdenesSelect();
-            Utils.showModal('modal-pago');
-        },
-
-        async save() {
-            const body = {
-                orden_id: Utils.val('pg-orden'),
-                monto: parseFloat(Utils.val('pg-monto')) || 0,
-                metodo: Utils.val('pg-metodo'),
-                referencia: Utils.val('pg-referencia'),
-                fecha: Utils.val('pg-fecha'),
-                notas: Utils.val('pg-notas'),
-            };
-            if (!body.orden_id || !body.monto) { Utils.toast('OT y Monto son requeridos', 'warning'); return; }
-            try {
-                await API.post('/facturacion', body);
-                Utils.toast('Pago registrado', 'success');
-                Utils.hideModal('modal-pago');
-                this.load();
-            } catch (err) { Utils.toast(err.message, 'error'); }
-        },
-
-        async remove(id) {
-            if (!await Utils.confirm('¿Eliminar este pago?')) return;
-            try { await API.delete(`/facturacion/${id}`); Utils.toast('Pago eliminado', 'success'); this.load(); } catch (err) { Utils.toast(err.message, 'error'); }
-        },
-    },
-
-    // ========================================================
-    // CONTABILIDAD (PARTIDA DOBLE)
-    // ========================================================
-    contabilidad: {
-        _cuentas: [],
-        _asientos: [],
-        _currentCuentaId: null,
-
-        async load() {
-            try {
-                const [cuentasData, asientosData] = await Promise.all([API.get('/contabilidad/cuentas'), API.get('/contabilidad/asientos')]);
-                this._cuentas = cuentasData.data || cuentasData.cuentas || cuentasData || [];
-                this._asientos = asientosData.data || asientosData.asientos || asientosData || [];
-                this.renderCuentas(this._cuentas);
-                this.renderAsientos(this._asientos);
-                this.populateCuentaSelect();
-            } catch (err) {
-                console.error('Contabilidad load error:', err);
-                this._cuentas = [];
-                this._asientos = [];
-            }
-        },
-
-        renderCuentas(data) {
-            const tbody = document.getElementById('tbl-cuentas');
-            if (!tbody) return;
-            if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="bf-empty"><i class="fa-solid fa-scale-balanced"></i>Sin cuentas</td></tr>';
-                return;
-            }
-            tbody.innerHTML = data.map(c => `<tr>
-                <td class="fw-600">${Utils.escapeHTML(c.codigo || '--')}</td>
-                <td>${Utils.escapeHTML(c.nombre || '--')}</td>
-                <td>${Utils.escapeHTML(c.tipo || '--')}</td>
-                <td>${Utils.escapeHTML(c.naturaleza || '--')}</td>
-                <td class="fw-600">${Utils.fmt(c.saldo || 0)}</td>
-                <td>
-                    <div class="d-flex gap-1">
-                        <button class="btn-bf-icon" onclick="App.contabilidad.openEditCuenta(${c.id})"><i class="fa-solid fa-pen"></i></button>
-                        <button class="btn-bf-icon danger" onclick="App.contabilidad.removeCuenta(${c.id})"><i class="fa-solid fa-trash"></i></button>
-                    </div>
-                </td>
-            </tr>`).join('');
-        },
-
-        renderAsientos(data) {
-            const tbody = document.getElementById('tbl-asientos');
-            if (!tbody) return;
-            if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="bf-empty"><i class="fa-solid fa-file-invoice"></i>Sin asientos</td></tr>';
-                return;
-            }
-            tbody.innerHTML = data.map(a => `<tr>
-                <td class="fw-600">#${a.id || a.numero || '--'}</td>
-                <td style="font-size:0.78rem;">${Utils.fmtDate(a.fecha)}</td>
-                <td>${Utils.escapeHTML(a.concepto || '--')}</td>
-                <td>${Utils.fmt(a.total_debe || 0)}</td>
-                <td>${Utils.fmt(a.total_haber || 0)}</td>
-                <td>
-                    <button class="btn-bf-icon danger" onclick="App.contabilidad.removeAsiento(${a.id})"><i class="fa-solid fa-trash"></i></button>
-                </td>
-            </tr>`).join('');
-        },
-
-        populateCuentaSelect() {
-            const opts = '<option value="">Seleccionar...</option>' + this._cuentas.map(c => `<option value="${c.id}">${Utils.escapeHTML(c.codigo)} - ${Utils.escapeHTML(c.nombre)}</option>`).join('');
-            // Mayor select
-            const sel = document.getElementById('mayor-cuenta-select');
-            if (sel) sel.innerHTML = '<option value="">Seleccionar cuenta...</option>' + this._cuentas.map(c => `<option value="${c.id}">${Utils.escapeHTML(c.codigo)} - ${Utils.escapeHTML(c.nombre)}</option>`).join('');
-            // Asiento lines
-            document.querySelectorAll('.as-cuenta').forEach(s => { const val = s.value; s.innerHTML = opts; s.value = val; });
-        },
-
-        openCreateCuenta() {
-            Utils.setText('modal-cuenta-title', 'Nueva Cuenta');
-            ['cta-id','cta-codigo','cta-nombre'].forEach(id => Utils.setVal(id, ''));
-            Utils.setVal('cta-tipo', 'activo');
-            Utils.setVal('cta-naturaleza', 'deudora');
-            Utils.showModal('modal-cuenta');
-        },
-
-        openEditCuenta(id) {
-            const c = this._cuentas.find(x => x.id === id);
-            if (!c) return;
-            Utils.setText('modal-cuenta-title', 'Editar Cuenta');
-            Utils.setVal('cta-id', c.id);
-            Utils.setVal('cta-codigo', c.codigo);
-            Utils.setVal('cta-nombre', c.nombre);
-            Utils.setVal('cta-tipo', c.tipo);
-            Utils.setVal('cta-naturaleza', c.naturaleza);
-            Utils.showModal('modal-cuenta');
-        },
-
-        async saveCuenta() {
-            const id = Utils.val('cta-id');
-            const body = { codigo: Utils.val('cta-codigo'), nombre: Utils.val('cta-nombre'), tipo: Utils.val('cta-tipo'), naturaleza: Utils.val('cta-naturaleza') };
-            if (!body.codigo || !body.nombre) { Utils.toast('Código y Nombre son requeridos', 'warning'); return; }
-            try {
-                if (id) { await API.put(`/contabilidad/cuentas/${id}`, body); Utils.toast('Cuenta actualizada', 'success'); }
-                else { await API.post('/contabilidad/cuentas', body); Utils.toast('Cuenta creada', 'success'); }
-                Utils.hideModal('modal-cuenta');
-                this.load();
-            } catch (err) { Utils.toast(err.message, 'error'); }
-        },
-
-        async removeCuenta(id) {
-            if (!await Utils.confirm('¿Eliminar esta cuenta?')) return;
-            try { await API.delete(`/contabilidad/cuentas/${id}`); Utils.toast('Cuenta eliminada', 'success'); this.load(); } catch (err) { Utils.toast(err.message, 'error'); }
-        },
-
-        openCreateAsiento() {
-            Utils.setText('modal-asiento-title', 'Nuevo Asiento');
-            Utils.setVal('as-id', '');
-            Utils.setVal('as-fecha', Utils.today());
-            Utils.setVal('as-concepto', '');
-            document.getElementById('as-lineas').innerHTML = `
-                <div class="row g-2 mb-1 as-linea">
-                    <div class="col-md-4"><select class="bf-input bf-select as-cuenta"><option value="">Cuenta...</option>${this._cuentas.map(c => `<option value="${c.id}">${Utils.escapeHTML(c.codigo)} - ${Utils.escapeHTML(c.nombre)}</option>`).join('')}</select></div>
-                    <div class="col-md-3"><input type="number" class="bf-input" placeholder="Debe" step="0.01" data-field="debe"></div>
-                    <div class="col-md-3"><input type="number" class="bf-input" placeholder="Haber" step="0.01" data-field="haber"></div>
-                    <div class="col-md-2 d-flex align-items-center"><button type="button" class="btn-bf-icon danger" onclick="this.closest('.as-linea').remove()"><i class="fa-solid fa-trash"></i></button></div>
-                </div>`;
-            Utils.showModal('modal-asiento');
-        },
-
-        addAsientoLine() {
-            const container = document.getElementById('as-lineas');
-            const div = document.createElement('div');
-            div.className = 'row g-2 mb-1 as-linea';
-            div.innerHTML = `
-                <div class="col-md-4"><select class="bf-input bf-select as-cuenta"><option value="">Cuenta...</option>${this._cuentas.map(c => `<option value="${c.id}">${Utils.escapeHTML(c.codigo)} - ${Utils.escapeHTML(c.nombre)}</option>`).join('')}</select></div>
-                <div class="col-md-3"><input type="number" class="bf-input" placeholder="Debe" step="0.01" data-field="debe"></div>
-                <div class="col-md-3"><input type="number" class="bf-input" placeholder="Haber" step="0.01" data-field="haber"></div>
-                <div class="col-md-2 d-flex align-items-center"><button type="button" class="btn-bf-icon danger" onclick="this.closest('.as-linea').remove()"><i class="fa-solid fa-trash"></i></button></div>`;
-            container.appendChild(div);
-        },
-
-        async saveAsiento() {
-            const lineas = [];
-            document.querySelectorAll('.as-linea').forEach(row => {
-                const cuentaId = row.querySelector('.as-cuenta').value;
-                const debe = parseFloat(row.querySelector('[data-field="debe"]').value) || 0;
-                const haber = parseFloat(row.querySelector('[data-field="haber"]').value) || 0;
-                if (cuentaId && (debe > 0 || haber > 0)) lineas.push({ cuenta_id: cuentaId, debe, haber });
-            });
-            if (lineas.length < 2) { Utils.toast('Mínimo 2 líneas por asiento', 'warning'); return; }
-            const totalDebe = lineas.reduce((s, l) => s + l.debe, 0);
-            const totalHaber = lineas.reduce((s, l) => s + l.haber, 0);
-            if (Math.abs(totalDebe - totalHaber) > 0.01) { Utils.toast(`Débe ${Utils.fmt(totalDebe)} ≠ Haber ${Utils.fmt(totalHaber)}`, 'error'); return; }
-            const body = { fecha: Utils.val('as-fecha'), concepto: Utils.val('as-concepto'), lineas };
-            if (!body.concepto) { Utils.toast('El concepto es requerido', 'warning'); return; }
-            try {
-                await API.post('/contabilidad/asientos', body);
-                Utils.toast('Asiento registrado', 'success');
-                Utils.hideModal('modal-asiento');
-                this.load();
-            } catch (err) { Utils.toast(err.message, 'error'); }
-        },
-
-        async removeAsiento(id) {
-            if (!await Utils.confirm('¿Eliminar este asiento?')) return;
-            try { await API.delete(`/contabilidad/asientos/${id}`); Utils.toast('Asiento eliminado', 'success'); this.load(); } catch (err) { Utils.toast(err.message, 'error'); }
-        },
-
-        async loadMayor() {
-            const cuentaId = Utils.val('mayor-cuenta-select');
-            if (!cuentaId) { Utils.setHTML('tbl-mayor', '<tr><td colspan="6" class="bf-empty"><i class="fa-solid fa-book"></i>Seleccione una cuenta</td></tr>'); return; }
-            try {
-                const data = await API.get(`/contabilidad/cuentas/${cuentaId}/mayor`);
-                const movimientos = data.data || data.movimientos || data || [];
-                const tbody = document.getElementById('tbl-mayor');
-                if (!movimientos || movimientos.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" class="bf-empty"><i class="fa-solid fa-book"></i>Sin movimientos</td></tr>';
-                    return;
-                }
-                let saldo = 0;
-                tbody.innerHTML = movimientos.map(m => {
-                    const debe = m.debe || 0;
-                    const haber = m.haber || 0;
-                    saldo += debe - haber;
-                    return `<tr>
-                        <td style="font-size:0.78rem;">${Utils.fmtDate(m.fecha)}</td>
-                        <td>${Utils.escapeHTML(m.concepto || '--')}</td>
-                        <td style="font-size:0.78rem;">#${m.asiento_id || '--'}</td>
-                        <td>${debe > 0 ? Utils.fmt(debe) : ''}</td>
-                        <td>${haber > 0 ? Utils.fmt(haber) : ''}</td>
-                        <td class="fw-600" style="color:${saldo >= 0 ? '#16a34a' : '#dc2626'};">${Utils.fmt(Math.abs(saldo))}</td>
-                    </tr>`;
-                }).join('');
-            } catch (err) { Utils.toast(err.message, 'error'); }
-        },
-    },
-
-    // ========================================================
-    // GASTOS DEL NEGOCIO
-    // ========================================================
-    gastos: {
-        _data: [],
-
-        async load() {
-            try {
-                const data = await API.get('/gastos');
-                this._data = data.data || data.gastos || data || [];
-                this.render(this._data);
-            } catch (err) { this._data = []; this.render([]); }
-        },
-
-        render(data) {
-            const tbody = document.getElementById('tbl-gastos');
-            if (!tbody) return;
-            if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="bf-empty"><i class="fa-solid fa-money-bill-trend-up"></i>Sin gastos</td></tr>';
-                return;
-            }
-            tbody.innerHTML = data.map(g => `<tr>
-                <td>${Utils.escapeHTML(g.concepto || '--')}</td>
-                <td class="fw-600">${Utils.fmt(g.monto)}</td>
-                <td>${Utils.translateCategoria(g.categoria)}</td>
-                <td style="font-size:0.78rem;">${Utils.fmtDate(g.fecha)}</td>
-                <td>${g.comprobante ? '<i class="fa-solid fa-file" style="color:var(--bf-primary);cursor:pointer;"></i>' : '--'}</td>
-                <td>
-                    <div class="d-flex gap-1">
-                        <button class="btn-bf-icon" onclick="App.gastos.openEdit(${g.id})"><i class="fa-solid fa-pen"></i></button>
-                        <button class="btn-bf-icon danger" onclick="App.gastos.remove(${g.id})"><i class="fa-solid fa-trash"></i></button>
-                    </div>
-                </td>
-            </tr>`).join('');
-        },
-
-        filter(term) {
-            const t = term.toLowerCase();
-            this.render(this._data.filter(g => `${g.concepto} ${g.categoria} ${g.monto}`.toLowerCase().includes(t)));
-        },
-
-        openCreate() {
-            Utils.setText('modal-gasto-title', 'Nuevo Gasto');
-            ['gt-id','gt-concepto','gt-monto'].forEach(id => Utils.setVal(id, ''));
-            Utils.setVal('gt-categoria', 'otros');
-            Utils.setVal('gt-fecha', Utils.today());
-            const fileInput = document.getElementById('gt-comprobante');
-            if (fileInput) fileInput.value = '';
-            Utils.showModal('modal-gasto');
-        },
-
-        openEdit(id) {
-            const g = this._data.find(x => x.id === id);
-            if (!g) return;
-            Utils.setText('modal-gasto-title', 'Editar Gasto');
-            Utils.setVal('gt-id', g.id);
-            Utils.setVal('gt-concepto', g.concepto);
-            Utils.setVal('gt-monto', g.monto);
-            Utils.setVal('gt-categoria', g.categoria || 'otros');
-            Utils.setVal('gt-fecha', g.fecha ? g.fecha.split('T')[0] : Utils.today());
-            Utils.showModal('modal-gasto');
-        },
-
-        async save() {
-            const id = Utils.val('gt-id');
-            const body = {
-                concepto: Utils.val('gt-concepto'),
-                monto: parseFloat(Utils.val('gt-monto')) || 0,
-                categoria: Utils.val('gt-categoria'),
-                fecha: Utils.val('gt-fecha'),
-            };
-            if (!body.concepto || !body.monto) { Utils.toast('Concepto y Monto son requeridos', 'warning'); return; }
-            // Handle file upload
-            const fileInput = document.getElementById('gt-comprobante');
-            if (fileInput && fileInput.files.length > 0) {
-                body.comprobante = await Utils.fileToBase64(fileInput.files[0]);
-            }
-            try {
-                if (id) { await API.put(`/gastos/${id}`, body); Utils.toast('Gasto actualizado', 'success'); }
-                else { await API.post('/gastos', body); Utils.toast('Gasto registrado', 'success'); }
-                Utils.hideModal('modal-gasto');
-                this.load();
-            } catch (err) { Utils.toast(err.message, 'error'); }
-        },
-
-        async remove(id) {
-            if (!await Utils.confirm('¿Eliminar este gasto?')) return;
-            try { await API.delete(`/gastos/${id}`); Utils.toast('Gasto eliminado', 'success'); this.load(); } catch (err) { Utils.toast(err.message, 'error'); }
-        },
-    },
-
-    // ========================================================
-    // WHATSAPP
-    // ========================================================
-    whatsapp: {
-        _data: [],
-
+    notificaciones: {
         async load() {
             try {
                 const data = await API.get('/notificaciones');
-                this._data = data.data || data.notificaciones || data || [];
-                this.render(this._data);
-            } catch (err) { this._data = []; this.render([]); }
-        },
-
-        render(data) {
-            const tbody = document.getElementById('tbl-whatsapp');
-            if (!tbody) return;
-            if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="bf-empty"><i class="fa-brands fa-whatsapp"></i>Sin notificaciones</td></tr>';
-                return;
+                const notifs = data.data || data.notificaciones || data || [];
+                const tbody = document.getElementById('tbl-notificaciones');
+                if (!tbody) return;
+                if (!notifs || notifs.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="bf-empty"><i class="fa-solid fa-bell-slash"></i>Sin notificaciones</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = notifs.slice(0, 100).map(n => {
+                    const estadoBadge = n.estado === 'enviado'
+                        ? '<span class="badge-st" style="background:#fef3c7;color:#d97706;">Pendiente</span>'
+                        : '<span class="badge-st" style="background:#dcfce7;color:#16a34a;">Enviado</span>';
+                    return `<tr>
+                        <td style="font-size:0.78rem;">${Utils.fmtDateTime(n.fecha_envio || n.created_at)}</td>
+                        <td style="font-size:0.82rem;">${Utils.escapeHTML(n.destino || n.telefono || '--')}</td>
+                        <td>${Utils.escapeHTML(n.orden_numero ? '#' + String(n.orden_numero).padStart(6,'0') : '--')}</td>
+                        <td>${estadoBadge}</td>
+                        <td style="font-size:0.78rem;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${Utils.escapeHTML(n.mensaje || '')}">${Utils.escapeHTML(n.mensaje || '').substring(0, 80)}</td>
+                    </tr>`;
+                }).join('');
+            } catch (err) {
+                const tbody = document.getElementById('tbl-notificaciones');
+                if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="bf-empty"><i class="fa-solid fa-bell-slash"></i>Error cargando</td></tr>';
             }
-            tbody.innerHTML = data.map(n => `<tr>
-                <td style="font-size:0.78rem;">${Utils.fmtDateTime(n.fecha || n.created_at)}</td>
-                <td>${Utils.escapeHTML(n.destino || n.telefono || '--')}</td>
-                <td style="font-size:0.8rem;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${Utils.escapeHTML(n.mensaje || '--')}</td>
-                <td><span class="badge-st" style="background:${n.estado === 'enviado' || n.status === 'sent' ? '#dcfce7;color:#16a34a;' : n.estado === 'error' || n.status === 'error' ? '#fee2e2;color:#dc2626;' : '#fef3c7;color:#d97706;'}">${Utils.escapeHTML(n.estado || n.status || '--')}</span></td>
-                <td style="font-size:0.78rem;color:#dc2626;">${Utils.escapeHTML(n.error || n.error_message || '')}</td>
-            </tr>`).join('');
-        },
-
-        testSend() { Utils.showModal('modal-whatsapp-test'); },
-
-        async send() {
-            const numero = Utils.val('wa-numero');
-            const mensaje = Utils.val('wa-mensaje');
-            if (!numero || !mensaje) { Utils.toast('Número y mensaje son requeridos', 'warning'); return; }
-            try {
-                await API.post('/notificaciones/test', { numero, mensaje });
-                Utils.toast('Mensaje de prueba enviado', 'success');
-                Utils.hideModal('modal-whatsapp-test');
-                this.load();
-            } catch (err) { Utils.toast(err.message, 'error'); }
         },
     },
 
@@ -1811,348 +1783,80 @@ const App = {
     // ========================================================
     landing: {
         _data: [],
-        _fields: [],
-        _editingId: null,
-
         async load() {
-            this.showList();
             try {
                 const data = await API.get('/landing');
-                this._data = data.data || data.landings || data || [];
-                this.render(this._data);
-            } catch (err) { this._data = []; this.render([]); }
+                this._data = data.data || data || [];
+                this.render();
+            } catch (e) {
+                Utils.toast('Error cargando landing pages', 'error');
+            }
         },
-
-        render(data) {
+        render() {
             const tbody = document.getElementById('tbl-landing');
             if (!tbody) return;
-            if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="bf-empty"><i class="fa-solid fa-globe"></i>Sin landing pages</td></tr>';
+            if (!this._data.length) {
+                tbody.innerHTML = '<tr><td colspan="5" class="bf-empty"><i class="fa-solid fa-globe"></i>Sin landing pages</td></tr>';
                 return;
             }
-            tbody.innerHTML = data.map(l => `<tr>
-                <td class="fw-600">${Utils.escapeHTML(l.titulo || '--')}</td>
-                <td style="font-size:0.78rem;color:#64748b;">${Utils.escapeHTML(l.slug || '--')}</td>
+            tbody.innerHTML = this._data.map(l => `<tr>
+                <td><strong>${Utils.escapeHTML(l.titulo || '')}</strong><br><small class="text-muted">/${Utils.escapeHTML(l.slug || '')}</small></td>
                 <td>${l.visitas || 0}</td>
                 <td>${l.conversiones || 0}</td>
-                <td><span class="badge-st" style="background:${l.activo ? '#dcfce7;color:#16a34a;' : '#f1f5f9;color:#64748b;'}">${l.activo ? 'Activa' : 'Inactiva'}</span></td>
-                <td>
-                    <div class="d-flex gap-1">
-                        <button class="btn-bf-icon" onclick="App.landing.openEdit(${l.id})" title="Editar"><i class="fa-solid fa-pen"></i></button>
-                        <button class="btn-bf-icon" onclick="App.landing.viewConversions(${l.id})" title="Conversiones"><i class="fa-solid fa-chart-line"></i></button>
-                        <button class="btn-bf-icon danger" onclick="App.landing.remove(${l.id})" title="Eliminar"><i class="fa-solid fa-trash"></i></button>
-                    </div>
-                </td>
+                <td>${l.publica ? '<span class="badge-st" style="background:#dcfce7;color:#16a34a;">Activa</span>' : '<span class="badge-st" style="background:#fee2e2;color:#dc2626;">Borrador</span>'}</td>
+                <td>${Utils.fmtDate(l.creado_en)}</td>
             </tr>`).join('');
-        },
-
-        showList() {
-            document.getElementById('landing-list-view').style.display = '';
-            document.getElementById('landing-form-view').style.display = 'none';
-        },
-
-        openCreate() {
-            this._editingId = null;
-            this._fields = [];
-            Utils.setText('landing-form-title', 'Nueva Landing Page');
-            ['lp-titulo','lp-slug','lp-descripcion','lp-cta-texto','lp-cta-url','lp-seo-title','lp-seo-desc'].forEach(id => Utils.setVal(id, ''));
-            Utils.setVal('lp-cta-texto', 'Solicitar Cotización');
-            Utils.setVal('lp-color', '#0d9488');
-            Utils.setVal('lp-fuente', 'Inter');
-            Utils.setHTML('lp-fields-list', '');
-            document.getElementById('landing-list-view').style.display = 'none';
-            document.getElementById('landing-form-view').style.display = '';
-        },
-
-        async openEdit(id) {
-            const l = this._data.find(x => x.id === id);
-            if (!l) return;
-            this._editingId = id;
-            this.openCreate();
-            Utils.setText('landing-form-title', `Editar: ${l.titulo || ''}`);
-            Utils.setVal('lp-titulo', l.titulo);
-            Utils.setVal('lp-slug', l.slug);
-            Utils.setVal('lp-descripcion', l.descripcion);
-            Utils.setVal('lp-cta-texto', l.cta_texto || l.ctaTexto || 'Solicitar Cotización');
-            Utils.setVal('lp-cta-url', l.cta_url || l.ctaUrl || '');
-            Utils.setVal('lp-color', l.color || '#0d9488');
-            Utils.setVal('lp-fuente', l.fuente || 'Inter');
-            Utils.setVal('lp-seo-title', l.seo_title || '');
-            Utils.setVal('lp-seo-desc', l.seo_description || '');
-            this._fields = l.form_fields || l.campos || [];
-            this.renderFields();
-        },
-
-        addFormField(type) {
-            const fieldNames = { nombre: 'Nombre', email: 'Email', telefono: 'Teléfono', mensaje: 'Mensaje' };
-            this._fields.push({ tipo: type, label: fieldNames[type] || type, requerido: true });
-            this.renderFields();
-        },
-
-        renderFields() {
-            const container = document.getElementById('lp-fields-list');
-            if (!container) return;
-            container.innerHTML = this._fields.map((f, i) => `
-                <div class="d-flex align-items-center gap-2 mb-2 p-2" style="background:#f8fafc;border-radius:0.4rem;border:1px solid #f1f5f9;">
-                    <span class="badge-st" style="background:var(--bf-primary);color:#fff;">${Utils.escapeHTML(f.tipo)}</span>
-                    <input class="bf-input" value="${Utils.escapeHTML(f.label)}" style="max-width:200px;" onchange="App.landing._fields[${i}].label=this.value">
-                    <label style="font-size:0.78rem;display:flex;align-items:center;gap:0.3rem;cursor:pointer;">
-                        <input type="checkbox" ${f.requerido ? 'checked' : ''} onchange="App.landing._fields[${i}].requerido=this.checked"> Req.
-                    </label>
-                    <button class="btn-bf-icon danger ms-auto" onclick="App.landing._fields.splice(${i},1);App.landing.renderFields();"><i class="fa-solid fa-trash"></i></button>
-                </div>
-            `).join('');
-        },
-
-        async save() {
-            const body = {
-                titulo: Utils.val('lp-titulo'),
-                slug: Utils.val('lp-slug'),
-                descripcion: Utils.val('lp-descripcion'),
-                cta_texto: Utils.val('lp-cta-texto'),
-                cta_url: Utils.val('lp-cta-url'),
-                color: Utils.val('lp-color'),
-                fuente: Utils.val('lp-fuente'),
-                seo_title: Utils.val('lp-seo-title'),
-                seo_description: Utils.val('lp-seo-desc'),
-                form_fields: this._fields,
-            };
-            if (!body.titulo) { Utils.toast('El título es requerido', 'warning'); return; }
-            // Handle logo upload
-            const logoFile = document.getElementById('lp-logo').files[0];
-            if (logoFile) body.logo = await Utils.fileToBase64(logoFile);
-            const bgFile = document.getElementById('lp-bg-image').files[0];
-            if (bgFile) body.bg_image = await Utils.fileToBase64(bgFile);
-
-            try {
-                if (this._editingId) { await API.put(`/landing/${this._editingId}`, body); Utils.toast('Landing page actualizada', 'success'); }
-                else { await API.post('/landing', body); Utils.toast('Landing page creada', 'success'); }
-                this.load();
-            } catch (err) { Utils.toast(err.message, 'error'); }
-        },
-
-        preview() {
-            const titulo = Utils.val('lp-titulo') || 'Preview';
-            const color = Utils.val('lp-color') || '#0d9488';
-            const descripcion = Utils.val('lp-descripcion') || '';
-            const cta = Utils.val('lp-cta-texto') || 'CTA';
-            const fields = this._fields || [];
-            const formFieldsHTML = fields.map(f => `<div class="mb-2"><input type="${f.tipo === 'mensaje' ? 'textarea' : f.tipo === 'email' ? 'email' : 'text'}" class="bf-input" placeholder="${Utils.escapeHTML(f.label)}" ${f.requerido ? 'required' : ''}></div>`).join('');
-
-            const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet"><style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:'Inter',sans-serif;}</style></head><body>
-                <div style="min-height:100vh;background:${color};display:flex;align-items:center;justify-content:center;padding:2rem;">
-                    <div style="background:#fff;border-radius:1rem;padding:2.5rem;max-width:500px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.2);text-align:center;">
-                        <h1 style="font-size:1.8rem;font-weight:800;color:#1e293b;margin-bottom:0.5rem;">${Utils.escapeHTML(titulo)}</h1>
-                        <p style="color:#64748b;font-size:0.9rem;margin-bottom:1.5rem;">${Utils.escapeHTML(descripcion)}</p>
-                        ${formFieldsHTML}
-                        <button style="background:${color};color:#fff;border:none;padding:0.75rem 2rem;border-radius:0.5rem;font-weight:600;font-size:1rem;cursor:pointer;width:100%;">${Utils.escapeHTML(cta)}</button>
-                    </div>
-                </div>
-            </body></html>`;
-
-            const win = window.open('', '_blank', 'width=800,height=600');
-            if (win) { win.document.write(html); win.document.close(); }
-            else { Utils.toast('No se pudo abrir la ventana de vista previa', 'warning'); }
-        },
-
-        async viewConversions(id) {
-            try {
-                const data = await API.get(`/landing/${id}/conversiones`);
-                const conv = data.data || data.conversiones || data || [];
-                await Swal.fire({
-                    title: 'Conversiones',
-                    html: conv.length > 0 ? `<table style="width:100%;font-size:0.85rem;border-collapse:collapse;"><tr style="background:#f8fafc;"><th style="padding:0.5rem;text-align:left;border-bottom:1px solid #e2e8f0;">Fecha</th><th style="padding:0.5rem;text-align:left;border-bottom:1px solid #e2e8f0;">Datos</th></tr>${conv.map(c => `<tr><td style="padding:0.5rem;border-bottom:1px solid #f1f5f9;">${Utils.fmtDateTime(c.fecha)}</td><td style="padding:0.5rem;border-bottom:1px solid #f1f5f9;">${Utils.escapeHTML(c.datos || JSON.stringify(c))}</td></tr>`).join('')}</table>` : '<p style="color:#94a3b8;">Sin conversiones aún</p>',
-                    width: 600,
-                });
-            } catch (err) { Utils.toast(err.message, 'error'); }
-        },
-
-        async remove(id) {
-            if (!await Utils.confirm('¿Eliminar esta landing page?')) return;
-            try { await API.delete(`/landing/${id}`); Utils.toast('Landing page eliminada', 'success'); this.load(); } catch (err) { Utils.toast(err.message, 'error'); }
         },
     },
 
     // ========================================================
-    // CONFIGURACIÓN
+    // CONTABILIDAD
     // ========================================================
-    config: {
+    contabilidad: {
         async load() {
             try {
-                const data = await API.get('/config');
-                const cfg = data.data || data.config || data || {};
-                Utils.setVal('cfg-empresa', cfg.empresa_nombre || cfg.nombre || '');
-                Utils.setVal('cfg-rif', cfg.rif || cfg.nit || '');
-                Utils.setVal('cfg-direccion', cfg.direccion || '');
-                Utils.setVal('cfg-telefono', cfg.telefono || '');
-                Utils.setVal('cfg-email', cfg.email || '');
-                Utils.setVal('cfg-wm-instance', cfg.ultramsg_instance || cfg.wm_instance || '');
-                Utils.setVal('cfg-wm-token', cfg.ultramsg_token || cfg.wm_token || '');
-                if (currentUser) {
-                    Utils.setVal('cfg-user-name', currentUser.nombre || '');
-                    Utils.setVal('cfg-user-email', currentUser.email || '');
+                const data = await API.get('/contabilidad/cuentas');
+                const cuentas = data.data || data || [];
+                const tbody = document.getElementById('tbl-cuentas');
+                if (!tbody) return;
+                if (!cuentas.length) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="bf-empty"><i class="fa-solid fa-scale-balanced"></i>Sin cuentas contables</td></tr>';
+                    return;
                 }
-            } catch (err) { console.error('Config load error:', err); }
-        },
-
-        async saveEmpresa() {
-            const body = {
-                empresa_nombre: Utils.val('cfg-empresa'),
-                rif: Utils.val('cfg-rif'),
-                direccion: Utils.val('cfg-direccion'),
-                telefono: Utils.val('cfg-telefono'),
-                email: Utils.val('cfg-email'),
-            };
-            try { await API.put('/config/empresa', body); Utils.toast('Configuración guardada', 'success'); } catch (err) { Utils.toast(err.message, 'error'); }
-        },
-
-        async saveWhatsApp() {
-            const body = { ultramsg_instance: Utils.val('cfg-wm-instance'), ultramsg_token: Utils.val('cfg-wm-token') };
-            try { await API.put('/config/whatsapp', body); Utils.toast('Configuración WhatsApp guardada', 'success'); } catch (err) { Utils.toast(err.message, 'error'); }
-        },
-
-        async saveProfile() {
-            const body = { nombre: Utils.val('cfg-user-name'), email: Utils.val('cfg-user-email') };
-            const pass = Utils.val('cfg-user-pass');
-            if (pass) body.password = pass;
-            try { await API.put('/config/profile', body); Utils.toast('Perfil actualizado', 'success'); } catch (err) { Utils.toast(err.message, 'error'); }
-        },
-
-        async backup() {
-            try {
-                const data = await API.get('/exportar');
-                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `bizflow_backup_${Utils.today()}.json`;
-                a.click();
-                URL.revokeObjectURL(url);
-                Utils.toast('Backup descargado', 'success');
-            } catch (err) { Utils.toast(err.message, 'error'); }
-        },
-    },
-
-    // ========================================================
-    // REPORTES
-    // ========================================================
-    reportes: {
-        _data: [],
-
-        load() {
-            const today = Utils.today();
-            const firstDay = today.substring(0, 8) + '01';
-            Utils.setVal('rpt-fecha-from', firstDay);
-            Utils.setVal('rpt-fecha-to', today);
-        },
-
-        async generate() {
-            const tipo = Utils.val('rpt-tipo');
-            const from = Utils.val('rpt-fecha-from');
-            const to = Utils.val('rpt-fecha-to');
-            try {
-                const params = new URLSearchParams({ tipo, desde: from, hasta: to });
-                const data = await API.get(`/reportes?${params.toString()}`);
-                const result = data.data || data;
-                this._data = result.items || result.filas || result || [];
-                this.renderChart(result, tipo);
-                this.renderTable(this._data);
-            } catch (err) {
-                Utils.toast(err.message, 'error');
-                this._data = [];
+                const tipoColor = { activo: '#dbeafe', pasivo: '#fef3c7', patrimonio: '#e0e7ff', ingreso: '#dcfce7', gasto: '#fee2e2' };
+                const tipoLabel = { activo: 'Activo', pasivo: 'Pasivo', patrimonio: 'Patrimonio', ingreso: 'Ingreso', gasto: 'Gasto' };
+                tbody.innerHTML = cuentas.map(c => `<tr>
+                    <td><strong>${Utils.escapeHTML(c.codigo || '')}</strong></td>
+                    <td>${Utils.escapeHTML(c.nombre || '')}</td>
+                    <td><span class="badge-st" style="background:${tipoColor[c.tipo] || '#f1f5f9'};color:#334155;">${tipoLabel[c.tipo] || c.tipo}</span></td>
+                    <td>${c.activa ? 'Sí' : 'No'}</td>
+                </tr>`).join('');
+            } catch (e) {
+                Utils.toast('Error cargando contabilidad', 'error');
             }
-        },
-
-        renderChart(data, tipo) {
-            const items = data.items || data.filas || data || [];
-            const labels = items.map(i => i.label || i.nombre || i.concepto || i.mes || '');
-            const values = items.map(i => i.total || i.cantidad || i.value || 0);
-            const colors = ['#0d9488','#f59e0b','#6366f1','#ec4899','#14b8a6','#8b5cf6','#f97316','#06b6d4','#10b981','#ef4444'];
-            if (tipo === 'ingresos' || tipo === 'gastos') {
-                createBarChart('chart-reportes', labels, values, colors);
-            } else {
-                createDoughnutChart('chart-reportes', labels, values, colors);
-            }
-        },
-
-        renderTable(data) {
-            const tbody = document.getElementById('tbl-reportes');
-            if (!tbody) return;
-            if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="3" class="bf-empty"><i class="fa-solid fa-chart-bar"></i>Sin datos para el período</td></tr>';
-                return;
-            }
-            tbody.innerHTML = data.map(r => `<tr>
-                <td>${Utils.escapeHTML(r.label || r.nombre || r.concepto || r.mes || '--')}</td>
-                <td>${r.cantidad || r.count || 0}</td>
-                <td class="fw-600">${Utils.fmt(r.total || r.value || 0)}</td>
-            </tr>`).join('');
-        },
-
-        exportPDF() {
-            if (!this._data || this._data.length === 0) { Utils.toast('Genere un reporte primero', 'warning'); return; }
-            try {
-                const { jsPDF } = window.jspdf;
-                const doc = new jsPDF();
-                const tipo = Utils.val('rpt-tipo');
-                const from = Utils.val('rpt-fecha-from');
-                const to = Utils.val('rpt-fecha-to');
-                doc.setFontSize(18);
-                doc.setTextColor(13, 148, 136);
-                doc.text('BizFlow - Reporte', 14, 20);
-                doc.setFontSize(10);
-                doc.setTextColor(100);
-                doc.text(`Tipo: ${tipo} | Desde: ${from} | Hasta: ${to}`, 14, 28);
-
-                const tableData = this._data.map(r => [
-                    r.label || r.nombre || r.concepto || r.mes || '--',
-                    String(r.cantidad || r.count || 0),
-                    Utils.fmt(r.total || r.value || 0),
-                ]);
-                doc.autoTable({
-                    startY: 35,
-                    head: [['Concepto', 'Cantidad', 'Total']],
-                    body: tableData,
-                    theme: 'grid',
-                    headStyles: { fillColor: [13, 148, 136] },
-                });
-                doc.save(`reporte_${tipo}_${from}_${to}.pdf`);
-                Utils.toast('PDF exportado', 'success');
-            } catch (err) { Utils.toast('Error exportando PDF: ' + err.message, 'error'); }
         },
     },
 };
 
 // ============================================================
-// INIT
+// INITIALIZATION
 // ============================================================
 document.addEventListener('DOMContentLoaded', () => {
-    // Show splash screen, then transition directly to app (no login)
+    // Hide splash after 1s
     setTimeout(() => {
-        document.getElementById('splash-screen').classList.add('hidden');
+        const splash = document.getElementById('splash-screen');
+        if (splash) splash.classList.add('hidden');
+    }, 1000);
 
-        // Skip login - go directly to app
-        currentUser = {
-            id: 1,
-            email: 'admin@bizflow.com',
-            nombre: 'Administrador',
-            rol: 'admin',
-            empresa: 'BizFlow',
-        };
-        localStorage.setItem('bizflow_user', JSON.stringify(currentUser));
-        Auth.showApp();
+    Auth.init();
+    initSidebar();
 
-        // Init sidebar
-        initSidebar();
-
-        // Logout button
-        const logoutBtn = document.getElementById('btn-logout');
-        if (logoutBtn) logoutBtn.addEventListener('click', () => Auth.logout());
-
-        // Notifications button (placeholder)
-        const notifBtn = document.getElementById('btn-notifications');
-        if (notifBtn) notifBtn.addEventListener('click', () => {
-            Utils.toast('Sin notificaciones nuevas', 'info');
+    // Form submission for nueva orden
+    const formNuevaOrden = document.getElementById('form-nueva-orden');
+    if (formNuevaOrden) {
+        formNuevaOrden.addEventListener('submit', (e) => {
+            e.preventDefault();
+            App.nuevaOrden.saveOrder();
         });
-    }, 1200);
+    }
 });

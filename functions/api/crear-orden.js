@@ -1,239 +1,199 @@
 // ============================================
-// BIZFLOW - Create Order (Public)
-// POST /api/crear-orden
-// Crear nueva orden de trabajo (versión simplificada, acceso público)
+// API: CREAR ORDEN DE TRABAJO
+// Global Pro Automotriz
+// Soporta: orden normal (Enviada) y OT EXPRESS (Aprobada directo)
 // ============================================
-
-import {
-  corsHeaders,
-  handleOptions,
-  parseBody,
-  validateRequired,
-  successResponse,
-  errorResponse,
-  chileNowStr,
-  chileToday,
-  generateToken,
-} from '../lib/db-helpers.js';
-
-export async function onRequestOptions(context) {
-  return handleOptions();
-}
 
 export async function onRequestPost(context) {
   const { request, env } = context;
-  const body = await parseBody(request);
-
-  if (!body) {
-    return errorResponse('Body de la petición inválido');
-  }
-
-  // Required fields for creating an order
-  const requiredFields = ['patente_placa', 'telefono_cliente'];
-  const { valid, missing } = validateRequired(body, requiredFields);
-
-  if (!valid) {
-    return errorResponse(`Faltan campos obligatorios: ${missing.join(', ')}`);
-  }
-
-  const {
-    nombre_cliente,
-    telefono_cliente,
-    email_cliente,
-    direccion_cliente,
-    patente_placa,
-    marca,
-    modelo,
-    anio,
-    kilometraje,
-    trabajo_frenos,
-    detalle_frenos,
-    trabajo_luces,
-    detalle_luces,
-    trabajo_tren_delantero,
-    detalle_tren_delantero,
-    trabajo_correas,
-    detalle_correas,
-    trabajo_componentes,
-    detalle_componentes,
-    nivel_combustible,
-    direccion,
-    referencia_direccion,
-    servicios,
-    observaciones,
-    negocio_id = 'default',
-  } = body;
 
   try {
-    // 1. Get next order number
-    const config = await env.DB.prepare(
-      'SELECT ultimo_numero_orden FROM Configuracion WHERE id = 1'
-    ).first();
+    const data = await request.json();
 
-    const nextNumber = (config?.ultimo_numero_orden || 0) + 1;
+    const isExpress = data.express === true;
 
-    // 2. Generate unique token for this order
-    const token = generateToken(32);
-
-    const now = chileNowStr();
-    const today = chileToday();
-
-    // 3. Find or create client
-    const telefonoClean = telefono_cliente.replace(/[\s\-\(\)]/g, '').trim();
-    let cliente = await env.DB.prepare(
-      'SELECT id FROM Clientes WHERE telefono = ? AND negocio_id = ?'
-    ).bind(telefonoClean, negocio_id).first();
-
-    if (!cliente) {
-      // Create new client
-      const insertResult = await env.DB.prepare(`
-        INSERT INTO Clientes (nombre, telefono, email, direccion, negocio_id)
-        VALUES (?, ?, ?, ?, ?)
-      `).bind(
-        nombre_cliente || 'Cliente',
-        telefonoClean,
-        email_cliente || null,
-        direccion_cliente || null,
-        negocio_id
-      ).run();
-      cliente = { id: insertResult.meta.last_row_id };
-    } else {
-      // Update existing client info if new data provided
-      if (nombre_cliente || email_cliente || direccion_cliente) {
-        await env.DB.prepare(`
-          UPDATE Clientes SET
-            nombre = COALESCE(NULLIF(?, ''), nombre),
-            email = COALESCE(NULLIF(?, ''), email),
-            direccion = COALESCE(NULLIF(?, ''), direccion)
-          WHERE id = ?
-        `).bind(
-          nombre_cliente || null,
-          email_cliente || null,
-          direccion_cliente || null,
-          cliente.id
-        ).run();
-      }
+    // Validaciones básicas
+    if (!data.patente || !data.cliente || !data.telefono) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Faltan datos obligatorios: patente, cliente y teléfono'
+      }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 400
+      });
     }
 
-    // 4. Find or create vehicle
-    let vehiculoId = null;
-    const patenteClean = patente_placa.replace(/[\s\.\-]/g, '').toUpperCase().trim();
+    // Obtener próximo número de orden
+    const configResult = await env.DB.prepare(
+      "SELECT ultimo_numero_orden FROM Configuracion WHERE id = 1"
+    ).first();
 
-    const vehiculo = await env.DB.prepare(
-      'SELECT id FROM Vehiculos WHERE patente_placa = ? AND negocio_id = ?'
-    ).bind(patenteClean, negocio_id).first();
+    const ultimoNumero = configResult?.ultimo_numero_orden || 57;
+    const nuevoNumero = ultimoNumero + 1;
 
+    // Generar token único
+    const token = crypto.randomUUID();
+
+    // Asegurar columna express en la tabla
+    try { await env.DB.exec('ALTER TABLE OrdenesTrabajo ADD COLUMN es_express INTEGER DEFAULT 0'); } catch (e) {}
+
+    // Crear o actualizar cliente
+    let cliente = await env.DB.prepare(
+      "SELECT id FROM Clientes WHERE nombre = ? AND telefono = ?"
+    ).bind(data.cliente, data.telefono).first();
+
+    let clienteId;
+    if (cliente) {
+      clienteId = cliente.id;
+      // Actualizar RUT si se proporcionó
+      if (data.rut) {
+        await env.DB.prepare(
+          "UPDATE Clientes SET rut = ? WHERE id = ?"
+        ).bind(data.rut, clienteId).run();
+      }
+    } else {
+      const result = await env.DB.prepare(
+        "INSERT INTO Clientes (nombre, rut, telefono) VALUES (?, ?, ?)"
+      ).bind(data.cliente, data.rut || null, data.telefono).run();
+      clienteId = result.meta.last_row_id;
+    }
+
+    // Buscar o crear vehículo
+    let vehiculo = await env.DB.prepare(
+      "SELECT id FROM Vehiculos WHERE patente_placa = ?"
+    ).bind(data.patente).first();
+
+    let vehiculoId;
     if (vehiculo) {
       vehiculoId = vehiculo.id;
-      // Update vehicle info if provided
-      if (marca || modelo || anio) {
+      // Actualizar datos del vehículo si vienen
+      if (data.marca || data.modelo || data.anio) {
         await env.DB.prepare(`
-          UPDATE Vehiculos SET
-            marca = COALESCE(NULLIF(?, ''), marca),
-            modelo = COALESCE(NULLIF(?, ''), modelo),
-            anio = COALESCE(NULLIF(?, 0), anio),
-            kilometraje = COALESCE(NULLIF(?, 0), kilometraje)
+          UPDATE Vehiculos
+          SET marca = ?, modelo = ?, anio = ?, cilindrada = ?,
+              combustible = ?, kilometraje = ?, cliente_id = ?
           WHERE id = ?
         `).bind(
-          marca || null,
-          modelo || null,
-          anio ? parseInt(anio) : null,
-          kilometraje ? parseInt(kilometraje) : null,
+          data.marca || null,
+          data.modelo || null,
+          data.anio || null,
+          data.cilindrada || null,
+          data.combustible || null,
+          data.kilometraje || null,
+          clienteId,
           vehiculoId
         ).run();
       }
-    } else if (marca || modelo) {
-      // Create new vehicle
-      const insertVehiculo = await env.DB.prepare(`
-        INSERT INTO Vehiculos (cliente_id, patente_placa, marca, modelo, anio, kilometraje, negocio_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+    } else {
+      const result = await env.DB.prepare(`
+        INSERT INTO Vehiculos (cliente_id, patente_placa, marca, modelo, anio,
+                              cilindrada, combustible, kilometraje)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
-        cliente.id,
-        patenteClean,
-        marca || null,
-        modelo || null,
-        anio ? parseInt(anio) : null,
-        kilometraje ? parseInt(kilometraje) : null,
-        negocio_id
+        clienteId,
+        data.patente,
+        data.marca || null,
+        data.modelo || null,
+        data.anio || null,
+        data.cilindrada || null,
+        data.combustible || null,
+        data.kilometraje || null
       ).run();
-      vehiculoId = insertVehiculo.meta.last_row_id;
+      vehiculoId = result.meta.last_row_id;
     }
 
-    // 5. Parse services if array
-    const serviciosStr = Array.isArray(servicios)
-      ? JSON.stringify(servicios)
-      : (servicios || '');
+    // Auto-alter: asegurar columnas que pueden faltar existan
+    const columnasFaltantes = [
+      'diagnostico_checks TEXT',
+      'diagnostico_observaciones TEXT',
+      'servicios_seleccionados TEXT',
+      'fecha_creacion TEXT',
+      'fecha_completado TEXT'
+    ];
+    for (const colDef of columnasFaltantes) {
+      try {
+        await env.DB.exec(`ALTER TABLE OrdenesTrabajo ADD COLUMN ${colDef}`);
+      } catch (e) { /* columna ya existe */ }
+    }
 
-    // 6. Insert the order
-    const insertOrden = await env.DB.prepare(`
-      INSERT INTO OrdenesTrabajo (
-        numero_orden, token, cliente_id, vehiculo_id,
-        patente_placa, fecha_ingreso, hora_ingreso,
-        marca, modelo, anio, kilometraje,
-        direccion, referencia_direccion,
-        trabajo_frenos, detalle_frenos,
-        trabajo_luces, detalle_luces,
-        trabajo_tren_delantero, detalle_tren_delantero,
-        trabajo_correas, detalle_correas,
-        trabajo_componentes, detalle_componentes,
-        nivel_combustible,
-        servicios_seleccionados,
-        diagnostico_observaciones,
-        estado, estado_trabajo,
-        negocio_id
-      ) VALUES (
-        ?, ?, ?, ?,
-        ?, ?, ?,
-        ?, ?, ?, ?,
-        ?, ?,
-        ?, ?,
-        ?, ?,
-        ?, ?,
-        ?, ?,
-        ?, ?,
-        ?,
-        ?,
-        ?,
-        'Enviada', 'Pendiente Visita',
-        ?
-      )
-    `).bind(
-      nextNumber, token, cliente.id, vehiculoId,
-      patenteClean, today, now.split(' ')[1],
-      marca || null, modelo || null, anio ? parseInt(anio) : null, kilometraje || null,
-      direccion || null, referencia_direccion || null,
-      trabajo_frenos ? 1 : 0, detalle_frenos || null,
-      trabajo_luces ? 1 : 0, detalle_luces || null,
-      trabajo_tren_delantero ? 1 : 0, detalle_tren_delantero || null,
-      trabajo_correas ? 1 : 0, detalle_correas || null,
-      trabajo_componentes ? 1 : 0, detalle_componentes || null,
-      nivel_combustible || null,
-      serviciosStr,
-      observaciones || null,
-      negocio_id
-    ).run();
+    // Función auxiliar para escapar strings
+    const escapeSql = (str) => {
+      if (str === null || str === undefined || str === '') return 'NULL';
+      return "'" + String(str).replace(/'/g, "''").replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/\r/g, '\\r') + "'";
+    };
 
-    // 7. Update next order number in config
+    // Calcular monto_total desde servicios seleccionados si no viene explícitamente (solo para normal)
+    let montoTotal = data.monto_total || 0;
+    if (!isExpress && (!montoTotal || montoTotal === 0) && data.servicios_seleccionados) {
+      try {
+        const servicios = typeof data.servicios_seleccionados === 'string'
+          ? JSON.parse(data.servicios_seleccionados)
+          : data.servicios_seleccionados;
+        montoTotal = servicios.reduce((sum, s) => sum + (Number(s.precio_final) || Number(s.precio_sugerido) || 0), 0);
+      } catch (e) { /* usar monto_total original */ }
+    }
+
+    // Estado: EXPRESS = 'Aprobada' directo, Normal = 'Enviada'
+    const estadoInicial = isExpress ? 'Aprobada' : 'Enviada';
+
+    // Para EXPRESS: las notas de diagnóstico van en diagnostico_observaciones
+    const diagnosticoObs = isExpress
+      ? (data.notas_diagnostico || null)
+      : (data.diagnostico_observaciones || null);
+
+    // Insertar orden de trabajo
+    const stmt = `INSERT INTO OrdenesTrabajo (numero_orden, token, cliente_id, vehiculo_id, patente_placa, fecha_ingreso, hora_ingreso, recepcionista, marca, modelo, anio, cilindrada, combustible, kilometraje, direccion, trabajo_frenos, detalle_frenos, trabajo_luces, detalle_luces, trabajo_tren_delantero, detalle_tren_delantero, trabajo_correas, detalle_correas, trabajo_componentes, detalle_componentes, nivel_combustible, check_paragolfe_delantero_der, check_puerta_delantera_der, check_puerta_trasera_der, check_paragolfe_trasero_izq, check_otros_carroceria, monto_total, monto_abono, monto_restante, metodo_pago, diagnostico_checks, diagnostico_observaciones, servicios_seleccionados, estado, fecha_creacion, es_express) VALUES (${nuevoNumero}, '${token}', ${clienteId}, ${vehiculoId}, '${data.patente}', ${escapeSql(data.fecha_ingreso)}, ${escapeSql(data.hora_ingreso)}, ${escapeSql(data.recepcionista)}, ${escapeSql(data.marca)}, ${escapeSql(data.modelo)}, ${data.anio || 'NULL'}, ${escapeSql(data.cilindrada)}, ${escapeSql(data.combustible)}, ${escapeSql(data.kilometraje)}, ${escapeSql(data.direccion)}, ${data.trabajo_frenos || 0}, ${escapeSql(data.detalle_frenos)}, ${data.trabajo_luces || 0}, ${escapeSql(data.detalle_luces)}, ${data.trabajo_tren_delantero || 0}, ${escapeSql(data.detalle_tren_delantero)}, ${data.trabajo_correas || 0}, ${escapeSql(data.detalle_correas)}, ${data.trabajo_componentes || 0}, ${escapeSql(data.detalle_componentes)}, ${escapeSql(data.nivel_combustible)}, ${data.check_paragolfe_delantero_der || 0}, ${data.check_puerta_delantera_der || 0}, ${data.check_puerta_trasera_der || 0}, ${data.check_paragolfe_trasero_izq || 0}, ${escapeSql(data.check_otros_carroceria)}, ${montoTotal}, ${data.monto_abono || 0}, ${data.monto_restante || 0}, ${escapeSql(data.metodo_pago)}, ${escapeSql(typeof data.diagnostico_checks === 'string' ? data.diagnostico_checks : (data.diagnostico_checks ? JSON.stringify(data.diagnostico_checks) : null))}, ${escapeSql(diagnosticoObs)}, ${escapeSql(typeof data.servicios_seleccionados === 'string' ? data.servicios_seleccionados : (data.servicios_seleccionados ? JSON.stringify(data.servicios_seleccionados) : null))}, '${estadoInicial}', datetime('now', 'localtime'), ${isExpress ? 1 : 0})`;
+
+    await env.DB.exec(stmt);
+
+    // Actualizar número de orden en configuración
     await env.DB.prepare(
-      'UPDATE Configuracion SET ultimo_numero_orden = ? WHERE id = 1'
-    ).bind(nextNumber).run();
+      "UPDATE Configuracion SET ultimo_numero_orden = ? WHERE id = 1"
+    ).bind(nuevoNumero).run();
 
-    const ordenId = insertOrden.meta.last_row_id;
+    // Enviar notificación WhatsApp
+    try {
+      const { registrarNotificacion } = await import('../lib/notificaciones.js');
+      var ordenCreada = await env.DB.prepare(
+        'SELECT id FROM OrdenesTrabajo WHERE numero_orden = ? ORDER BY id DESC LIMIT 1'
+      ).bind(nuevoNumero).first();
+      var ordenId = ordenCreada ? ordenCreada.id : 0;
 
-    return successResponse({
-      id: ordenId,
-      numero_orden: nextNumber,
-      token,
-      patente_placa: patenteClean,
-      estado: 'Enviada',
-      estado_trabajo: 'Pendiente Visita',
-      cliente_id: cliente.id,
-      vehiculo_id: vehiculoId,
-      fecha_creacion: now,
-      mensaje: 'Orden de trabajo creada exitosamente',
-    }, 201);
+      if (isExpress) {
+        // Notificación EXPRESS: sin link de firma
+        await registrarNotificacion(env, ordenId, data.telefono, 'orden_express_creada', {
+          numero_orden: nuevoNumero,
+          patente_placa: data.patente,
+          cliente_nombre: data.cliente
+        });
+      } else {
+        // Notificación normal: con link de firma
+        await registrarNotificacion(env, ordenId, data.telefono, 'orden_creada', {
+          numero_orden: nuevoNumero,
+          patente_placa: data.patente,
+          cliente_nombre: data.cliente,
+          link_aprobacion: 'https://globalprov2.pages.dev/aprobar?token=' + token
+        });
+      }
+    } catch (ne) { console.log('Notificacion no enviada:', ne.message); }
+
+    return new Response(JSON.stringify({
+      success: true,
+      numero_orden: nuevoNumero,
+      token: token,
+      express: isExpress
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+
   } catch (error) {
-    console.error('Error creating order:', error);
-    return errorResponse(`Error al crear la orden: ${error.message}`, 500);
+    console.error('Error al crear orden:', error);
+    return new Response(JSON.stringify({
+      success: false,
+      error: error.message
+    }), {
+      headers: { 'Content-Type': 'application/json' },
+      status: 500
+    });
   }
 }

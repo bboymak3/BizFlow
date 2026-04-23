@@ -1,159 +1,195 @@
-// ============================================================
-// BizFlow - Admin Gastos API
-// GET: List expenses with filters
-// POST: Create expense (optional R2 receipt upload)
-// ============================================================
+// ============================================
+// API: GASTOS DEL NEGOCIO (CRUD)
+// Auto-crea tabla si no existe
+// Global Pro Automotriz
+// ============================================
 
-import { jsonResponse, errorResponse, handleCors, hoyISO } from '../../lib/db-helpers.js';
-import { subirArchivoR2, generarRutaDocumento, base64ToArrayBuffer } from '../../lib/r2-helpers.js';
+async function asegurarTabla(env) {
+  try {
+    await env.DB.prepare(`CREATE TABLE IF NOT EXISTS GastosNegocio (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      concepto TEXT NOT NULL,
+      categoria TEXT NOT NULL DEFAULT 'Otros',
+      monto REAL NOT NULL,
+      fecha_gasto DATE NOT NULL,
+      observaciones TEXT,
+      registrado_por TEXT,
+      fecha_registro DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`).run();
+    await env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_gastos_categoria ON GastosNegocio(categoria)`).run();
+    await env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_gastos_fecha ON GastosNegocio(fecha_gasto)`).run();
+  } catch (e) {
+    console.error('Error al asegurar tabla GastosNegocio:', e);
+  }
+}
 
-export async function onRequest(context) {
-  const cors = handleCors(context.request);
-  if (cors) return cors;
-
+// GET: Obtener gastos con filtros
+export async function onRequestGet(context) {
   const { request, env } = context;
-  const { DB, MEDIA } = env;
 
   try {
-    if (request.method === 'GET') {
-      return await handleGet(request, DB);
-    } else if (request.method === 'POST') {
-      return await handlePost(request, DB, MEDIA);
-    } else {
-      return errorResponse('Método no permitido', 405);
+    await asegurarTabla(env);
+
+    const url = new URL(request.url);
+    const categoria = url.searchParams.get('categoria');
+    const desde = url.searchParams.get('desde');
+    const hasta = url.searchParams.get('hasta');
+
+    let whereClauses = [];
+    let params = [];
+
+    if (categoria) {
+      whereClauses.push('categoria = ?');
+      params.push(categoria);
     }
+
+    if (desde) {
+      whereClauses.push('fecha_gasto >= ?');
+      params.push(desde);
+    }
+
+    if (hasta) {
+      whereClauses.push('fecha_gasto <= ?');
+      params.push(hasta);
+    }
+
+    const whereSQL = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
+
+    const { results } = await env.DB.prepare(`
+      SELECT * FROM GastosNegocio
+      ${whereSQL}
+      ORDER BY fecha_gasto DESC, fecha_registro DESC
+    `).bind(...params).all();
+
+    // Resumen por categoría
+    const { results: resumen } = await env.DB.prepare(`
+      SELECT
+        categoria,
+        COUNT(*) as cantidad,
+        COALESCE(SUM(monto), 0) as total
+      FROM GastosNegocio
+      ${whereSQL}
+      GROUP BY categoria
+      ORDER BY total DESC
+    `).bind(...params).all();
+
+    const totalGeneral = results.reduce((sum, g) => sum + Number(g.monto || 0), 0);
+
+    return new Response(JSON.stringify({
+      success: true,
+      gastos: results,
+      resumen_por_categoria: resumen,
+      total_general: totalGeneral
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+
   } catch (error) {
-    console.error('Gastos error:', error);
-    return errorResponse('Error en gastos: ' + error.message, 500);
+    console.error('Error al obtener gastos:', error);
+    return new Response(JSON.stringify({
+      success: false,
+      error: error.message
+    }), {
+      headers: { 'Content-Type': 'application/json' },
+      status: 500
+    });
   }
 }
 
-async function handleGet(request, DB) {
-  const url = new URL(request.url);
-  const usuarioId = url.searchParams.get('usuario_id');
-  const fechaDesde = url.searchParams.get('fecha_desde');
-  const fechaHasta = url.searchParams.get('fecha_hasta');
-  const categoria = url.searchParams.get('categoria');
-  const page = parseInt(url.searchParams.get('page')) || 1;
-  const limit = parseInt(url.searchParams.get('limit')) || 20;
+// POST: Registrar gasto
+export async function onRequestPost(context) {
+  const { request, env } = context;
 
-  if (!usuarioId) {
-    return errorResponse('usuario_id es requerido');
-  }
+  try {
+    await asegurarTabla(env);
 
-  let whereClause = 'WHERE usuario_id = ?';
-  const params = [usuarioId];
+    const data = await request.json();
 
-  if (fechaDesde) {
-    whereClause += ' AND fecha >= ?';
-    params.push(fechaDesde);
-  }
-
-  if (fechaHasta) {
-    whereClause += ' AND fecha <= ?';
-    params.push(fechaHasta);
-  }
-
-  if (categoria) {
-    whereClause += ' AND categoria = ?';
-    params.push(categoria);
-  }
-
-  // Count
-  const countResult = await DB.prepare(
-    `SELECT COUNT(*) as total FROM GastosNegocio ${whereClause}`
-  ).bind(...params).first();
-
-  // Total sum
-  const sumResult = await DB.prepare(
-    `SELECT COALESCE(SUM(monto), 0) as total_gastos FROM GastosNegocio ${whereClause}`
-  ).bind(...params).first();
-
-  // Results
-  const offset = (page - 1) * limit;
-  const { results } = await DB.prepare(`
-    SELECT * FROM GastosNegocio
-    ${whereClause}
-    ORDER BY fecha DESC, creado_en DESC
-    LIMIT ? OFFSET ?
-  `).bind(...params, limit, offset).all();
-
-  // Category breakdown
-  const { results: porCategoria } = await DB.prepare(`
-    SELECT categoria, COUNT(*) as cantidad, SUM(monto) as total
-    FROM GastosNegocio
-    ${whereClause}
-    GROUP BY categoria
-    ORDER BY total DESC
-  `).bind(...params).all();
-
-  return jsonResponse({
-    gastos: results || [],
-    total_gastos: sumResult?.total_gastos || 0,
-    por_categoria: porCategoria || [],
-    paginacion: {
-      page,
-      limit,
-      total: countResult?.total || 0,
-      total_pages: Math.ceil((countResult?.total || 0) / limit),
-    }
-  });
-}
-
-async function handlePost(request, DB, MEDIA) {
-  const data = await request.json();
-
-  const {
-    usuario_id, concepto, monto, categoria, fecha, descripcion, comprobante_base64,
-  } = data;
-
-  if (!usuario_id) return errorResponse('usuario_id es requerido');
-  if (!concepto || !concepto.trim()) return errorResponse('concepto es requerido');
-  if (!monto || parseFloat(monto) <= 0) return errorResponse('monto debe ser positivo');
-
-  // Handle receipt upload if provided
-  let comprobante = '';
-  if (comprobante_base64) {
-    try {
-      const buffer = base64ToArrayBuffer(comprobante_base64);
-      const ruta = generarRutaDocumento('comprobante', `${concepto.trim().substring(0, 30)}_${Date.now()}.jpg`);
-
-      await subirArchivoR2(MEDIA, ruta, buffer, {
-        contentType: 'image/jpeg',
-        metadata: { tipo: 'comprobante_gasto', concepto: concepto.trim() },
+    if (!data.concepto || !data.monto || !data.fecha_gasto) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Faltan datos: concepto, monto y fecha_gasto son obligatorios'
+      }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 400
       });
-
-      comprobante = ruta;
-
-      // Register in MediosR2
-      await DB.prepare(`
-        INSERT INTO MediosR2 (usuario_id, ruta, nombre_original, mime_type, tamano_bytes, tipo_recurso)
-        VALUES (?, ?, ?, ?, ?, 'comprobante')
-      `).bind(usuario_id, ruta, `comprobante_${Date.now()}.jpg`, 'image/jpeg', buffer.byteLength || 0).run();
-    } catch (err) {
-      console.error('Error subiendo comprobante:', err);
-      // Non-critical, continue without receipt
     }
+
+    const categoriasValidas = ['Repuestos', 'Herramientas', 'Servicios', 'Alquiler', 'Combustible', 'Nómina', 'Otros'];
+    const categoria = categoriasValidas.includes(data.categoria) ? data.categoria : 'Otros';
+
+    const result = await env.DB.prepare(`
+      INSERT INTO GastosNegocio (concepto, categoria, monto, fecha_gasto, observaciones, registrado_por)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(
+      data.concepto,
+      categoria,
+      data.monto,
+      data.fecha_gasto,
+      data.observaciones || null,
+      data.registrado_por || 'Admin'
+    ).run();
+
+    const nuevoGastoId = result.meta.last_row_id;
+
+    const gasto = await env.DB.prepare(
+      'SELECT * FROM GastosNegocio WHERE id = ?'
+    ).bind(nuevoGastoId).first();
+
+    return new Response(JSON.stringify({
+      success: true,
+      gasto
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+  } catch (error) {
+    console.error('Error al registrar gasto:', error);
+    return new Response(JSON.stringify({
+      success: false,
+      error: error.message
+    }), {
+      headers: { 'Content-Type': 'application/json' },
+      status: 500
+    });
   }
+}
 
-  const now = hoyISO();
+// DELETE: Eliminar gasto
+export async function onRequestDelete(context) {
+  const { request, env } = context;
 
-  const result = await DB.prepare(`
-    INSERT INTO GastosNegocio (usuario_id, concepto, monto, categoria, fecha, descripcion, comprobante)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).bind(
-    usuario_id,
-    concepto.trim(),
-    parseFloat(monto),
-    categoria?.trim() || 'operativo',
-    fecha || now,
-    descripcion?.trim() || '',
-    comprobante
-  ).run();
+  try {
+    const url = new URL(request.url);
+    const gastoId = url.searchParams.get('id');
 
-  const gasto = await DB.prepare(
-    'SELECT * FROM GastosNegocio WHERE id = ?'
-  ).bind(result.meta.last_row_id).first();
+    if (!gastoId) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Se requiere el ID del gasto'
+      }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 400
+      });
+    }
 
-  return jsonResponse({ gasto }, 201);
+    await env.DB.prepare('DELETE FROM GastosNegocio WHERE id = ?').bind(gastoId).run();
+
+    return new Response(JSON.stringify({
+      success: true,
+      message: 'Gasto eliminado correctamente'
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+  } catch (error) {
+    console.error('Error al eliminar gasto:', error);
+    return new Response(JSON.stringify({
+      success: false,
+      error: error.message
+    }), {
+      headers: { 'Content-Type': 'application/json' },
+      status: 500
+    });
+  }
 }

@@ -1,51 +1,48 @@
 // ============================================
-// BIZFLOW - Get Notes for Order
-// GET /api/tecnico/notas?orden_id=X
-// Obtener notas de una orden de trabajo
+// API: OBTENER NOTAS DE UNA ORDEN
+// Global Pro Automotriz
 // ============================================
-
-import {
-  corsHeaders,
-  handleOptions,
-  successResponse,
-  errorResponse,
-} from '../../lib/db-helpers.js';
-
-export async function onRequestOptions(context) {
-  return handleOptions();
-}
 
 export async function onRequestGet(context) {
   const { request, env } = context;
-  const url = new URL(request.url);
-  const ordenId = url.searchParams.get('orden_id');
-
-  if (!ordenId) {
-    return errorResponse('Parámetro orden_id es obligatorio');
-  }
 
   try {
-    // Get all notes for this order, including technician name
-    const notas = await env.DB.prepare(`
-      SELECT
-        nt.id,
-        nt.orden_id,
-        nt.tecnico_id,
-        nt.nota,
-        nt.fecha_nota,
-        t.nombre AS tecnico_nombre
-      FROM NotasTrabajo nt
-      LEFT JOIN Tecnicos t ON nt.tecnico_id = t.id
-      WHERE nt.orden_id = ?
-      ORDER BY nt.fecha_nota DESC
-    `).bind(parseInt(ordenId)).all();
+    const url = new URL(request.url);
+    const ordenId = url.searchParams.get('orden_id');
 
-    return successResponse({
-      notas: notas.results || [],
-      total: (notas.results || []).length,
+    if (!ordenId) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Falta ID de la orden'
+      }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 400
+      });
+    }
+
+    // Obtener notas de la orden
+    const notas = await env.DB.prepare(`
+      SELECT id, nota, fecha_nota
+      FROM NotasTrabajo
+      WHERE orden_id = ?
+      ORDER BY fecha_nota ASC
+    `).bind(ordenId).all();
+
+    return new Response(JSON.stringify({
+      success: true,
+      notas: notas.results || []
+    }), {
+      headers: { 'Content-Type': 'application/json' }
     });
+
   } catch (error) {
-    console.error('Error fetching notes:', error);
-    return errorResponse('Error al obtener las notas', 500);
+    console.error('Error al obtener notas:', error);
+    return new Response(JSON.stringify({
+      success: false,
+      error: error.message
+    }), {
+      headers: { 'Content-Type': 'application/json' },
+      status: 500
+    });
   }
 }

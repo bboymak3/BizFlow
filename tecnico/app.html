@@ -1,767 +1,538 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="theme-color" content="#2563eb" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <title>BizFlow Técnico</title>
-  <link rel="manifest" href="manifest.json" />
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet" />
-  <link href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet" />
-  <style>
-    :root {
-      --primary: #2563eb;
-      --primary-dark: #1d4ed8;
-      --primary-light: #3b82f6;
-      --bg: #0f172a;
-      --bg-card: #1e293b;
-      --bg-surface: #334155;
-      --text: #f1f5f9;
-      --text-muted: #94a3b8;
-      --text-dim: #64748b;
-      --success: #22c55e;
-      --warning: #f59e0b;
-      --danger: #ef4444;
-      --info: #06b6d4;
-      --purple: #a855f7;
-      --orange: #f97316;
-      --border: rgba(255,255,255,0.08);
-      --glass: rgba(30,41,59,0.85);
-    }
-
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html { font-size: 16px; -webkit-tap-highlight-color: transparent; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100dvh;
-      overflow-x: hidden;
-      -webkit-font-smoothing: antialiased;
-    }
-
-    /* ── SCROLLBAR ──────────────────────────────────────── */
-    ::-webkit-scrollbar { width: 4px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: var(--text-dim); border-radius: 4px; }
-
-    /* ── OFFLINE BANNER ─────────────────────────────────── */
-    .offline-banner {
-      display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
-      background: var(--danger); color: #fff; text-align: center;
-      padding: 6px 16px; font-size: 0.78rem; font-weight: 600;
-    }
-    .offline-banner.active { display: flex; align-items: center; justify-content: center; gap: 6px; }
-
-    /* ── TOAST ──────────────────────────────────────────── */
-    .toast-container {
-      position: fixed; top: 60px; left: 12px; right: 12px; z-index: 9000;
-      pointer-events: none; display: flex; flex-direction: column; gap: 8px;
-    }
-    .toast-msg {
-      pointer-events: auto; padding: 12px 16px; border-radius: 12px;
-      font-size: 0.85rem; font-weight: 500;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-      display: flex; align-items: center; gap: 10px;
-      animation: toastSlideIn 0.3s ease-out;
-      border-left: 4px solid var(--primary);
-      background: var(--bg-card);
-    }
-    .toast-msg.success { border-left-color: var(--success); }
-    .toast-msg.error { border-left-color: var(--danger); }
-    .toast-msg.warning { border-left-color: var(--warning); }
-    .toast-msg.info { border-left-color: var(--info); }
-    @keyframes toastSlideIn {
-      from { opacity: 0; transform: translateY(-20px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    /* ── LOADING OVERLAY ────────────────────────────────── */
-    .loading-overlay {
-      display: none; position: fixed; inset: 0; z-index: 8000;
-      background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
-      align-items: center; justify-content: center;
-    }
-    .loading-overlay.active { display: flex; }
-    .spinner {
-      width: 48px; height: 48px;
-      border: 4px solid rgba(255,255,255,0.15);
-      border-top-color: var(--primary);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    /* ── SPLASH SCREEN ──────────────────────────────────── */
-    #splashScreen {
-      position: fixed; inset: 0; z-index: 7000;
-      background: var(--bg);
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      gap: 20px;
-      transition: opacity 0.4s ease-out;
-    }
-    #splashScreen.fade-out { opacity: 0; pointer-events: none; }
-    .splash-logo {
-      width: 90px; height: 90px; border-radius: 24px;
-      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-      display: flex; align-items: center; justify-content: center;
-      box-shadow: 0 12px 40px rgba(37,99,235,0.4);
-      animation: pulse 2s ease-in-out infinite;
-    }
-    .splash-logo i { font-size: 42px; color: #fff; }
-    .splash-title { font-size: 1.6rem; font-weight: 800; color: var(--text); }
-    .splash-subtitle { font-size: 0.85rem; color: var(--text-muted); }
-    @keyframes pulse {
-      0%, 100% { transform: scale(1); }
-      50% { transform: scale(1.05); }
-    }
-
-    /* ── LOGIN SCREEN ───────────────────────────────────── */
-    #loginScreen {
-      display: none; align-items: center; justify-content: center;
-      min-height: 100dvh; padding: 24px;
-    }
-    .login-card {
-      background: var(--bg-card); border: 1px solid var(--border);
-      border-radius: 24px; padding: 40px 28px;
-      width: 100%; max-width: 380px;
-      box-shadow: 0 25px 50px rgba(0,0,0,0.4);
-    }
-    .login-logo { text-align: center; margin-bottom: 32px; }
-    .login-logo .icon-wrap {
-      width: 72px; height: 72px; border-radius: 20px;
-      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-      display: inline-flex; align-items: center; justify-content: center;
-      box-shadow: 0 8px 24px rgba(37,99,235,0.3);
-    }
-    .login-logo .icon-wrap i { font-size: 32px; color: #fff; }
-    .login-logo h1 { font-size: 1.5rem; font-weight: 700; margin-top: 16px; }
-    .login-logo p { font-size: 0.85rem; color: var(--text-muted); margin-top: 4px; }
-    .form-group { margin-bottom: 18px; }
-    .form-group label {
-      display: block; font-size: 0.78rem; font-weight: 600;
-      color: var(--text-muted); margin-bottom: 6px;
-      text-transform: uppercase; letter-spacing: 0.05em;
-    }
-    .form-input {
-      width: 100%; padding: 14px 16px; border-radius: 14px;
-      border: 1.5px solid var(--border);
-      background: rgba(255,255,255,0.06); color: var(--text);
-      font-size: 1rem; outline: none;
-      transition: border-color 0.2s, background 0.2s;
-    }
-    .form-input:focus {
-      border-color: var(--primary);
-      background: rgba(37,99,235,0.08);
-    }
-    .form-input::placeholder { color: var(--text-dim); }
-    .btn-login {
-      width: 100%; padding: 16px; border: none; border-radius: 14px;
-      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-      color: #fff; font-size: 1rem; font-weight: 700; cursor: pointer;
-      text-transform: uppercase; letter-spacing: 0.04em;
-      box-shadow: 0 6px 20px rgba(37,99,235,0.4);
-      transition: transform 0.15s, box-shadow 0.15s; margin-top: 8px;
-    }
-    .btn-login:active { transform: scale(0.97); }
-    .btn-login:disabled { opacity: 0.5; cursor: not-allowed; }
-    .login-error {
-      color: #fca5a5; font-size: 0.85rem;
-      text-align: center; margin-top: 12px; min-height: 20px;
-    }
-
-    /* ── APP SHELL ──────────────────────────────────────── */
-    #appScreen { display: none; padding-bottom: 80px; }
-
-    /* Header */
-    .app-header {
-      position: sticky; top: 0; z-index: 100;
-      background: var(--glass); backdrop-filter: blur(16px);
-      border-bottom: 1px solid var(--border);
-      padding: 12px 16px;
-      display: flex; align-items: center; justify-content: space-between;
-    }
-    .app-header .brand { display: flex; align-items: center; gap: 10px; }
-    .app-header .brand i { font-size: 22px; color: var(--primary); }
-    .app-header .brand h1 { font-size: 1.05rem; font-weight: 700; white-space: nowrap; }
-    .app-header .brand .sub { font-size: 0.72rem; color: var(--text-muted); font-weight: 400; }
-    .header-actions { display: flex; gap: 8px; }
-    .header-btn {
-      width: 36px; height: 36px; border-radius: 10px;
-      border: 1px solid var(--border); background: rgba(255,255,255,0.05);
-      color: var(--text-muted); font-size: 0.9rem;
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer; transition: all 0.2s;
-    }
-    .header-btn:active { background: rgba(255,255,255,0.1); color: var(--text); }
-
-    /* ── PAGE VIEWS ─────────────────────────────────────── */
-    .page-view { display: none; }
-    .page-view.active { display: block; }
-
-    /* ── ORDENES TAB (Mis Órdenes) ──────────────────────── */
-    .status-filters {
-      position: sticky; top: 60px; z-index: 90;
-      background: var(--glass); backdrop-filter: blur(12px);
-      padding: 10px 16px; display: flex; gap: 6px; overflow-x: auto;
-    }
-    .status-filter {
-      flex-shrink: 0; padding: 8px 14px; border-radius: 20px;
-      border: 1.5px solid var(--border); background: transparent;
-      color: var(--text-muted); font-size: 0.78rem; font-weight: 600;
-      cursor: pointer; transition: all 0.2s; white-space: nowrap;
-    }
-    .status-filter.active {
-      background: var(--primary); color: #fff;
-      border-color: var(--primary);
-    }
-    .status-filter .count {
-      display: inline-flex; align-items: center; justify-content: center;
-      min-width: 18px; height: 18px; border-radius: 9px;
-      background: rgba(255,255,255,0.2); font-size: 0.68rem;
-      margin-left: 5px; padding: 0 4px;
-    }
-    .status-filter:not(.active) .count {
-      background: rgba(255,255,255,0.08);
-    }
-
-    .orders-list { padding: 12px 16px; max-width: 480px; margin: 0 auto; }
-
-    /* Order Card */
-    .ot-card {
-      background: var(--bg-card); border: 1px solid var(--border);
-      border-radius: 16px; padding: 16px; margin-bottom: 12px;
-      cursor: pointer; transition: transform 0.15s;
-    }
-    .ot-card:active { transform: scale(0.98); }
-    .ot-card-header {
-      display: flex; justify-content: space-between; align-items: center;
-      margin-bottom: 10px;
-    }
-    .ot-number { font-size: 1.1rem; font-weight: 800; }
-    .ot-badges { display: flex; gap: 6px; }
-    .badge-estado, .badge-prioridad {
-      padding: 3px 10px; border-radius: 20px;
-      font-size: 0.68rem; font-weight: 700;
-      text-transform: uppercase; letter-spacing: 0.03em;
-    }
-    .badge-estado.pendiente { background: #fbbf24; color: #78350f; }
-    .badge-estado.asignada { background: #60a5fa; color: #1e3a5f; }
-    .badge-estado.en_proceso { background: var(--orange); color: #431407; }
-    .badge-estado.pausada { background: #94a3b8; color: #1e293b; }
-    .badge-estado.completada { background: var(--success); color: #052e16; }
-    .badge-estado.cancelada { background: var(--danger); color: #fff; }
-    .badge-estado.aprobada { background: var(--info); color: #083344; }
-    .badge-estado.cerrada { background: #475569; color: #f8fafc; }
-    .badge-prioridad.alta { background: var(--danger); color: #fff; }
-    .badge-prioridad.urgente { background: #dc2626; color: #fff; animation: urgentPulse 1.5s infinite; }
-    .badge-prioridad.normal { background: rgba(255,255,255,0.1); color: var(--text-muted); }
-    .badge-prioridad.baja { background: rgba(255,255,255,0.05); color: var(--text-dim); }
-    @keyframes urgentPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
-
-    .ot-info { font-size: 0.85rem; line-height: 1.6; color: var(--text-muted); }
-    .ot-info .row { display: flex; gap: 6px; margin-bottom: 1px; }
-    .ot-info .label { color: var(--text-dim); font-size: 0.76rem; min-width: 52px; }
-    .ot-vehicle {
-      display: flex; gap: 10px; margin-top: 10px; padding-top: 10px;
-      border-top: 1px solid var(--border);
-    }
-    .ot-plate {
-      background: rgba(37,99,235,0.15); border: 1px solid rgba(37,99,235,0.3);
-      border-radius: 8px; padding: 4px 10px;
-      font-weight: 800; font-size: 0.9rem; letter-spacing: 0.04em;
-      color: var(--primary-light);
-    }
-    .ot-vehicle-info { font-size: 0.82rem; color: var(--text-muted); }
-
-    .empty-state {
-      text-align: center; padding: 48px 20px; color: var(--text-dim);
-    }
-    .empty-state i { font-size: 48px; margin-bottom: 12px; opacity: 0.4; }
-    .empty-state p { font-size: 0.9rem; }
-
-    /* ── FAB (Floating Action Button) ───────────────────── */
-    .fab-refresh {
-      position: fixed; bottom: 96px; right: 16px; z-index: 200;
-      width: 52px; height: 52px; border-radius: 50%;
-      background: var(--primary); color: #fff;
-      border: none; font-size: 1.1rem; cursor: pointer;
-      box-shadow: 0 6px 20px rgba(37,99,235,0.4);
-      display: flex; align-items: center; justify-content: center;
-      transition: transform 0.2s;
-    }
-    .fab-refresh:active { transform: scale(0.9); }
-    .fab-refresh.spinning i { animation: spin 0.8s linear infinite; }
-
-    /* ── PULL TO REFRESH ────────────────────────────────── */
-    .pull-indicator {
-      text-align: center; padding: 12px; color: var(--text-dim);
-      font-size: 0.82rem; display: none;
-    }
-    .pull-indicator.active { display: block; }
-
-    /* ═══════════════════════════════════════════════════════
-       ORDEN DETAIL VIEW (Tab 2 - Órdenes Abiertas)
-       ═══════════════════════════════════════════════════════ */
-    .detail-header {
-      background: var(--bg-card); border-bottom: 1px solid var(--border);
-      padding: 16px; position: relative;
-    }
-    .detail-header .back-btn {
-      position: absolute; top: 12px; left: 12px;
-      width: 36px; height: 36px; border-radius: 50%;
-      border: none; background: rgba(255,255,255,0.08);
-      color: var(--text); font-size: 1rem;
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer;
-    }
-    .detail-header .ot-title {
-      text-align: center; padding: 0 40px;
-    }
-    .detail-header .ot-title h2 { font-size: 1.2rem; font-weight: 800; }
-    .detail-header .ot-meta {
-      display: flex; justify-content: center; gap: 8px; margin-top: 6px; flex-wrap: wrap;
-    }
-
-    .detail-content { padding: 16px; max-width: 480px; margin: 0 auto; }
-
-    .detail-section {
-      background: var(--bg-card); border: 1px solid var(--border);
-      border-radius: 16px; padding: 16px; margin-bottom: 14px;
-    }
-    .detail-section-title {
-      font-size: 0.78rem; font-weight: 700; text-transform: uppercase;
-      letter-spacing: 0.05em; color: var(--primary-light); margin-bottom: 12px;
-      display: flex; align-items: center; gap: 8px;
-    }
-    .detail-row {
-      display: flex; justify-content: space-between; padding: 5px 0;
-      font-size: 0.86rem;
-    }
-    .detail-row .label { color: var(--text-muted); }
-    .detail-row .value { font-weight: 600; text-align: right; max-width: 60%; }
-
-    /* Status change buttons */
-    .status-actions {
-      display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;
-    }
-    .status-btn {
-      flex: 1; min-width: 100px; padding: 12px 10px; border-radius: 12px;
-      border: 2px solid; font-size: 0.82rem; font-weight: 700;
-      cursor: pointer; display: flex; align-items: center;
-      justify-content: center; gap: 6px; transition: all 0.15s;
-      background: transparent;
-    }
-    .status-btn:active { transform: scale(0.96); }
-    .status-btn.btn-start { border-color: var(--primary); color: var(--primary); }
-    .status-btn.btn-start:active { background: var(--primary); color: #fff; }
-    .status-btn.btn-pause { border-color: var(--warning); color: var(--warning); }
-    .status-btn.btn-pause:active { background: var(--warning); color: #000; }
-    .status-btn.btn-complete { border-color: var(--success); color: var(--success); }
-    .status-btn.btn-complete:active { background: var(--success); color: #fff; }
-
-    /* Photo section */
-    .photo-type-selector { display: flex; gap: 6px; margin-bottom: 12px; }
-    .photo-type-btn {
-      flex: 1; padding: 8px; border-radius: 10px;
-      border: 1.5px solid var(--border); background: transparent;
-      color: var(--text-muted); font-size: 0.75rem; font-weight: 600;
-      cursor: pointer; text-align: center; transition: all 0.2s;
-    }
-    .photo-type-btn.selected { border-color: var(--primary); color: var(--primary); background: rgba(37,99,235,0.08); }
-    .photo-actions { display: flex; gap: 8px; margin-bottom: 12px; }
-    .photo-action-btn {
-      flex: 1; padding: 12px; border-radius: 12px; border: none;
-      font-size: 0.85rem; font-weight: 700; cursor: pointer;
-      display: flex; align-items: center; justify-content: center; gap: 6px;
-    }
-    .photo-action-btn.camera { background: var(--primary); color: #fff; }
-    .photo-action-btn.gallery { background: var(--bg-surface); color: var(--text); }
-
-    .photos-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-    .photo-thumb {
-      aspect-ratio: 1; border-radius: 10px; object-fit: cover;
-      width: 100%; cursor: pointer; border: 2px solid transparent;
-      transition: border-color 0.2s;
-    }
-    .photo-thumb:active { border-color: var(--primary); }
-    .photo-label { font-size: 0.68rem; color: var(--text-dim); text-align: center; margin-top: 2px; }
-
-    /* Notes section */
-    .note-item {
-      background: rgba(255,255,255,0.04); border-radius: 10px;
-      padding: 10px 12px; margin-bottom: 6px;
-    }
-    .note-text { font-size: 0.85rem; color: var(--text); line-height: 1.5; }
-    .note-meta { font-size: 0.7rem; color: var(--text-dim); margin-top: 3px; }
-
-    /* Costs section */
-    .cost-item {
-      display: flex; justify-content: space-between; padding: 6px 0;
-      border-bottom: 1px solid var(--border); font-size: 0.85rem;
-    }
-    .cost-item:last-child { border-bottom: none; }
-    .cost-item .price { color: var(--success); font-weight: 700; }
-
-    /* GPS Section */
-    .gps-coords {
-      font-family: 'Courier New', monospace; font-size: 0.82rem;
-      color: var(--info); padding: 8px 12px;
-      background: rgba(6,182,212,0.08); border-radius: 8px;
-      word-break: break-all;
-    }
-
-    /* Signature Canvas */
-    .signature-area {
-      position: relative; border: 2px dashed var(--border);
-      border-radius: 12px; overflow: hidden; background: #fff;
-    }
-    .signature-area canvas { display: block; width: 100%; height: 200px; touch-action: none; }
-    .signature-area .placeholder-text {
-      position: absolute; top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      color: #cbd5e1; font-size: 0.9rem; pointer-events: none;
-    }
-    .signature-actions { display: flex; gap: 8px; margin-top: 10px; }
-
-    /* Timeline */
-    .timeline-item { display: flex; gap: 12px; padding-bottom: 14px; position: relative; }
-    .timeline-item:not(:last-child)::after {
-      content: ''; position: absolute; left: 15px; top: 32px; bottom: 0;
-      width: 2px; background: var(--border);
-    }
-    .timeline-dot {
-      width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 0.8rem; background: var(--bg-surface);
-    }
-    .timeline-content { flex: 1; }
-    .timeline-status { font-size: 0.86rem; font-weight: 600; }
-    .timeline-meta { font-size: 0.72rem; color: var(--text-dim); margin-top: 2px; }
-
-    /* ── GENERIC BUTTONS ────────────────────────────────── */
-    .btn-action {
-      width: 100%; padding: 14px; border-radius: 12px;
-      font-size: 0.9rem; font-weight: 700; cursor: pointer;
-      display: flex; align-items: center; justify-content: center; gap: 8px;
-      margin-bottom: 8px; border: none; transition: transform 0.15s;
-    }
-    .btn-action:active { transform: scale(0.97); }
-    .btn-action:disabled { opacity: 0.4; pointer-events: none; }
-    .btn-primary-action { background: var(--primary); color: #fff; }
-    .btn-success-action { background: var(--success); color: #fff; }
-    .btn-dark-action { background: var(--bg-surface); color: var(--text); }
-    .btn-danger-action { background: var(--danger); color: #fff; }
-    .btn-warning-action { background: var(--warning); color: #000; }
-
-    /* ── TEXTAREA & INPUT ───────────────────────────────── */
-    .field-textarea {
-      width: 100%; min-height: 100px; padding: 12px; border-radius: 12px;
-      border: 1px solid var(--border); background: rgba(255,255,255,0.05);
-      color: var(--text); font-size: 0.9rem; outline: none; resize: vertical;
-    }
-    .field-textarea:focus { border-color: var(--primary); }
-    .field-input {
-      width: 100%; padding: 10px 12px; border-radius: 10px;
-      border: 1px solid var(--border); background: rgba(255,255,255,0.05);
-      color: var(--text); font-size: 0.88rem; outline: none;
-    }
-    .field-input:focus { border-color: var(--primary); }
-    .field-label {
-      display: block; font-size: 0.78rem; font-weight: 600;
-      color: var(--text-muted); margin-bottom: 6px;
-    }
-    .field-group { margin-bottom: 12px; }
-
-    /* ── BOTTOM NAV ─────────────────────────────────────── */
-    .bottom-nav {
-      position: fixed; bottom: 0; left: 0; right: 0; z-index: 500;
-      background: var(--bg-card); border-top: 1px solid var(--border);
-      display: flex; padding: 6px 0 max(6px, env(safe-area-inset-bottom));
-    }
-    .nav-item {
-      flex: 1; display: flex; flex-direction: column;
-      align-items: center; gap: 2px;
-      padding: 8px 4px; border: none; background: none;
-      color: var(--text-dim); font-size: 0.68rem; font-weight: 600;
-      cursor: pointer; transition: color 0.2s;
-    }
-    .nav-item.active { color: var(--primary); }
-    .nav-item i { font-size: 20px; }
-    .nav-item .nav-badge {
-      position: absolute; top: 2px; right: 50%; transform: translateX(14px);
-      min-width: 16px; height: 16px; border-radius: 8px;
-      background: var(--danger); color: #fff;
-      font-size: 0.6rem; font-weight: 700;
-      display: flex; align-items: center; justify-content: center;
-      padding: 0 4px;
-    }
-    .nav-item { position: relative; }
-
-    /* ── PROFILE VIEW ───────────────────────────────────── */
-    .profile-card {
-      background: var(--bg-card); border: 1px solid var(--border);
-      border-radius: 20px; padding: 24px; margin: 16px;
-      text-align: center;
-    }
-    .profile-avatar {
-      width: 80px; height: 80px; border-radius: 50%;
-      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-      display: flex; align-items: center; justify-content: center;
-      margin: 0 auto 14px; font-size: 32px; color: #fff;
-      box-shadow: 0 8px 24px rgba(37,99,235,0.3);
-    }
-    .profile-name { font-size: 1.2rem; font-weight: 700; }
-    .profile-code { font-size: 0.82rem; color: var(--text-muted); margin-top: 2px; }
-    .profile-specialty {
-      display: inline-block; padding: 4px 12px; border-radius: 20px;
-      background: rgba(37,99,235,0.1); color: var(--primary-light);
-      font-size: 0.78rem; font-weight: 600; margin-top: 8px;
-    }
-    .profile-stats {
-      display: grid; grid-template-columns: repeat(3, 1fr);
-      gap: 12px; margin-top: 20px; padding-top: 16px;
-      border-top: 1px solid var(--border);
-    }
-    .stat-item { text-align: center; }
-    .stat-value { font-size: 1.4rem; font-weight: 800; color: var(--primary-light); }
-    .stat-label { font-size: 0.7rem; color: var(--text-dim); margin-top: 2px; }
-    .profile-info-list { margin-top: 16px; text-align: left; }
-    .profile-info-item {
-      display: flex; align-items: center; gap: 12px;
-      padding: 10px 0; border-bottom: 1px solid var(--border);
-      font-size: 0.88rem;
-    }
-    .profile-info-item i { color: var(--text-dim); width: 20px; text-align: center; }
-    .profile-info-item a { color: var(--primary-light); text-decoration: none; }
-    .profile-location {
-      margin-top: 14px; padding: 10px 14px; border-radius: 12px;
-      background: rgba(6,182,212,0.08); border: 1px solid rgba(6,182,212,0.2);
-      font-size: 0.8rem; color: var(--info);
-    }
-
-    /* ── MODALS ─────────────────────────────────────────── */
-    .modal-overlay {
-      display: none; position: fixed; inset: 0; z-index: 600;
-      background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
-      align-items: flex-end; justify-content: center;
-    }
-    .modal-overlay.active { display: flex; }
-    .modal-sheet {
-      background: var(--bg-card); border-radius: 24px 24px 0 0;
-      width: 100%; max-width: 480px; max-height: 90dvh;
-      overflow-y: auto; padding: 16px 20px 32px;
-      animation: slideUp 0.3s ease-out;
-    }
-    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-    .modal-handle {
-      width: 40px; height: 4px; border-radius: 4px;
-      background: rgba(255,255,255,0.2); margin: 0 auto 14px;
-    }
-    .modal-title { font-size: 1.15rem; font-weight: 800; margin-bottom: 4px; }
-    .modal-subtitle { font-size: 0.82rem; color: var(--text-muted); margin-bottom: 16px; }
-
-    /* ── FULLSCREEN PHOTO VIEWER ────────────────────────── */
-    .fullscreen-photo {
-      display: none; position: fixed; inset: 0; z-index: 5000;
-      background: rgba(0,0,0,0.95); align-items: center; justify-content: center;
-    }
-    .fullscreen-photo.active { display: flex; }
-    .fullscreen-photo img { max-width: 100%; max-height: 100%; object-fit: contain; }
-    .fullscreen-photo .close-btn {
-      position: absolute; top: 16px; right: 16px;
-      background: rgba(255,255,255,0.2); border: none; border-radius: 50%;
-      width: 44px; height: 44px; color: #fff; font-size: 1.5rem;
-      cursor: pointer; display: flex; align-items: center; justify-content: center;
-    }
-
-    /* ── COST FORM ROW ──────────────────────────────────── */
-    .cost-form-row {
-      display: grid; grid-template-columns: 2fr 1fr 1fr 1fr;
-      gap: 6px; margin-bottom: 8px; align-items: end;
-    }
-    .cost-form-row .field-input { font-size: 0.8rem; padding: 8px 10px; }
-
-    /* Leaflet fix */
-    #gpsMap { height: 200px; border-radius: 12px; z-index: 1; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Global Pro Automotriz - Técnico</title>
+    <meta name="description" content="App para tecnicos de Global Pro Automotriz">
+    <meta name="theme-color" content="#a80000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="GlobalPro">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="/icon-192.png">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        .login-container {
+            max-width: 400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .login-card {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px 30px;
+        }
+        .login-logo {
+            font-size: 3rem;
+            color: #a80000;
+            margin-bottom: 20px;
+        }
+        .pin-input {
+            font-size: 2rem;
+            letter-spacing: 10px;
+            text-align: center;
+            padding: 15px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            font-weight: bold;
+        }
+        .pin-input:focus {
+            border-color: #a80000;
+            box-shadow: 0 0 0 0.2rem rgba(168, 0, 0, 0.25);
+        }
+        .app-header {
+            background: white;
+            padding: 15px 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+        .orden-card {
+            background: linear-gradient(180deg, #ffffff 0%, #fffdf5 100%);
+            border: 1px solid rgba(0,0,0,0.08);
+            border-radius: 22px;
+            box-shadow: 0 18px 40px rgba(0,0,0,0.12);
+            margin-bottom: 18px;
+            padding: 22px;
+            transition: transform 0.25s ease, box-shadow 0.25s ease;
+        }
+        .orden-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 24px 52px rgba(0,0,0,0.16);
+        }
+        .estado-badge {
+            font-size: 0.82rem;
+            padding: 10px 18px;
+            border-radius: 999px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+        .estado-pendiente-visita { background: #fff3cd; color: #856404; border: 1px solid #ffe8a1; }
+        .estado-en-sitio { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        .estado-en-progreso { background: #cce5ff; color: #004085; border: 1px solid #b8daff; }
+        .estado-pendiente-piezas { background: #e2e3e5; color: #383d41; border: 1px solid #d6d8db; }
+        .estado-completada { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .estado-aprobada { background: #28a745; color: white; }
+        .estado-no-completada { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .action-btn {
+            padding: 16px 18px;
+            border-radius: 18px;
+            font-weight: 700;
+            width: 100%;
+            margin-bottom: 14px;
+            font-size: 1rem;
+            letter-spacing: 0.01em;
+            text-transform: uppercase;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+            box-shadow: 0 10px 18px rgba(0,0,0,0.12);
+        }
+        .action-btn:hover {
+            transform: translateY(-1px);
+            opacity: 0.98;
+        }
+        .btn-gps { background: #000; color: #fff; border: 2px solid #ffc800; }
+        .btn-iniciar { background: #111; color: #fff; border: 2px solid #ffc800; }
+        .btn-completar { background: #ffc800; color: #111; border: 2px solid #d90429; }
+        .btn-no-completar { background: #d90429; color: #fff; border: 2px solid #000; }
+        .btn-fotos { background: #000; color: #fff; border: 2px solid #ffc800; }
+        .btn-notas { background: #343a40; color: #fff; border: 1px solid rgba(255,255,255,0.12); }
+        .btn-firma { background: #000; color: #ffc800; border: 2px solid #ffc800; }
+        .detail-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            font-size: 0.95rem;
+            gap: 10px;
+        }
+        .detail-row i {
+            width: 28px;
+            color: #000;
+        }
+        .signature-canvas {
+            border: 2px dashed #ccc;
+            border-radius: 14px;
+            background: white;
+            touch-action: none;
+        }
+        .nav-pills .nav-link {
+            border: none;
+            color: #fff;
+            font-weight: 700;
+            border-radius: 18px;
+            margin: 0 6px 10px;
+            padding: 18px 14px;
+            background: #111;
+            transition: transform 0.2s ease, background 0.2s ease;
+        }
+        .nav-pills .nav-link:hover {
+            transform: translateY(-1px);
+        }
+        .nav-pills .nav-link.active {
+            background: #ffc800;
+            color: #111;
+            border: 2px solid #d90429;
+            box-shadow: 0 12px 20px rgba(0,0,0,0.15);
+        }
+        .tab-content {
+            padding: 15px 0;
+        }
+        .btn-radio-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .btn-radio-group .btn,
+        .btn-option-group .option-btn {
+            flex: 1 1 48%;
+            min-width: 130px;
+            padding: 18px 18px;
+            border-radius: 18px;
+            font-size: 1.08rem;
+            font-weight: 700;
+            box-shadow: 0 10px 16px rgba(0,0,0,0.09);
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+            border: 2px solid #000;
+            background: #111;
+            color: #ffc800;
+        }
+        .btn-radio-group .btn {
+            background: #000;
+            color: #ffc800;
+        }
+        .btn-radio-group .btn.btn-outline-dark {
+            border-color: #ffc800;
+            color: #ffc800;
+            background: #111;
+        }
+        .btn-radio-group .btn.btn-outline-dark:hover,
+        .btn-option-group .option-btn:hover {
+            background: #ffc800;
+            color: #111;
+            border-color: #d90429;
+        }
+        .btn-check:checked + .btn,
+        .btn-option-group .option-btn.active {
+            background: #ffc800;
+            color: #111;
+            border-color: #d90429;
+            box-shadow: 0 10px 18px rgba(0,0,0,0.15);
+        }
+        .btn-check:focus-visible + .btn {
+            box-shadow: 0 0 0 0.2rem rgba(255,200,0,0.35);
+        }
+        .btn-option-group {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+        .btn-option-group .option-btn.active {
+            background: #ffc800 !important;
+            color: #111 !important;
+            border-color: #d90429 !important;
+            box-shadow: 0 10px 18px rgba(0,0,0,0.15);
+        }
+        .modal-header .modal-title {
+            font-size: 1.7rem;
+            letter-spacing: 0.03em;
+        }
+        .orden-card h6 {
+            font-size: 1.3rem;
+        }
+        .orden-card .detail-row {
+            font-size: 1.05rem;
+        }
+        .orden-card .detail-row span {
+            font-size: 1.05rem;
+            font-weight: 600;
+        }
+        .estado-badge {
+            font-size: 0.95rem;
+        }
+        .action-btn {
+            font-size: 1.05rem;
+        }
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #111;
+            box-shadow: 0 -6px 18px rgba(0,0,0,0.2);
+            padding: 12px 0;
+            z-index: 1000;
+        }
+        .bottom-nav .nav-item {
+            text-align: center;
+            color: #ccc;
+            font-size: 0.82rem;
+            padding: 10px 6px;
+        }
+        .bottom-nav .nav-item.active {
+            color: #111;
+            background: #ffc800;
+            border-radius: 18px;
+            font-weight: 700;
+        }
+        .bottom-nav .nav-item i {
+            font-size: 1.4rem;
+            display: block;
+            margin-bottom: 4px;
+        }
+        .note-item {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 10px;
+        }
+        .note-time {
+            font-size: 0.75rem;
+            color: #666;
+        }
+        #map-container {
+            display: none;
+        }
+    </style>
 </head>
 <body>
 
-  <!-- Offline Banner -->
-  <div id="offlineBanner" class="offline-banner">
-    <i class="fas fa-wifi-slash"></i> Sin conexión – Modo offline activo
-  </div>
-
-  <!-- Toast Container -->
-  <div id="toastContainer" class="toast-container"></div>
-
-  <!-- Loading Overlay -->
-  <div id="loadingOverlay" class="loading-overlay">
-    <div class="spinner"></div>
-  </div>
-
-  <!-- Fullscreen Photo Viewer -->
-  <div id="fullscreenPhoto" class="fullscreen-photo" onclick="closeFullscreenPhoto()">
-    <button class="close-btn">&times;</button>
-    <img id="fullscreenImg" src="" alt="Foto" />
-  </div>
-
-  <!-- ═══════════════════ SPLASH SCREEN ═══════════════════ -->
-  <div id="splashScreen">
-    <div class="splash-logo"><i class="fas fa-bolt"></i></div>
-    <div class="splash-title">BizFlow</div>
-    <div class="splash-subtitle">Portal del Técnico</div>
-  </div>
-
-  <!-- ═══════════════════ LOGIN SCREEN ═══════════════════ -->
-  <div id="loginScreen">
-    <div class="login-card">
-      <div class="login-logo">
-        <div class="icon-wrap"><i class="fas fa-bolt"></i></div>
-        <h1>BizFlow</h1>
-        <p>Portal del Técnico</p>
-      </div>
-      <div class="form-group">
-        <label for="codigoInput">Código de Técnico</label>
-        <input id="codigoInput" type="text" class="form-input" placeholder="Ej: TEC-001" autocomplete="username" />
-      </div>
-      <div class="form-group">
-        <label for="passwordInput">Contraseña</label>
-        <input id="passwordInput" type="password" class="form-input" placeholder="••••••••" autocomplete="current-password" />
-      </div>
-      <button class="btn-login" id="btnLogin" onclick="App.login()">
-        <i class="fas fa-sign-in-alt"></i> Iniciar Sesión
-      </button>
-      <div id="loginError" class="login-error"></div>
-    </div>
-  </div>
-
-  <!-- ═══════════════════ APP SCREEN ═══════════════════ -->
-  <div id="appScreen">
-    <!-- Header -->
-    <header class="app-header">
-      <div class="brand">
-        <i class="fas fa-bolt"></i>
-        <div>
-          <h1>BizFlow Técnico</h1>
-          <div id="headerTecnicoName" class="sub"></div>
+    <!-- Pantalla de Login -->
+    <div id="login-screen" class="login-container">
+        <div class="login-card text-center">
+            <i class="fas fa-car-side login-logo"></i>
+            <h4 class="mb-4">Global Pro Automotriz</h4>
+            <p class="text-muted mb-4">Acceso de Técnicos</p>
+            <div class="mb-3">
+                <input type="tel" id="telefono-login" class="form-control form-control-lg mb-3"
+                       placeholder="Teléfono (ej: +56912345678)" maxlength="15">
+                <input type="password" id="pin-login" class="form-control form-control-lg pin-input"
+                       placeholder="PIN" maxlength="4" pattern="[0-9]*" inputmode="numeric">
+            </div>
+            <button id="btn-login" class="btn btn-danger btn-lg w-100 mt-3" onclick="login()">
+                Ingresar
+            </button>
+            <p id="login-error" class="text-danger mt-3 small" style="display: none;"></p>
         </div>
-      </div>
-      <div class="header-actions">
-        <button class="header-btn" onclick="App.loadOrdenes()" title="Refrescar">
-          <i class="fas fa-sync-alt"></i>
-        </button>
-        <button class="header-btn" onclick="App.logout()" title="Cerrar sesión">
-          <i class="fas fa-sign-out-alt"></i>
-        </button>
-      </div>
-    </header>
-
-    <!-- ═══ PAGE: Mis Órdenes (Tab 1) ═══ -->
-    <div id="pageOrdenes" class="page-view active">
-      <div class="status-filters" id="statusFilters">
-        <button class="status-filter active" data-filter="todas" onclick="App.filterOrdenes('todas', this)">
-          Todas <span class="count" id="countTodas">0</span>
-        </button>
-        <button class="status-filter" data-filter="en_proceso" onclick="App.filterOrdenes('en_proceso', this)">
-          En Proceso <span class="count" id="countEnProceso">0</span>
-        </button>
-        <button class="status-filter" data-filter="completada" onclick="App.filterOrdenes('completada', this)">
-          Completadas <span class="count" id="countCompletada">0</span>
-        </button>
-        <button class="status-filter" data-filter="pendiente" onclick="App.filterOrdenes('pendiente', this)">
-          Pendientes <span class="count" id="countPendiente">0</span>
-        </button>
-      </div>
-      <div class="pull-indicator" id="pullIndicator"><i class="fas fa-sync-alt fa-spin"></i> Actualizando...</div>
-      <div class="orders-list" id="ordersList"></div>
     </div>
 
-    <!-- ═══ PAGE: Detalle Orden (Tab 2) ═══ -->
-    <div id="pageDetalle" class="page-view">
-      <!-- Populated dynamically by JS -->
-    </div>
-
-    <!-- ═══ PAGE: Mi Perfil (Tab 3) ═══ -->
-    <div id="pagePerfil" class="page-view">
-      <!-- Populated dynamically by JS -->
-    </div>
-
-    <!-- FAB Refresh (only on orders tab) -->
-    <button class="fab-refresh" id="fabRefresh" onclick="App.loadOrdenes()">
-      <i class="fas fa-sync-alt"></i>
-    </button>
-  </div>
-
-  <!-- ═══════════════════ BOTTOM NAV ═══════════════════ -->
-  <nav class="bottom-nav" id="bottomNav">
-    <button class="nav-item active" data-tab="ordenes" onclick="App.switchTab('ordenes')">
-      <i class="fas fa-clipboard-list"></i>
-      <span>Mis Órdenes</span>
-    </button>
-    <button class="nav-item" data-tab="detalle" onclick="App.switchTab('detalle')">
-      <i class="fas fa-tools"></i>
-      <span>Órdenes Abiertas</span>
-    </button>
-    <button class="nav-item" data-tab="perfil" onclick="App.switchTab('perfil')">
-      <i class="fas fa-user-cog"></i>
-      <span>Mi Perfil</span>
-    </button>
-  </nav>
-
-  <!-- ═══════════════════ COST MODAL ═══════════════════ -->
-  <div id="costModal" class="modal-overlay" onclick="App.closeModal('costModal')">
-    <div class="modal-sheet" onclick="event.stopPropagation()">
-      <div class="modal-handle"></div>
-      <div class="modal-title"><i class="fas fa-dollar-sign"></i> Agregar Costo</div>
-      <div class="modal-subtitle">Registra un costo adicional para esta orden</div>
-      <div class="field-group">
-        <label class="field-label">Concepto</label>
-        <input type="text" class="field-input" id="costConcepto" placeholder="Ej: Repuesto frenos" />
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-        <div class="field-group">
-          <label class="field-label">Cantidad</label>
-          <input type="number" class="field-input" id="costCantidad" value="1" min="1" />
+    <!-- Pantalla Principal de la App -->
+    <div id="app-screen" style="display: none;">
+        <!-- Header -->
+        <div class="app-header d-flex justify-content-between align-items-center">
+            <div>
+                <h5 class="mb-0" style="color: #a80000; font-weight: bold;">Global Pro Técnico</h5>
+                <small class="text-muted" id="tecnico-nombre"></small>
+            </div>
+            <button class="btn btn-outline-danger btn-sm" onclick="logout()">
+                <i class="fas fa-sign-out-alt"></i>
+            </button>
         </div>
-        <div class="field-group">
-          <label class="field-label">Precio Unitario</label>
-          <input type="number" class="field-input" id="costPrecio" value="0" step="0.01" />
-        </div>
-      </div>
-      <div class="field-group">
-        <label class="field-label">Tipo</label>
-        <div style="display:flex;gap:6px;">
-          <button class="photo-type-btn selected" onclick="App.selectCostType('repuesto',this)">Repuesto</button>
-          <button class="photo-type-btn" onclick="App.selectCostType('servicio',this)">Servicio</button>
-          <button class="photo-type-btn" onclick="App.selectCostType('mano_obra',this)">Mano Obra</button>
-          <button class="photo-type-btn" onclick="App.selectCostType('otro',this)">Otro</button>
-        </div>
-      </div>
-      <button class="btn-action btn-primary-action" onclick="App.addCost()">
-        <i class="fas fa-plus"></i> Agregar Costo
-      </button>
-    </div>
-  </div>
 
-  <!-- ═══════════════════ NOTE MODAL ═══════════════════ -->
-  <div id="noteModal" class="modal-overlay" onclick="App.closeModal('noteModal')">
-    <div class="modal-sheet" onclick="event.stopPropagation()">
-      <div class="modal-handle"></div>
-      <div class="modal-title"><i class="fas fa-sticky-note"></i> Agregar Nota</div>
-      <div class="modal-subtitle">Escribe una nota para esta orden</div>
-      <textarea class="field-textarea" id="noteContenido" placeholder="Describe observaciones, diagnóstico, etc."></textarea>
-      <button class="btn-action btn-primary-action" style="margin-top:12px;" onclick="App.addNote()">
-        <i class="fas fa-save"></i> Guardar Nota
-      </button>
-    </div>
-  </div>
+        <!-- Contenido Principal -->
+        <div class="container pb-5" style="padding-top: 15px;">
+            <!-- Tabs de navegación -->
+            <ul class="nav nav-pills mb-3" id="main-tabs">
+                <li class="nav-item flex-fill text-center">
+                    <a class="nav-link active" href="#" onclick="showTab('pendientes')">
+                        <i class="fas fa-clock"></i> Pendientes
+                    </a>
+                </li>
+                <li class="nav-item flex-fill text-center">
+                    <a class="nav-link" href="#" onclick="showTab('en-curso')">
+                        <i class="fas fa-tools"></i> En Curso
+                    </a>
+                </li>
+                <li class="nav-item flex-fill text-center">
+                    <a class="nav-link" href="#" onclick="showTab('completadas')">
+                        <i class="fas fa-check-circle"></i> Completadas
+                    </a>
+                </li>
+            </ul>
 
-  <script src="app.js"></script>
+            <!-- Lista de órdenes pendientes -->
+            <div id="tab-pendientes" class="tab-content">
+                <div id="ordenes-pendientes"></div>
+            </div>
+
+            <!-- Lista de órdenes en curso -->
+            <div id="tab-en-curso" class="tab-content" style="display: none;">
+                <div id="ordenes-en-curso"></div>
+            </div>
+
+            <!-- Lista de órdenes completadas -->
+            <div id="tab-completadas" class="tab-content" style="display: none;">
+                <div id="ordenes-completadas"></div>
+            </div>
+        </div>
+
+        <!-- Navegación inferior -->
+        <div class="bottom-nav">
+            <div class="row g-0">
+                <div class="col-4 nav-item active" onclick="showTab('pendientes')">
+                    <i class="fas fa-clock"></i>
+                    Pendientes
+                </div>
+                <div class="col-4 nav-item" onclick="showTab('en-curso')">
+                    <i class="fas fa-tools"></i>
+                    En Curso
+                </div>
+                <div class="col-4 nav-item" onclick="showTab('completadas')">
+                    <i class="fas fa-check-circle"></i>
+                    Listo
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Detalle de Orden -->
+    <div class="modal fade" id="modalOrden" tabindex="-1">
+        <div class="modal-dialog modal-fullscreen modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title">Orden de Trabajo #<span id="modal-numero-orden"></span></h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body bg-light">
+                    <!-- Información del cliente y vehículo -->
+                    <div class="orden-card">
+                        <div class="detail-row">
+                            <i class="fas fa-user"></i>
+                            <span id="modal-cliente" class="fw-bold"></span>
+                        </div>
+                        <div class="detail-row">
+                            <i class="fas fa-map-marker-alt"></i>
+                            <span id="modal-direccion"></span>
+                        </div>
+                        <div class="detail-row">
+                            <i class="fas fa-car"></i>
+                            <span id="modal-vehiculo"></span>
+                            <span id="modal-patente" class="ms-2 badge bg-danger"></span>
+                        </div>
+                        <div class="detail-row">
+                            <i class="fas fa-info-circle"></i>
+                            <span id="modal-estado" class="estado-badge"></span>
+                        </div>
+                        <div class="detail-row">
+                            <i class="fas fa-check-square"></i>
+                            <div class="form-check form-switch ms-2">
+                                <input class="form-check-input" type="checkbox" id="modal-orden-cerrada" disabled>
+                                <label class="form-check-label" for="modal-orden-cerrada">Orden cerrada</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Mapa -->
+                    <div id="map-container">
+                        <iframe id="map-frame" width="100%" height="100%" style="border: 0;"></iframe>
+                    </div>
+
+                    <!-- Info Domicilio -->
+                    <div class="orden-card" id="card-domicilio" style="display:none; border-left: 4px solid #6c757d;">
+                        <h6 class="fw-bold mb-2"><i class="fas fa-truck me-2"></i>Domicilio</h6>
+                        <div id="modal-domicilio"></div>
+                    </div>
+
+                    <!-- Acciones según estado -->
+                    <div id="acciones-container"></div>
+
+                    <!-- Diagnósticos / Trabajos (sin precios) -->
+                    <div class="orden-card" id="card-diagnosticos" style="display:none;">
+                        <h6 class="fw-bold mb-3"><i class="fas fa-clipboard-list me-2"></i>Diagnóstico / Trabajos</h6>
+                        <div id="modal-diagnosticos"></div>
+                    </div>
+
+                    <!-- Checklist del Vehículo -->
+                    <div class="orden-card" id="card-checklist" style="display:none;">
+                        <h6 class="fw-bold mb-3"><i class="fas fa-car-side me-2"></i>Checklist del Vehículo</h6>
+                        <div id="modal-checklist"></div>
+                    </div>
+
+                    <!-- Observaciones del diagnóstico -->
+                    <div class="orden-card" id="card-observaciones" style="display:none;">
+                        <h6 class="fw-bold mb-3"><i class="fas fa-comment-dots me-2"></i>Observaciones</h6>
+                        <div id="modal-observaciones"></div>
+                    </div>
+
+                    <!-- Trabajos a realizar (fallback) -->
+                    <div class="orden-card" id="card-trabajos-fallback" style="display:none;">
+                        <h6 class="fw-bold mb-3"><i class="fas fa-tools me-2"></i>Trabajos a Realizar</h6>
+                        <div id="modal-trabajos"></div>
+                    </div>
+
+                    <!-- Notas de Cierre -->
+                    <div class="orden-card">
+                        <h6 class="fw-bold mb-3"><i class="fas fa-file-signature me-2"></i>Notas de Cierre</h6>
+                        <div id="modal-notas"></div>
+                    </div>
+
+                    <!-- Sección de fotos -->
+                    <div class="orden-card">
+                        <h6 class="fw-bold mb-3"><i class="fas fa-camera me-2"></i>Fotos</h6>
+                        <div class="row g-2 mb-3">
+                            <div class="col-4">
+                                <button class="btn btn-fotos action-btn" onclick="tomarFoto('antes')">
+                                    <i class="fas fa-camera me-2"></i>Antes
+                                </button>
+                            </div>
+                            <div class="col-4">
+                                <button class="btn btn-fotos action-btn" onclick="tomarFoto('despues')">
+                                    <i class="fas fa-camera me-2"></i>Después
+                                </button>
+                            </div>
+                            <div class="col-4">
+                                <button class="btn btn-fotos action-btn" onclick="tomarFoto('evidencia')">
+                                    <i class="fas fa-camera me-2"></i>Evidencia
+                                </button>
+                            </div>
+                        </div>
+                        <div id="fotos-grid" class="photo-grid"></div>
+                    </div>
+
+                    <!-- Sección de notas -->
+                    <div class="orden-card">
+                        <h6 class="fw-bold mb-3"><i class="fas fa-sticky-note me-2"></i>Notas</h6>
+                        <div class="input-group mb-3">
+                            <input type="text" id="nueva-nota" class="form-control"
+                                   placeholder="Agregar nota...">
+                            <button class="btn btn-outline-danger" onclick="agregarNota()">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+                        <div id="notas-lista"></div>
+                    </div>
+
+                    <!-- Historial de seguimiento -->
+                    <div class="orden-card">
+                        <h6 class="fw-bold mb-3"><i class="fas fa-history me-2"></i>Historial</h6>
+                        <div id="historial-lista"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de No Completada -->
+    <div class="modal fade" id="modalNoCompletada" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-warning">
+                    <h5 class="modal-title">¿No se pudo completar?</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Motivo:</label>
+                        <select id="motivo-no-completada" class="form-select">
+                            <option value="">Seleccione un motivo...</option>
+                            <option value="Faltan piezas">Faltan piezas</option>
+                            <option value="Vehículo no disponible">Vehículo no disponible</option>
+                            <option value="Problema técnico">Problema técnico</option>
+                            <option value="Cliente no disponible">Cliente no disponible</option>
+                            <option value="Otro">Otro</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Detalles adicionales:</label>
+                        <textarea id="detalles-no-completada" class="form-control"
+                                  rows="3" placeholder="Explique qué sucedió..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-warning" onclick="guardarNoCompletada()">
+                        <i class="fas fa-exclamation-triangle me-2"></i>Reportar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para tomar foto -->
+    <input type="file" id="foto-input" accept="image/*" capture="environment" style="display: none;">
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="app.js"></script>
+    <!-- Registrar Service Worker para PWA -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/tecnico/sw.js').catch(function() {});
+            });
+        }
+    </script>
 </body>
 </html>

@@ -221,6 +221,8 @@
         .bf-input:focus { outline:none; border-color:var(--bf-primary); box-shadow:0 0 0 3px rgba(13,148,136,0.1); }
         .bf-input::placeholder { color:#94a3b8; }
         .bf-select { appearance:none; background-image:url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%2364748b' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e"); background-repeat:no-repeat; background-position:right 0.5rem center; background-size:14px; padding-right:2rem; }
+        .bf-textarea { border:1.5px solid #e2e8f0; border-radius:0.45rem; padding:0.5rem 0.75rem; font-size:0.84rem; color:#1e293b; transition:all 0.15s; width:100%; resize:vertical; min-height:80px; font-family:inherit; }
+        .bf-textarea:focus { outline:none; border-color:var(--bf-primary); box-shadow:0 0 0 3px rgba(13,148,136,0.1); }
 
         /* ===== CHART ===== */
         .bf-chart { position:relative; width:100%; height:260px; }
@@ -253,6 +255,39 @@
         .bf-search { position:relative; }
         .bf-search input { padding-left:2.2rem; border-radius:2rem; }
         .bf-search i { position:absolute; left:0.75rem; top:50%; transform:translateY(-50%); color:#94a3b8; font-size:0.82rem; }
+
+        /* ===== PATENTE INPUT ===== */
+        .patente-bf {
+            font-size:1.8rem; font-weight:800; text-align:center; text-transform:uppercase;
+            letter-spacing:3px; border:2px solid var(--bf-primary); border-radius:0.6rem;
+            padding:0.75rem; width:100%;
+        }
+        .patente-bf:focus { border-color:var(--bf-primary-dark); box-shadow:0 0 0 3px rgba(13,148,136,0.15); }
+
+        /* ===== EXPRESS BADGE ===== */
+        .badge-express {
+            background:linear-gradient(135deg,#f59e0b,#ef4444); color:#fff;
+            font-size:0.72rem; font-weight:700; padding:0.25rem 0.65rem; border-radius:2rem;
+        }
+
+        /* ===== FILTER BUTTONS ===== */
+        .filtro-bf {
+            border:1.5px solid #e2e8f0; background:#fff; color:#475569;
+            border-radius:2rem; padding:0.35rem 0.9rem; font-size:0.78rem; font-weight:600;
+            cursor:pointer; transition:all 0.15s;
+        }
+        .filtro-bf:hover { border-color:var(--bf-primary); color:var(--bf-primary); }
+        .filtro-bf.active { background:var(--bf-primary); color:#fff; border-color:var(--bf-primary); }
+
+        /* ===== ACCORDION ===== */
+        .bf-accordion .bf-accordion-header {
+            display:flex; align-items:center; justify-content:space-between;
+            padding:0.75rem 1rem; cursor:pointer; border-radius:var(--bf-radius);
+            background:#f8fafc; border:1px solid #e2e8f0; transition:all 0.15s;
+        }
+        .bf-accordion .bf-accordion-header:hover { background:#f1f5f9; }
+        .bf-accordion .bf-accordion-body { display:none; padding:1rem 0; }
+        .bf-accordion .bf-accordion-body.open { display:block; }
     </style>
 </head>
 <body>
@@ -300,26 +335,32 @@
             <div class="bf-sidebar-label">Principal</div>
             <a class="bf-sidebar-item active" data-route="dashboard"><i class="fa-solid fa-chart-pie"></i>Dashboard</a>
 
-            <div class="bf-sidebar-label">CRM &amp; Operaciones</div>
+            <div class="bf-sidebar-label">Operaciones Taller</div>
+            <a class="bf-sidebar-item" data-route="nueva-orden"><i class="fa-solid fa-plus-circle"></i>Nueva Orden</a>
+            <a class="bf-sidebar-item" data-route="buscar-ordenes"><i class="fa-solid fa-magnifying-glass"></i>Buscar Órdenes</a>
+            <a class="bf-sidebar-item" data-route="tecnicos"><i class="fa-solid fa-users-gear"></i>Gestión Técnicos</a>
+            <a class="bf-sidebar-item" data-route="liquidar-tecnicos"><i class="fa-solid fa-calculator"></i>Liquidar Técnicos</a>
+
+            <div class="bf-sidebar-label">Catálogos</div>
+            <a class="bf-sidebar-item" data-route="servicios"><i class="fa-solid fa-wrench"></i>Catálogo de Servicios</a>
+            <a class="bf-sidebar-item" data-route="modelos-vehiculo"><i class="fa-solid fa-car-side"></i>Modelos de Vehículos</a>
+            <a class="bf-sidebar-item" data-route="costos-adicionales"><i class="fa-solid fa-receipt"></i>Costos Adicionales</a>
+
+            <div class="bf-sidebar-label">Finanzas</div>
+            <a class="bf-sidebar-item" data-route="gastos"><i class="fa-solid fa-money-bill-trend-up"></i>Gastos del Negocio</a>
+            <a class="bf-sidebar-item" data-route="reportes"><i class="fa-solid fa-chart-bar"></i>Reporte General</a>
+
+            <div class="bf-sidebar-label">CRM &amp; Marketing</div>
             <a class="bf-sidebar-item" data-route="clientes"><i class="fa-solid fa-users"></i>Clientes</a>
             <a class="bf-sidebar-item" data-route="vehiculos"><i class="fa-solid fa-car"></i>Vehículos</a>
-            <a class="bf-sidebar-item" data-route="ordenes"><i class="fa-solid fa-clipboard-list"></i>Órdenes de Trabajo</a>
-            <a class="bf-sidebar-item" data-route="tecnicos"><i class="fa-solid fa-users-gear"></i>Técnicos</a>
-            <a class="bf-sidebar-item" data-route="servicios"><i class="fa-solid fa-wrench"></i>Catálogo de Servicios</a>
-
-            <div class="bf-sidebar-label">Inventario &amp; Finanzas</div>
-            <a class="bf-sidebar-item" data-route="inventario"><i class="fa-solid fa-boxes-stacked"></i>Inventario</a>
-            <a class="bf-sidebar-item" data-route="facturacion"><i class="fa-solid fa-credit-card"></i>Facturación y Pagos</a>
-            <a class="bf-sidebar-item" data-route="contabilidad"><i class="fa-solid fa-scale-balanced"></i>Contabilidad</a>
-            <a class="bf-sidebar-item" data-route="gastos"><i class="fa-solid fa-money-bill-trend-up"></i>Gastos del Negocio</a>
-
-            <div class="bf-sidebar-label">Marketing &amp; Comunicación</div>
             <a class="bf-sidebar-item" data-route="whatsapp"><i class="fa-brands fa-whatsapp"></i>WhatsApp</a>
             <a class="bf-sidebar-item" data-route="landing-pages"><i class="fa-solid fa-globe"></i>Landing Pages</a>
 
             <div class="bf-sidebar-label">Sistema</div>
             <a class="bf-sidebar-item" data-route="configuracion"><i class="fa-solid fa-gear"></i>Configuración</a>
-            <a class="bf-sidebar-item" data-route="reportes"><i class="fa-solid fa-chart-bar"></i>Reportes</a>
+            <a class="bf-sidebar-item" data-route="inventario"><i class="fa-solid fa-boxes-stacked"></i>Inventario</a>
+            <a class="bf-sidebar-item" data-route="contabilidad"><i class="fa-solid fa-scale-balanced"></i>Contabilidad</a>
+            <a class="bf-sidebar-item" data-route="notificaciones"><i class="fa-solid fa-bell"></i>Notificaciones</a>
         </nav>
         <div style="padding:0.75rem 1.25rem;border-top:1px solid rgba(255,255,255,0.06);flex-shrink:0;">
             <div class="d-flex align-items-center gap-2">
@@ -339,7 +380,7 @@
             <span class="bf-topbar-title" id="topbar-title">Dashboard</span>
         </div>
         <div class="bf-topbar-right">
-            <button class="bf-btn-icon" id="btn-notifications"><i class="fa-regular fa-bell"></i><span class="badge-dot" id="notif-dot" style="display:none;"></span></button>
+            <button class="bf-btn-icon" id="btn-notifications" onclick="Router.navigate('notificaciones')"><i class="fa-regular fa-bell"></i><span class="badge-dot" id="notif-dot" style="display:none;"></span></button>
             <div class="bf-topbar-user">
                 <div class="bf-avatar" id="tb-avatar">AD</div>
                 <span class="d-none d-md-inline" id="tb-name">Admin</span>
@@ -359,7 +400,7 @@
                 <div class="col-6 col-lg-3">
                     <div class="kpi-card">
                         <div class="kpi-icon" style="background:rgba(13,148,136,0.1);color:var(--bf-primary);"><i class="fa-solid fa-clipboard-list"></i></div>
-                        <div><div class="kpi-label">Total OTs</div><div class="kpi-value" id="dash-total-ots">0</div></div>
+                        <div><div class="kpi-label">Total Órdenes</div><div class="kpi-value" id="dash-total-ots">0</div></div>
                     </div>
                 </div>
                 <div class="col-6 col-lg-3">
@@ -377,25 +418,51 @@
                 <div class="col-6 col-lg-3">
                     <div class="kpi-card">
                         <div class="kpi-icon" style="background:#fef3c7;color:#d97706;"><i class="fa-solid fa-dollar-sign"></i></div>
-                        <div><div class="kpi-label">Ingresos</div><div class="kpi-value" id="dash-ingresos">$0</div></div>
+                        <div><div class="kpi-label">Generado</div><div class="kpi-value" id="dash-ingresos">$0</div></div>
+                    </div>
+                </div>
+            </div>
+            <div class="row g-3 mb-3">
+                <div class="col-6 col-lg-3">
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background:#fce7f3;color:#db2777;"><i class="fa-solid fa-hand-holding-dollar"></i></div>
+                        <div><div class="kpi-label">Comisiones</div><div class="kpi-value" id="dash-comisiones">$0</div></div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background:#f1f5f9;color:#64748b;"><i class="fa-solid fa-wallet"></i></div>
+                        <div><div class="kpi-label">Balance</div><div class="kpi-value" id="dash-balance">$0</div></div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background:#ede9fe;color:#7c3aed;"><i class="fa-solid fa-users"></i></div>
+                        <div><div class="kpi-label">Clientes</div><div class="kpi-value" id="dash-clientes">0</div></div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background:#fef3c7;color:#d97706;"><i class="fa-solid fa-users-gear"></i></div>
+                        <div><div class="kpi-label">Técnicos</div><div class="kpi-value" id="dash-tecnicos">0</div></div>
                     </div>
                 </div>
             </div>
             <div class="row g-3 mb-4">
                 <div class="col-lg-7">
-                    <div class="bf-card"><div class="bf-card-header"><span class="bf-card-title"><i class="fa-solid fa-chart-bar me-2" style="color:var(--bf-primary);"></i>OTs por Estado</span></div><div class="bf-card-body"><div class="bf-chart"><canvas id="chart-ots-estado"></canvas></div></div></div>
+                    <div class="bf-card"><div class="bf-card-header"><span class="bf-card-title"><i class="fa-solid fa-chart-bar me-2" style="color:var(--bf-primary);"></i>Órdenes por Estado</span></div><div class="bf-card-body"><div class="bf-chart"><canvas id="chart-ots-estado"></canvas></div></div></div>
                 </div>
                 <div class="col-lg-5">
                     <div class="bf-card"><div class="bf-card-header"><span class="bf-card-title"><i class="fa-solid fa-chart-line me-2" style="color:var(--bf-primary);"></i>Ingresos Mensual</span></div><div class="bf-card-body"><div class="bf-chart"><canvas id="chart-ingresos"></canvas></div></div></div>
                 </div>
             </div>
             <div class="bf-card">
-                <div class="bf-card-header"><span class="bf-card-title"><i class="fa-solid fa-clock me-2" style="color:var(--bf-primary);"></i>OTs Recientes</span></div>
+                <div class="bf-card-header"><span class="bf-card-title"><i class="fa-solid fa-clock me-2" style="color:var(--bf-primary);"></i>Órdenes Recientes</span></div>
                 <div class="bf-card-body" style="padding:0;">
                     <div class="table-responsive">
                         <table class="bf-table">
-                            <thead><tr><th>#</th><th>Cliente</th><th>Vehículo</th><th>Estado</th><th>Técnico</th><th>Fecha</th></tr></thead>
-                            <tbody id="dash-recent-ots"><tr><td colspan="6" class="bf-empty"><i class="fa-solid fa-inbox"></i>Sin datos</td></tr></tbody>
+                            <thead><tr><th>#</th><th>Patente</th><th>Cliente</th><th>Estado</th><th>Técnico</th><th>Total</th><th>Fecha</th></tr></thead>
+                            <tbody id="dash-recent-ots"><tr><td colspan="7" class="bf-empty"><i class="fa-solid fa-inbox"></i>Sin datos</td></tr></tbody>
                         </table>
                     </div>
                 </div>
@@ -403,157 +470,185 @@
         </div>
 
         <!-- ============================================== -->
-        <!-- PAGE: CLIENTES                                  -->
+        <!-- PAGE: NUEVA ORDEN                               -->
         <!-- ============================================== -->
-        <div id="page-clientes" class="bf-page">
+        <div id="page-nueva-orden" class="bf-page">
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-                <h5 class="fw-bold mb-0">Clientes</h5>
-                <button class="btn-bf" onclick="App.clientes.openCreate()"><i class="fa-solid fa-plus"></i>Nuevo Cliente</button>
+                <h5 class="fw-bold mb-0">Nueva Orden de Trabajo</h5>
+                <button class="btn-bf" style="background:linear-gradient(135deg,#f59e0b,#ef4444);" onclick="App.nuevaOrden.openExpress()"><i class="fa-solid fa-bolt"></i>OT Express</button>
             </div>
-            <div class="bf-card">
-                <div class="bf-card-header">
-                    <div class="bf-search">
-                        <i class="fa-solid fa-search"></i>
-                        <input type="text" class="bf-input" placeholder="Buscar cliente..." id="search-clientes" oninput="App.clientes.filter(this.value)">
-                    </div>
-                </div>
-                <div class="bf-card-body" style="padding:0;">
-                    <div class="table-responsive">
-                        <table class="bf-table">
-                            <thead><tr><th>Nombre</th><th>Cédula/RIF</th><th>Email</th><th>Teléfono</th><th>Ciudad</th><th>Origen</th><th>Acciones</th></tr></thead>
-                            <tbody id="tbl-clientes"><tr><td colspan="7" class="bf-empty"><i class="fa-solid fa-users"></i>Sin clientes</td></tr></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
 
-        <!-- ============================================== -->
-        <!-- PAGE: VEHÍCULOS                                 -->
-        <!-- ============================================== -->
-        <div id="page-vehiculos" class="bf-page">
-            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-                <h5 class="fw-bold mb-0">Vehículos</h5>
-                <button class="btn-bf" onclick="App.vehiculos.openCreate()"><i class="fa-solid fa-plus"></i>Nuevo Vehículo</button>
-            </div>
-            <div class="bf-card">
-                <div class="bf-card-header">
-                    <div class="bf-search">
-                        <i class="fa-solid fa-search"></i>
-                        <input type="text" class="bf-input" placeholder="Buscar por placa, marca..." id="search-vehiculos" oninput="App.vehiculos.filter(this.value)">
-                    </div>
-                </div>
-                <div class="bf-card-body" style="padding:0;">
-                    <div class="table-responsive">
-                        <table class="bf-table">
-                            <thead><tr><th>Placa</th><th>Marca</th><th>Modelo</th><th>Año</th><th>Color</th><th>VIN</th><th>Cliente</th><th>Acciones</th></tr></thead>
-                            <tbody id="tbl-vehiculos"><tr><td colspan="8" class="bf-empty"><i class="fa-solid fa-car"></i>Sin vehículos</td></tr></tbody>
-                        </table>
-                    </div>
+            <!-- Número de orden -->
+            <div class="bf-card mb-3">
+                <div class="bf-card-body text-center py-3">
+                    <div style="font-size:0.82rem;color:#64748b;font-weight:600;">ORDEN DE TRABAJO N°</div>
+                    <div style="font-size:2rem;font-weight:900;color:var(--bf-primary);letter-spacing:3px;" id="nueva-orden-numero">000000</div>
                 </div>
             </div>
-        </div>
 
-        <!-- ============================================== -->
-        <!-- PAGE: ÓRDENES DE TRABAJO                        -->
-        <!-- ============================================== -->
-        <div id="page-ordenes" class="bf-page">
-            <!-- List View -->
-            <div id="ordenes-list-view">
-                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-                    <h5 class="fw-bold mb-0">Órdenes de Trabajo</h5>
-                    <button class="btn-bf" onclick="App.ordenes.openCreate()"><i class="fa-solid fa-plus"></i>Nueva OT</button>
+            <form id="form-nueva-orden">
+                <!-- Patente -->
+                <div class="bf-card mb-3">
+                    <div class="bf-card-header"><span class="bf-card-title"><i class="fa-solid fa-id-card me-2" style="color:var(--bf-primary);"></i>Datos del Vehículo</span></div>
+                    <div class="bf-card-body">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="bf-label">Patente / Placa</label>
+                                <input type="text" class="patente-bf bf-input" id="no-patente" placeholder="ABCD12" onblur="App.nuevaOrden.buscarPatente()">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="bf-label">Marca</label>
+                                <input type="text" class="bf-input" id="no-marca" placeholder="Toyota">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="bf-label">Modelo</label>
+                                <input type="text" class="bf-input" id="no-modelo" placeholder="Corolla">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="bf-label">Año</label>
+                                <input type="text" class="bf-input" id="no-anio" placeholder="2024">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="bf-label">Cilindrada</label>
+                                <input type="text" class="bf-input" id="no-cilindrada" placeholder="2.0">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="bf-label">Combustible</label>
+                                <select class="bf-input bf-select" id="no-combustible"><option value="">Seleccionar</option><option>Bencina</option><option>Diesel</option><option>Híbrido</option><option>Eléctrico</option><option>GLP</option></select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="bf-label">Kilometraje</label>
+                                <input type="text" class="bf-input" id="no-km" placeholder="150000">
+                            </div>
+                        </div>
+                    </div>
                 </div>
+
+                <!-- Cliente -->
+                <div class="bf-card mb-3">
+                    <div class="bf-card-header"><span class="bf-card-title"><i class="fa-solid fa-user me-2" style="color:var(--bf-primary);"></i>Datos del Cliente</span></div>
+                    <div class="bf-card-body">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="bf-label">Nombre del Cliente</label>
+                                <input type="text" class="bf-input" id="no-cliente" placeholder="Juan Pérez" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="bf-label">RUT / Cédula</label>
+                                <input type="text" class="bf-input" id="no-rut" placeholder="12345678-9">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="bf-label">Teléfono</label>
+                                <input type="text" class="bf-input" id="no-telefono" placeholder="+56 9 1234 5678" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="bf-label">Dirección</label>
+                                <input type="text" class="bf-input" id="no-direccion" placeholder="Av. Siempre Viva 123">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="bf-label">Fecha Ingreso</label>
+                                <input type="date" class="bf-input" id="no-fecha">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="bf-label">Hora Ingreso</label>
+                                <input type="time" class="bf-input" id="no-hora">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="bf-label">Recepcionista</label>
+                                <input type="text" class="bf-input" id="no-recepcionista" placeholder="Nombre">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Servicios -->
                 <div class="bf-card mb-3">
                     <div class="bf-card-header">
-                        <div class="d-flex flex-wrap gap-2 align-items-center">
-                            <select class="bf-input bf-select" id="filter-ot-estado" onchange="App.ordenes.load()" style="width:auto;min-width:140px;">
-                                <option value="">Todos los estados</option>
-                                <option value="enviada">Enviada</option>
-                                <option value="aprobada">Aprobada</option>
-                                <option value="pendiente_visita">Pendiente Visita</option>
-                                <option value="en_sitio">En Sitio</option>
-                                <option value="en_progreso">En Progreso</option>
-                                <option value="completada">Completada</option>
-                                <option value="cerrada">Cerrada</option>
-                                <option value="cancelada">Cancelada</option>
-                            </select>
-                            <select class="bf-input bf-select" id="filter-ot-tecnico" onchange="App.ordenes.load()" style="width:auto;min-width:140px;">
-                                <option value="">Todos los técnicos</option>
-                            </select>
-                            <input type="date" class="bf-input" id="filter-ot-fecha" onchange="App.ordenes.load()" style="width:auto;">
-                            <select class="bf-input bf-select" id="filter-ot-prioridad" onchange="App.ordenes.load()" style="width:auto;min-width:120px;">
-                                <option value="">Todas las prioridades</option>
-                                <option value="alta">Alta</option>
-                                <option value="media">Media</option>
-                                <option value="baja">Baja</option>
-                            </select>
+                        <span class="bf-card-title"><i class="fa-solid fa-wrench me-2" style="color:var(--bf-primary);"></i>Servicios del Catálogo</span>
+                        <button type="button" class="btn-bf btn-bf-sm" onclick="App.nuevaOrden.cargarServicios()"><i class="fa-solid fa-sync"></i>Recargar</button>
+                    </div>
+                    <div class="bf-card-body" id="no-servicios-container">
+                        <div class="bf-empty"><i class="fa-solid fa-wrench"></i>Cargando servicios...</div>
+                    </div>
+                </div>
+
+                <!-- Costos Extra -->
+                <div class="bf-card mb-3">
+                    <div class="bf-card-header"><span class="bf-card-title"><i class="fa-solid fa-plus-circle me-2" style="color:#f59e0b;"></i>Costos Extra</span></div>
+                    <div class="bf-card-body">
+                        <div class="row g-2 mb-2">
+                            <div class="col-md-4"><input type="text" class="bf-input" id="no-extra-concepto" placeholder="Concepto"></div>
+                            <div class="col-md-3"><input type="number" class="bf-input" id="no-extra-monto" placeholder="Monto $"></div>
+                            <div class="col-md-3"><select class="bf-input bf-select" id="no-extra-cat"><option value="Mano de Obra">Mano de Obra</option><option value="Repuestos/Materiales">Repuestos</option></select></div>
+                            <div class="col-md-2"><button type="button" class="btn-bf btn-bf-sm w-100" onclick="App.nuevaOrden.addCostoExtra()"><i class="fa-solid fa-plus"></i></button></div>
                         </div>
-                        <div class="bf-search">
-                            <i class="fa-solid fa-search"></i>
-                            <input type="text" class="bf-input" placeholder="Buscar OT..." id="search-ordenes" oninput="App.ordenes.filter(this.value)">
+                        <div id="no-costos-extra-list"></div>
+                    </div>
+                </div>
+
+                <!-- Observaciones -->
+                <div class="bf-card mb-3">
+                    <div class="bf-card-header"><span class="bf-card-title"><i class="fa-solid fa-note-sticky me-2" style="color:var(--bf-primary);"></i>Diagnóstico / Observaciones</span></div>
+                    <div class="bf-card-body">
+                        <textarea class="bf-textarea" id="no-observaciones" placeholder="Descripción del problema o diagnóstico..." rows="3"></textarea>
+                    </div>
+                </div>
+
+                <!-- Resumen y Pago -->
+                <div class="bf-card mb-3">
+                    <div class="bf-card-header"><span class="bf-card-title"><i class="fa-solid fa-calculator me-2" style="color:var(--bf-primary);"></i>Resumen</span></div>
+                    <div class="bf-card-body">
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-4 text-center"><div class="bf-label">Total Servicios</div><div class="fw-800 fs-5" style="color:var(--bf-primary);" id="no-resumen-servicios">$0</div></div>
+                            <div class="col-md-4 text-center"><div class="bf-label">Costos Extra</div><div class="fw-800 fs-5" style="color:#f59e0b;" id="no-resumen-extra">$0</div></div>
+                            <div class="col-md-4 text-center"><div class="bf-label">Total Estimado</div><div class="fw-800 fs-5" style="color:#16a34a;" id="no-resumen-total">$0</div></div>
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-md-3"><div class="form-check"><input class="form-check-input" type="checkbox" id="no-tiene-abono" onchange="App.nuevaOrden.calcular()"><label class="form-check-label" for="no-tiene-abono" style="font-size:0.82rem;">Tiene Abono</label></div></div>
+                            <div class="col-md-3"><input type="number" class="bf-input" id="no-abono" placeholder="$ Abono" oninput="App.nuevaOrden.calcular()" disabled></div>
+                            <div class="col-md-3"><select class="bf-input bf-select" id="no-metodo-pago"><option>Efectivo</option><option>Transferencia</option><option>Tarjeta</option></select></div>
+                            <div class="col-md-3 text-center"><div class="bf-label">Restante</div><div class="fw-800" id="no-resumen-restante">$0</div></div>
                         </div>
                     </div>
-                    <div class="bf-card-body" style="padding:0;">
-                        <div class="table-responsive">
-                            <table class="bf-table">
-                                <thead><tr><th>#</th><th>Cliente</th><th>Vehículo</th><th>Tipo</th><th>Prioridad</th><th>Estado</th><th>Técnico</th><th>Total</th><th>Fecha</th><th>Acciones</th></tr></thead>
-                                <tbody id="tbl-ordenes"><tr><td colspan="10" class="bf-empty"><i class="fa-solid fa-clipboard-list"></i>Sin órdenes</td></tr></tbody>
-                            </table>
-                        </div>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn-bf flex-grow-1"><i class="fa-solid fa-save"></i>Crear Orden</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- PAGE: BUSCAR ÓRDENES                            -->
+        <!-- ============================================== -->
+        <div id="page-buscar-ordenes" class="bf-page">
+            <h5 class="fw-bold mb-3">Buscar Órdenes</h5>
+            <div class="bf-card mb-3">
+                <div class="bf-card-header"><span class="bf-card-title"><i class="fa-solid fa-search me-2" style="color:var(--bf-primary);"></i>Buscar por Patente</span></div>
+                <div class="bf-card-body">
+                    <div class="row g-2">
+                        <div class="col-md-5"><input type="text" class="patente-bf bf-input" id="bo-patente" placeholder="ABCD12" style="font-size:1.2rem;letter-spacing:2px;"></div>
+                        <div class="col-md-3"><button class="btn-bf w-100 h-100" onclick="App.buscarOrdenes.buscar()"><i class="fa-solid fa-search"></i>Buscar</button></div>
+                        <div class="col-md-4"><select class="bf-input bf-select" id="bo-estado" onchange="App.buscarOrdenes.filtrarEstado()">
+                            <option value="">Todos los estados</option>
+                            <option value="Enviada">Enviada</option><option value="Aprobada">Aprobada</option>
+                            <option value="En Progreso">En Progreso</option><option value="Completada">Completada</option>
+                            <option value="Cerrada">Cerrada</option><option value="Cancelada">Cancelada</option>
+                        </select></div>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2 mt-3">
+                        <button class="filtro-bf active" onclick="App.buscarOrdenes.setFiltro('todas',this)">Todas</button>
+                        <button class="filtro-bf" onclick="App.buscarOrdenes.setFiltro('Enviada',this)">Enviadas</button>
+                        <button class="filtro-bf" onclick="App.buscarOrdenes.setFiltro('Aprobada',this)">Aprobadas</button>
+                        <button class="filtro-bf" onclick="App.buscarOrdenes.setFiltro('En Progreso',this)">En Proceso</button>
+                        <button class="filtro-bf" onclick="App.buscarOrdenes.setFiltro('Completada',this)">Completadas</button>
+                        <button class="filtro-bf" onclick="App.buscarOrdenes.setFiltro('Cerrada',this)">Cerradas</button>
                     </div>
                 </div>
             </div>
-
-            <!-- Detail View -->
-            <div id="orden-detail-view" style="display:none;">
-                <div class="d-flex align-items-center gap-2 mb-3">
-                    <button class="btn-bf-icon" onclick="App.ordenes.showList()"><i class="fa-solid fa-arrow-left"></i></button>
-                    <h5 class="fw-bold mb-0" id="orden-detail-title">OT #001</h5>
-                    <div class="ms-auto d-flex gap-1">
-                        <button class="btn-bf btn-bf-sm" onclick="App.ordenes.generatePDF()"><i class="fa-solid fa-file-pdf"></i>PDF</button>
-                        <button class="btn-bf-outline btn-bf-sm" onclick="App.ordenes.sendApproval()"><i class="fa-solid fa-paper-plane"></i>Enviar Aprobación</button>
-                    </div>
-                </div>
-                <div class="row g-3 mb-3">
-                    <div class="col-lg-6">
-                        <div class="bf-card"><div class="bf-card-header"><span class="bf-card-title">Información General</span></div>
-                            <div class="bf-card-body" id="orden-detail-info"><p class="text-muted small">Cargando...</p></div>
-                        </div>
-                    </div>
-                    <div class="col-lg-6">
-                        <div class="bf-card"><div class="bf-card-header"><span class="bf-card-title">Estado y Asignación</span></div>
-                            <div class="bf-card-body" id="orden-detail-status"><p class="text-muted small">Cargando...</p></div>
-                        </div>
-                    </div>
-                </div>
-                <div class="row g-3 mb-3">
-                    <div class="col-lg-6">
-                        <div class="bf-card"><div class="bf-card-header"><span class="bf-card-title">Notas</span><button class="btn-bf btn-bf-sm" onclick="App.ordenes.openAddNote()"><i class="fa-solid fa-plus"></i>Agregar</button></div>
-                            <div class="bf-card-body" id="orden-detail-notas"><p class="text-muted small mb-0">Sin notas</p></div>
-                        </div>
-                    </div>
-                    <div class="col-lg-6">
-                        <div class="bf-card"><div class="bf-card-header"><span class="bf-card-title">Costos Adicionales</span><button class="btn-bf btn-bf-sm" onclick="App.ordenes.openAddCost()"><i class="fa-solid fa-plus"></i>Agregar</button></div>
-                            <div class="bf-card-body" id="orden-detail-costos"><p class="text-muted small mb-0">Sin costos adicionales</p></div>
-                        </div>
-                    </div>
-                </div>
-                <div class="row g-3 mb-3">
-                    <div class="col-lg-6">
-                        <div class="bf-card"><div class="bf-card-header"><span class="bf-card-title">Fotos</span><button class="btn-bf btn-bf-sm" onclick="document.getElementById('orden-photo-input').click()"><i class="fa-solid fa-camera"></i>Subir Foto</button></div>
-                            <div class="bf-card-body"><input type="file" id="orden-photo-input" accept="image/*" multiple style="display:none;" onchange="App.ordenes.uploadPhotos(this.files)"><div class="d-flex flex-wrap gap-2" id="orden-detail-fotos"><p class="text-muted small mb-0">Sin fotos</p></div></div>
-                        </div>
-                    </div>
-                    <div class="col-lg-6">
-                        <div class="bf-card"><div class="bf-card-header"><span class="bf-card-title">Seguimiento</span></div>
-                            <div class="bf-card-body" id="orden-detail-seguimiento"><p class="text-muted small mb-0">Sin seguimiento</p></div>
-                        </div>
-                    </div>
-                </div>
+            <div id="bo-resultados">
                 <div class="bf-card">
-                    <div class="bf-card-header"><span class="bf-card-title">Firma del Cliente</span></div>
-                    <div class="bf-card-body text-center" id="orden-detail-firma"><p class="text-muted small mb-0">Sin firma</p></div>
+                    <div class="bf-card-body"><div class="bf-empty"><i class="fa-solid fa-magnifying-glass"></i>Ingrese una patente para buscar órdenes</div></div>
                 </div>
             </div>
         </div>
@@ -563,7 +658,7 @@
         <!-- ============================================== -->
         <div id="page-tecnicos" class="bf-page">
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-                <h5 class="fw-bold mb-0">Técnicos</h5>
+                <h5 class="fw-bold mb-0">Gestión Técnicos</h5>
                 <button class="btn-bf" onclick="App.tecnicos.openCreate()"><i class="fa-solid fa-plus"></i>Nuevo Técnico</button>
             </div>
             <div class="bf-card">
@@ -573,12 +668,47 @@
                 <div class="bf-card-body" style="padding:0;">
                     <div class="table-responsive">
                         <table class="bf-table">
-                            <thead><tr><th>Nombre</th><th>Especialidad</th><th>Teléfono</th><th>Email</th><th>Código</th><th>Ubicación GPS</th><th>Acciones</th></tr></thead>
-                            <tbody id="tbl-tecnicos"><tr><td colspan="7" class="bf-empty"><i class="fa-solid fa-users-gear"></i>Sin técnicos</td></tr></tbody>
+                            <thead><tr><th>Nombre</th><th>Teléfono</th><th>Email</th><th>Comisión %</th><th>Estado</th><th>Acciones</th></tr></thead>
+                            <tbody id="tbl-tecnicos"><tr><td colspan="6" class="bf-empty"><i class="fa-solid fa-users-gear"></i>Sin técnicos</td></tr></tbody>
                         </table>
                     </div>
                 </div>
             </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- PAGE: LIQUIDAR TÉCNICOS                        -->
+        <!-- ============================================== -->
+        <div id="page-liquidar-tecnicos" class="bf-page">
+            <h5 class="fw-bold mb-3">Liquidar Técnicos</h5>
+            <div class="bf-card mb-3">
+                <div class="bf-card-header"><span class="bf-card-title"><i class="fa-solid fa-filter me-2" style="color:var(--bf-primary);"></i>Filtros de Liquidación</span></div>
+                <div class="bf-card-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="bf-label">Técnico</label>
+                            <select class="bf-input bf-select" id="liq-tecnico"></select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="bf-label">Tipo</label>
+                            <select class="bf-input bf-select" id="liq-tipo">
+                                <option value="mes">Mensual</option>
+                                <option value="semana">Semanal</option>
+                                <option value="rango">Rango de Fechas</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="bf-label">Valor</label>
+                            <input type="text" class="bf-input" id="liq-valor" placeholder="2025-01">
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end">
+                            <button class="btn-bf w-100" onclick="App.liquidarTecnicos.calcular()"><i class="fa-solid fa-calculator"></i>Calcular</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="liq-resultados"></div>
+            <div id="liq-resumen"></div>
         </div>
 
         <!-- ============================================== -->
@@ -596,9 +726,191 @@
                 <div class="bf-card-body" style="padding:0;">
                     <div class="table-responsive">
                         <table class="bf-table">
-                            <thead><tr><th>Nombre</th><th>Descripción</th><th>Precio</th><th>Duración</th><th>Categoría</th><th>Acciones</th></tr></thead>
-                            <tbody id="tbl-servicios"><tr><td colspan="6" class="bf-empty"><i class="fa-solid fa-wrench"></i>Sin servicios</td></tr></tbody>
+                            <thead><tr><th>Nombre</th><th>Categoría</th><th>Tipo Comisión</th><th>Precio Sugerido</th><th>Acciones</th></tr></thead>
+                            <tbody id="tbl-servicios"><tr><td colspan="5" class="bf-empty"><i class="fa-solid fa-wrench"></i>Sin servicios</td></tr></tbody>
                         </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- PAGE: MODELOS DE VEHÍCULOS                     -->
+        <!-- ============================================== -->
+        <div id="page-modelos-vehiculo" class="bf-page">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                <h5 class="fw-bold mb-0">Modelos de Vehículos</h5>
+                <button class="btn-bf" onclick="App.modelos.openCreate()"><i class="fa-solid fa-plus"></i>Nuevo Modelo</button>
+            </div>
+            <div class="bf-card">
+                <div class="bf-card-header">
+                    <div class="bf-search"><i class="fa-solid fa-search"></i><input type="text" class="bf-input" placeholder="Buscar modelo..." id="search-modelos" oninput="App.modelos.filter(this.value)"></div>
+                </div>
+                <div class="bf-card-body" style="padding:0;">
+                    <div class="table-responsive">
+                        <table class="bf-table">
+                            <thead><tr><th>Marca</th><th>Modelo</th><th>Años</th><th>Acciones</th></tr></thead>
+                            <tbody id="tbl-modelos"><tr><td colspan="4" class="bf-empty"><i class="fa-solid fa-car-side"></i>Sin modelos</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- PAGE: COSTOS ADICIONALES                       -->
+        <!-- ============================================== -->
+        <div id="page-costos-adicionales" class="bf-page">
+            <h5 class="fw-bold mb-3">Costos Adicionales</h5>
+            <div class="bf-card">
+                <div class="bf-card-header"><span class="bf-card-title"><i class="fa-solid fa-receipt me-2" style="color:var(--bf-primary);"></i>Configuración de Costos</span></div>
+                <div class="bf-card-body">
+                    <p style="color:#64748b;font-size:0.84rem;">Los costos adicionales se agregan directamente desde cada orden de trabajo. Use el botón "Agregar Costo" en la vista de detalle de una orden.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- PAGE: GASTOS DEL NEGOCIO                       -->
+        <!-- ============================================== -->
+        <div id="page-gastos" class="bf-page">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                <h5 class="fw-bold mb-0">Gastos del Negocio</h5>
+                <button class="btn-bf" onclick="App.gastos.openCreate()"><i class="fa-solid fa-plus"></i>Nuevo Gasto</button>
+            </div>
+            <div class="bf-card mb-3">
+                <div class="bf-card-header">
+                    <div class="d-flex flex-wrap gap-2 align-items-center">
+                        <select class="bf-input bf-select" id="gasto-filtro-cat" onchange="App.gastos.load()" style="width:auto;min-width:140px;">
+                            <option value="">Todas las categorías</option>
+                            <option value="Alquiler">Alquiler</option><option value="Servicios">Servicios</option>
+                            <option value="Transporte">Transporte</option><option value="Insumos">Insumos</option>
+                            <option value="Salarios">Salarios</option><option value="Marketing">Marketing</option>
+                            <option value="Otros">Otros</option>
+                        </select>
+                        <input type="month" class="bf-input" id="gasto-filtro-desde" onchange="App.gastos.load()" style="width:auto;">
+                    </div>
+                    <div class="bf-avatar" style="background:#fef2f2;color:#dc2626;font-size:0.7rem;"><span id="gasto-total-badge">$0</span></div>
+                </div>
+                <div class="bf-card-body" style="padding:0;">
+                    <div class="table-responsive">
+                        <table class="bf-table">
+                            <thead><tr><th>Fecha</th><th>Concepto</th><th>Categoría</th><th>Monto</th><th>Acciones</th></tr></thead>
+                            <tbody id="tbl-gastos"><tr><td colspan="5" class="bf-empty"><i class="fa-solid fa-money-bill-trend-up"></i>Sin gastos</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div id="gasto-resumen"></div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- PAGE: REPORTE GENERAL                           -->
+        <!-- ============================================== -->
+        <div id="page-reportes" class="bf-page">
+            <h5 class="fw-bold mb-3">Reporte General</h5>
+            <div class="bf-card mb-3">
+                <div class="bf-card-body">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-4"><label class="bf-label">Período (YYYY-MM)</label><input type="month" class="bf-input" id="reporte-valor"></div>
+                        <div class="col-md-2"><button class="btn-bf w-100" onclick="App.reportes.generar()"><i class="fa-solid fa-chart-bar"></i>Generar</button></div>
+                    </div>
+                </div>
+            </div>
+            <div id="reporte-contenido">
+                <div class="bf-card"><div class="bf-card-body"><div class="bf-empty"><i class="fa-solid fa-chart-bar"></i>Seleccione un período para generar el reporte</div></div></div>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- PAGE: CLIENTES                                  -->
+        <!-- ============================================== -->
+        <div id="page-clientes" class="bf-page">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                <h5 class="fw-bold mb-0">Clientes</h5>
+                <button class="btn-bf" onclick="App.clientes.openCreate()"><i class="fa-solid fa-plus"></i>Nuevo Cliente</button>
+            </div>
+            <div class="bf-card">
+                <div class="bf-card-header">
+                    <div class="bf-search"><i class="fa-solid fa-search"></i><input type="text" class="bf-input" placeholder="Buscar cliente..." id="search-clientes" oninput="App.clientes.filter(this.value)"></div>
+                </div>
+                <div class="bf-card-body" style="padding:0;">
+                    <div class="table-responsive">
+                        <table class="bf-table">
+                            <thead><tr><th>Nombre</th><th>RUT/Cédula</th><th>Teléfono</th><th>Dirección</th><th>Patentes</th><th>Acciones</th></tr></thead>
+                            <tbody id="tbl-clientes"><tr><td colspan="6" class="bf-empty"><i class="fa-solid fa-users"></i>Sin clientes</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- PAGE: VEHÍCULOS                                 -->
+        <!-- ============================================== -->
+        <div id="page-vehiculos" class="bf-page">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                <h5 class="fw-bold mb-0">Vehículos</h5>
+                <button class="btn-bf" onclick="App.vehiculos.openCreate()"><i class="fa-solid fa-plus"></i>Nuevo Vehículo</button>
+            </div>
+            <div class="bf-card">
+                <div class="bf-card-header">
+                    <div class="bf-search"><i class="fa-solid fa-search"></i><input type="text" class="bf-input" placeholder="Buscar por placa, marca..." id="search-vehiculos" oninput="App.vehiculos.filter(this.value)"></div>
+                </div>
+                <div class="bf-card-body" style="padding:0;">
+                    <div class="table-responsive">
+                        <table class="bf-table">
+                            <thead><tr><th>Placa</th><th>Marca</th><th>Modelo</th><th>Año</th><th>Color</th><th>Cliente</th><th>Acciones</th></tr></thead>
+                            <tbody id="tbl-vehiculos"><tr><td colspan="7" class="bf-empty"><i class="fa-solid fa-car"></i>Sin vehículos</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- PAGE: WHATSAPP                                 -->
+        <!-- ============================================== -->
+        <div id="page-whatsapp" class="bf-page">
+            <h5 class="fw-bold mb-3">WhatsApp - UltraMsg</h5>
+            <div class="bf-card">
+                <div class="bf-card-header"><span class="bf-card-title"><i class="fa-brands fa-whatsapp me-2" style="color:#25D366;"></i>Configuración UltraMsg</span></div>
+                <div class="bf-card-body" id="whatsapp-config-container">
+                    <div class="bf-empty"><i class="fa-brands fa-whatsapp"></i>Cargando configuración...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- PAGE: LANDING PAGES                             -->
+        <!-- ============================================== -->
+        <div id="page-landing-pages" class="bf-page">
+            <h5 class="fw-bold mb-3">Landing Pages</h5>
+            <div class="bf-card">
+                <div class="bf-card-body"><div class="bf-empty"><i class="fa-solid fa-globe"></i>Módulo de Landing Pages</div></div>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- PAGE: CONFIGURACIÓN                             -->
+        <!-- ============================================== -->
+        <div id="page-configuracion" class="bf-page">
+            <h5 class="fw-bold mb-3">Configuración</h5>
+            <div class="row g-3">
+                <div class="col-lg-6">
+                    <div class="bf-card">
+                        <div class="bf-card-header"><span class="bf-card-title"><i class="fa-solid fa-truck me-2" style="color:var(--bf-primary);"></i>Configuración Domicilio</span></div>
+                        <div class="bf-card-body" id="config-domicilio-container">
+                            <div class="bf-empty"><i class="fa-solid fa-truck"></i>Cargando...</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="bf-card">
+                        <div class="bf-card-header"><span class="bf-card-title"><i class="fa-brands fa-whatsapp me-2" style="color:#25D366;"></i>UltraMsg API</span></div>
+                        <div class="bf-card-body" id="config-ultramsg-container">
+                            <div class="bf-empty"><i class="fa-brands fa-whatsapp"></i>Cargando...</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -619,42 +931,8 @@
                 <div class="bf-card-body" style="padding:0;">
                     <div class="table-responsive">
                         <table class="bf-table">
-                            <thead><tr><th>Código</th><th>Nombre</th><th>Categoría</th><th>Cantidad</th><th>Mínima</th><th>Precio Compra</th><th>Precio Venta</th><th>Proveedor</th><th>Acciones</th></tr></thead>
-                            <tbody id="tbl-inventario"><tr><td colspan="9" class="bf-empty"><i class="fa-solid fa-boxes-stacked"></i>Sin items</td></tr></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-            <div class="bf-card mt-3">
-                <div class="bf-card-header"><span class="bf-card-title">Movimientos</span></div>
-                <div class="bf-card-body" style="padding:0;">
-                    <div class="table-responsive">
-                        <table class="bf-table">
-                            <thead><tr><th>Fecha</th><th>Producto</th><th>Tipo</th><th>Cantidad</th><th>Nota</th></tr></thead>
-                            <tbody id="tbl-movimientos"><tr><td colspan="5" class="bf-empty"><i class="fa-solid fa-clock-rotate-left"></i>Sin movimientos</td></tr></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ============================================== -->
-        <!-- PAGE: FACTURACIÓN Y PAGOS                       -->
-        <!-- ============================================== -->
-        <div id="page-facturacion" class="bf-page">
-            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-                <h5 class="fw-bold mb-0">Facturación y Pagos</h5>
-                <button class="btn-bf" onclick="App.facturacion.openCreate()"><i class="fa-solid fa-plus"></i>Registrar Pago</button>
-            </div>
-            <div class="bf-card">
-                <div class="bf-card-header">
-                    <div class="bf-search"><i class="fa-solid fa-search"></i><input type="text" class="bf-input" placeholder="Buscar pago..." id="search-facturacion" oninput="App.facturacion.filter(this.value)"></div>
-                </div>
-                <div class="bf-card-body" style="padding:0;">
-                    <div class="table-responsive">
-                        <table class="bf-table">
-                            <thead><tr><th>#</th><th>OT</th><th>Cliente</th><th>Monto</th><th>Método</th><th>Referencia</th><th>Fecha</th><th>Acciones</th></tr></thead>
-                            <tbody id="tbl-facturacion"><tr><td colspan="8" class="bf-empty"><i class="fa-solid fa-credit-card"></i>Sin pagos</td></tr></tbody>
+                            <thead><tr><th>Código</th><th>Nombre</th><th>Categoría</th><th>Cantidad</th><th>Precio Compra</th><th>Precio Venta</th><th>Acciones</th></tr></thead>
+                            <tbody id="tbl-inventario"><tr><td colspan="7" class="bf-empty"><i class="fa-solid fa-boxes-stacked"></i>Sin items</td></tr></tbody>
                         </table>
                     </div>
                 </div>
@@ -665,246 +943,28 @@
         <!-- PAGE: CONTABILIDAD                              -->
         <!-- ============================================== -->
         <div id="page-contabilidad" class="bf-page">
-            <ul class="nav nav-tabs mb-3" id="contab-tabs">
-                <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#contab-cuentas">Plan de Cuentas</a></li>
-                <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#contab-asientos">Asientos Contables</a></li>
-                <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#contab-mayor">Mayor / Ledger</a></li>
-            </ul>
-            <div class="tab-content">
-                <div class="tab-pane fade show active" id="contab-cuentas">
-                    <div class="d-flex justify-content-end mb-2"><button class="btn-bf btn-bf-sm" onclick="App.contabilidad.openCreateCuenta()"><i class="fa-solid fa-plus"></i>Nueva Cuenta</button></div>
-                    <div class="bf-card">
-                        <div class="bf-card-body" style="padding:0;">
-                            <div class="table-responsive">
-                                <table class="bf-table">
-                                    <thead><tr><th>Código</th><th>Nombre</th><th>Tipo</th><th>Naturaleza</th><th>Saldo</th><th>Acciones</th></tr></thead>
-                                    <tbody id="tbl-cuentas"><tr><td colspan="6" class="bf-empty"><i class="fa-solid fa-scale-balanced"></i>Sin cuentas</td></tr></tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="tab-pane fade" id="contab-asientos">
-                    <div class="d-flex justify-content-end mb-2"><button class="btn-bf btn-bf-sm" onclick="App.contabilidad.openCreateAsiento()"><i class="fa-solid fa-plus"></i>Nuevo Asiento</button></div>
-                    <div class="bf-card">
-                        <div class="bf-card-body" style="padding:0;">
-                            <div class="table-responsive">
-                                <table class="bf-table">
-                                    <thead><tr><th>#</th><th>Fecha</th><th>Concepto</th><th>Debe</th><th>Haber</th><th>Acciones</th></tr></thead>
-                                    <tbody id="tbl-asientos"><tr><td colspan="6" class="bf-empty"><i class="fa-solid fa-file-invoice"></i>Sin asientos</td></tr></tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="tab-pane fade" id="contab-mayor">
-                    <div class="bf-card">
-                        <div class="bf-card-header">
-                            <select class="bf-input bf-select" id="mayor-cuenta-select" style="width:auto;min-width:200px;" onchange="App.contabilidad.loadMayor()">
-                                <option value="">Seleccionar cuenta...</option>
-                            </select>
-                        </div>
-                        <div class="bf-card-body" style="padding:0;">
-                            <div class="table-responsive">
-                                <table class="bf-table">
-                                    <thead><tr><th>Fecha</th><th>Concepto</th><th>Asiento</th><th>Debe</th><th>Haber</th><th>Saldo</th></tr></thead>
-                                    <tbody id="tbl-mayor"><tr><td colspan="6" class="bf-empty"><i class="fa-solid fa-book"></i>Seleccione una cuenta</td></tr></tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            <h5 class="fw-bold mb-3">Contabilidad</h5>
+            <div class="bf-card">
+                <div class="bf-card-body"><div class="bf-empty"><i class="fa-solid fa-scale-balanced"></i>Módulo de Contabilidad</div></div>
             </div>
         </div>
 
         <!-- ============================================== -->
-        <!-- PAGE: GASTOS DEL NEGOCIO                        -->
+        <!-- PAGE: NOTIFICACIONES                           -->
         <!-- ============================================== -->
-        <div id="page-gastos" class="bf-page">
-            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-                <h5 class="fw-bold mb-0">Gastos del Negocio</h5>
-                <button class="btn-bf" onclick="App.gastos.openCreate()"><i class="fa-solid fa-plus"></i>Nuevo Gasto</button>
-            </div>
+        <div id="page-notificaciones" class="bf-page">
+            <h5 class="fw-bold mb-3">Notificaciones WhatsApp</h5>
             <div class="bf-card">
                 <div class="bf-card-header">
-                    <div class="bf-search"><i class="fa-solid fa-search"></i><input type="text" class="bf-input" placeholder="Buscar gasto..." id="search-gastos" oninput="App.gastos.filter(this.value)"></div>
+                    <span class="bf-card-title"><i class="fa-brands fa-whatsapp me-2" style="color:#25D366;"></i>Historial de Notificaciones</span>
+                    <button class="btn-bf btn-bf-sm" onclick="App.notificaciones.load()"><i class="fa-solid fa-sync"></i>Recargar</button>
                 </div>
                 <div class="bf-card-body" style="padding:0;">
-                    <div class="table-responsive">
+                    <div class="table-responsive" style="max-height:500px;overflow-y:auto;">
                         <table class="bf-table">
-                            <thead><tr><th>Concepto</th><th>Monto</th><th>Categoría</th><th>Fecha</th><th>Comprobante</th><th>Acciones</th></tr></thead>
-                            <tbody id="tbl-gastos"><tr><td colspan="6" class="bf-empty"><i class="fa-solid fa-money-bill-trend-up"></i>Sin gastos</td></tr></tbody>
+                            <thead><tr><th>Fecha</th><th>Destino</th><th>OT</th><th>Estado</th><th>Mensaje</th></tr></thead>
+                            <tbody id="tbl-notificaciones"><tr><td colspan="5" class="bf-empty"><i class="fa-solid fa-bell-slash"></i>Sin notificaciones</td></tr></tbody>
                         </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ============================================== -->
-        <!-- PAGE: WHATSAPP                                  -->
-        <!-- ============================================== -->
-        <div id="page-whatsapp" class="bf-page">
-            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-                <h5 class="fw-bold mb-0">Notificaciones WhatsApp</h5>
-                <button class="btn-bf" onclick="App.whatsapp.testSend()"><i class="fa-solid fa-paper-plane"></i>Test Envío</button>
-            </div>
-            <div class="bf-card">
-                <div class="bf-card-header"><span class="bf-card-title">Log de Notificaciones</span></div>
-                <div class="bf-card-body" style="padding:0;">
-                    <div class="table-responsive">
-                        <table class="bf-table">
-                            <thead><tr><th>Fecha</th><th>Destino</th><th>Mensaje</th><th>Estado</th><th>Error</th></tr></thead>
-                            <tbody id="tbl-whatsapp"><tr><td colspan="5" class="bf-empty"><i class="fa-brands fa-whatsapp"></i>Sin notificaciones</td></tr></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ============================================== -->
-        <!-- PAGE: LANDING PAGES                            -->
-        <!-- ============================================== -->
-        <div id="page-landing-pages" class="bf-page">
-            <div id="landing-list-view">
-                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-                    <h5 class="fw-bold mb-0">Landing Pages</h5>
-                    <button class="btn-bf" onclick="App.landing.openCreate()"><i class="fa-solid fa-plus"></i>Nueva Landing Page</button>
-                </div>
-                <div class="bf-card">
-                    <div class="bf-card-body" style="padding:0;">
-                        <div class="table-responsive">
-                            <table class="bf-table">
-                                <thead><tr><th>Título</th><th>Slug</th><th>Visitas</th><th>Conversiones</th><th>Estado</th><th>Acciones</th></tr></thead>
-                                <tbody id="tbl-landing"><tr><td colspan="6" class="bf-empty"><i class="fa-solid fa-globe"></i>Sin landing pages</td></tr></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div id="landing-form-view" style="display:none;">
-                <div class="d-flex align-items-center gap-2 mb-3">
-                    <button class="btn-bf-icon" onclick="App.landing.showList()"><i class="fa-solid fa-arrow-left"></i></button>
-                    <h5 class="fw-bold mb-0" id="landing-form-title">Nueva Landing Page</h5>
-                    <div class="ms-auto d-flex gap-1">
-                        <button class="btn-bf btn-bf-sm" onclick="App.landing.preview()"><i class="fa-solid fa-eye"></i>Vista Previa</button>
-                        <button class="btn-bf btn-bf-sm" onclick="App.landing.save()"><i class="fa-solid fa-floppy-disk"></i>Guardar</button>
-                    </div>
-                </div>
-                <div class="row g-3">
-                    <div class="col-lg-6">
-                        <div class="bf-card">
-                            <div class="bf-card-header"><span class="bf-card-title">Contenido</span></div>
-                            <div class="bf-card-body">
-                                <div class="mb-2"><label class="bf-label">Título</label><input type="text" class="bf-input" id="lp-titulo"></div>
-                                <div class="mb-2"><label class="bf-label">Slug</label><input type="text" class="bf-input" id="lp-slug" placeholder="mi-landing-page"></div>
-                                <div class="mb-2"><label class="bf-label">Descripción</label><textarea class="bf-input" id="lp-descripcion" rows="3"></textarea></div>
-                                <div class="mb-2"><label class="bf-label">CTA Texto</label><input type="text" class="bf-input" id="lp-cta-texto" value="Solicitar Cotización"></div>
-                                <div class="mb-2"><label class="bf-label">CTA URL</label><input type="text" class="bf-input" id="lp-cta-url"></div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-lg-6">
-                        <div class="bf-card">
-                            <div class="bf-card-header"><span class="bf-card-title">Diseño &amp; SEO</span></div>
-                            <div class="bf-card-body">
-                                <div class="mb-2"><label class="bf-label">Color Principal</label><input type="color" class="bf-input" id="lp-color" value="#0d9488" style="height:40px;padding:4px;"></div>
-                                <div class="mb-2"><label class="bf-label">Fuente</label><select class="bf-input bf-select" id="lp-fuente"><option value="Inter">Inter</option><option value="Roboto">Roboto</option><option value="Poppins">Poppins</option><option value="Montserrat">Montserrat</option></select></div>
-                                <div class="mb-2"><label class="bf-label">Logo (imagen)</label><input type="file" class="bf-input" id="lp-logo" accept="image/*"></div>
-                                <div class="mb-2"><label class="bf-label">Imagen de Fondo</label><input type="file" class="bf-input" id="lp-bg-image" accept="image/*"></div>
-                                <div class="mb-2"><label class="bf-label">SEO Título</label><input type="text" class="bf-input" id="lp-seo-title"></div>
-                                <div class="mb-2"><label class="bf-label">SEO Descripción</label><textarea class="bf-input" id="lp-seo-desc" rows="2"></textarea></div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-12">
-                        <div class="bf-card">
-                            <div class="bf-card-header"><span class="bf-card-title">Campos del Formulario</span></div>
-                            <div class="bf-card-body" id="lp-form-fields">
-                                <div class="d-flex flex-wrap gap-2 mb-2">
-                                    <button class="btn-bf-outline btn-bf-sm" onclick="App.landing.addFormField('nombre')">+ Nombre</button>
-                                    <button class="btn-bf-outline btn-bf-sm" onclick="App.landing.addFormField('email')">+ Email</button>
-                                    <button class="btn-bf-outline btn-bf-sm" onclick="App.landing.addFormField('telefono')">+ Teléfono</button>
-                                    <button class="btn-bf-outline btn-bf-sm" onclick="App.landing.addFormField('mensaje')">+ Mensaje</button>
-                                </div>
-                                <div id="lp-fields-list"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ============================================== -->
-        <!-- PAGE: CONFIGURACIÓN                             -->
-        <!-- ============================================== -->
-        <div id="page-configuracion" class="bf-page">
-            <h5 class="fw-bold mb-3">Configuración</h5>
-            <div class="row g-3">
-                <div class="col-lg-6">
-                    <div class="bf-card">
-                        <div class="bf-card-header"><span class="bf-card-title"><i class="fa-solid fa-building me-2"></i>Información de la Empresa</span></div>
-                        <div class="bf-card-body">
-                            <div class="mb-2"><label class="bf-label">Nombre</label><input type="text" class="bf-input" id="cfg-empresa"></div>
-                            <div class="mb-2"><label class="bf-label">RIF/NIT</label><input type="text" class="bf-input" id="cfg-rif"></div>
-                            <div class="mb-2"><label class="bf-label">Dirección</label><input type="text" class="bf-input" id="cfg-direccion"></div>
-                            <div class="mb-2"><label class="bf-label">Teléfono</label><input type="text" class="bf-input" id="cfg-telefono"></div>
-                            <div class="mb-2"><label class="bf-label">Email</label><input type="text" class="bf-input" id="cfg-email"></div>
-                            <button class="btn-bf btn-bf-sm" onclick="App.config.saveEmpresa()"><i class="fa-solid fa-floppy-disk"></i>Guardar</button>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-lg-6">
-                    <div class="bf-card">
-                        <div class="bf-card-header"><span class="bf-card-title"><i class="fa-brands fa-whatsapp me-2"></i>WhatsApp Config</span></div>
-                        <div class="bf-card-body">
-                            <div class="mb-2"><label class="bf-label">UltraMsg Instance ID</label><input type="text" class="bf-input" id="cfg-wm-instance"></div>
-                            <div class="mb-2"><label class="bf-label">UltraMsg Token</label><input type="password" class="bf-input" id="cfg-wm-token"></div>
-                            <button class="btn-bf btn-bf-sm" onclick="App.config.saveWhatsApp()"><i class="fa-solid fa-floppy-disk"></i>Guardar</button>
-                        </div>
-                    </div>
-                    <div class="bf-card mt-3">
-                        <div class="bf-card-header"><span class="bf-card-title"><i class="fa-solid fa-user me-2"></i>Mi Perfil</span></div>
-                        <div class="bf-card-body">
-                            <div class="mb-2"><label class="bf-label">Nombre</label><input type="text" class="bf-input" id="cfg-user-name"></div>
-                            <div class="mb-2"><label class="bf-label">Email</label><input type="email" class="bf-input" id="cfg-user-email"></div>
-                            <div class="mb-2"><label class="bf-label">Nueva Contraseña</label><input type="password" class="bf-input" id="cfg-user-pass" placeholder="Dejar vacío para no cambiar"></div>
-                            <button class="btn-bf btn-bf-sm" onclick="App.config.saveProfile()"><i class="fa-solid fa-floppy-disk"></i>Actualizar</button>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-12">
-                    <div class="bf-card">
-                        <div class="bf-card-header"><span class="bf-card-title"><i class="fa-solid fa-database me-2"></i>Backup</span></div>
-                        <div class="bf-card-body">
-                            <button class="btn-bf btn-bf-sm" onclick="App.config.backup()"><i class="fa-solid fa-download"></i>Descargar Backup</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ============================================== -->
-        <!-- PAGE: REPORTES                                  -->
-        <!-- ============================================== -->
-        <div id="page-reportes" class="bf-page">
-            <h5 class="fw-bold mb-3">Reportes</h5>
-            <div class="bf-card mb-3">
-                <div class="bf-card-header"><span class="bf-card-title">Filtros</span></div>
-                <div class="bf-card-body">
-                    <div class="row g-2">
-                        <div class="col-md-3"><label class="bf-label">Fecha Desde</label><input type="date" class="bf-input" id="rpt-fecha-from"></div>
-                        <div class="col-md-3"><label class="bf-label">Fecha Hasta</label><input type="date" class="bf-input" id="rpt-fecha-to"></div>
-                        <div class="col-md-3"><label class="bf-label">Tipo</label><select class="bf-input bf-select" id="rpt-tipo"><option value="ordenes">Órdenes</option><option value="ingresos">Ingresos</option><option value="gastos">Gastos</option><option value="clientes">Clientes</option><option value="tecnicos">Técnicos</option></select></div>
-                        <div class="col-md-3 d-flex align-items-end"><button class="btn-bf w-100" onclick="App.reportes.generate()"><i class="fa-solid fa-chart-bar"></i>Generar</button></div>
-                    </div>
-                </div>
-            </div>
-            <div class="bf-card">
-                <div class="bf-card-header"><span class="bf-card-title">Resultado del Reporte</span><button class="btn-bf-outline btn-bf-sm" onclick="App.reportes.exportPDF()"><i class="fa-solid fa-file-pdf"></i>Exportar PDF</button></div>
-                <div class="bf-card-body" id="reportes-result">
-                    <div class="bf-chart"><canvas id="chart-reportes"></canvas></div>
-                    <div class="table-responsive mt-3">
-                        <table class="bf-table"><thead><tr><th>Concepto</th><th>Cantidad</th><th>Total</th></tr></thead><tbody id="tbl-reportes"><tr><td colspan="3" class="bf-empty"><i class="fa-solid fa-chart-bar"></i>Genere un reporte</td></tr></tbody></table>
                     </div>
                 </div>
             </div>
@@ -913,263 +973,178 @@
     </main>
 </div>
 
-<!-- ============================================== -->
-<!-- MODALS                                           -->
-<!-- ============================================== -->
+<!-- ===== MODALS ===== -->
 
 <!-- Modal: Cliente -->
-<div class="modal fade" id="modal-cliente" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content">
-    <div class="modal-header"><h5 class="modal-title" id="modal-cliente-title">Nuevo Cliente</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+<div class="modal fade" id="modal-cliente" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title" id="modal-cliente-title">Cliente</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
     <div class="modal-body">
         <input type="hidden" id="cl-id">
         <div class="row g-2">
-            <div class="col-md-6"><label class="bf-label">Nombre *</label><input type="text" class="bf-input" id="cl-nombre" required></div>
+            <div class="col-md-6"><label class="bf-label">Nombre</label><input type="text" class="bf-input" id="cl-nombre"></div>
             <div class="col-md-6"><label class="bf-label">Apellido</label><input type="text" class="bf-input" id="cl-apellido"></div>
-            <div class="col-md-6"><label class="bf-label">Cédula/RIF *</label><input type="text" class="bf-input" id="cl-cedula"></div>
-            <div class="col-md-6"><label class="bf-label">Email</label><input type="email" class="bf-input" id="cl-email"></div>
+            <div class="col-md-6"><label class="bf-label">RUT / Cédula</label><input type="text" class="bf-input" id="cl-cedula"></div>
             <div class="col-md-6"><label class="bf-label">Teléfono</label><input type="text" class="bf-input" id="cl-telefono"></div>
+            <div class="col-md-6"><label class="bf-label">Email</label><input type="email" class="bf-input" id="cl-email"></div>
             <div class="col-md-6"><label class="bf-label">Ciudad</label><input type="text" class="bf-input" id="cl-ciudad"></div>
-            <div class="col-md-6"><label class="bf-label">Estado</label><input type="text" class="bf-input" id="cl-estado"></div>
-            <div class="col-md-6"><label class="bf-label">Origen</label><select class="bf-input bf-select" id="cl-origen"><option value="web">Web</option><option value="referido">Referido</option><option value="redes_sociales">Redes Sociales</option><option value="whatsapp">WhatsApp</option><option value="otro">Otro</option></select></div>
             <div class="col-12"><label class="bf-label">Dirección</label><input type="text" class="bf-input" id="cl-direccion"></div>
-            <div class="col-12"><label class="bf-label">Notas</label><textarea class="bf-input" id="cl-notas" rows="2"></textarea></div>
+            <div class="col-12"><label class="bf-label">Notas</label><textarea class="bf-textarea" id="cl-notas" rows="2"></textarea></div>
         </div>
     </div>
-    <div class="modal-footer"><button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button><button type="button" class="btn-bf btn-bf-sm" onclick="App.clientes.save()"><i class="fa-solid fa-floppy-disk"></i>Guardar</button></div>
+    <div class="modal-footer"><button class="btn-bf" onclick="App.clientes.save()"><i class="fa-solid fa-save"></i>Guardar</button><button class="btn-bf-outline" data-bs-dismiss="modal">Cancelar</button></div>
 </div></div></div>
 
 <!-- Modal: Vehículo -->
-<div class="modal fade" id="modal-vehiculo" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content">
-    <div class="modal-header"><h5 class="modal-title" id="modal-vehiculo-title">Nuevo Vehículo</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+<div class="modal fade" id="modal-vehiculo" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title" id="modal-vehiculo-title">Vehículo</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
     <div class="modal-body">
         <input type="hidden" id="vh-id">
         <div class="row g-2">
-            <div class="col-md-6"><label class="bf-label">Placa *</label><input type="text" class="bf-input" id="vh-placa"></div>
-            <div class="col-md-6"><label class="bf-label">Cliente *</label><select class="bf-input bf-select" id="vh-cliente"><option value="">Seleccionar...</option></select></div>
-            <div class="col-md-6"><label class="bf-label">Marca</label><input type="text" class="bf-input" id="vh-marca"></div>
-            <div class="col-md-6"><label class="bf-label">Modelo</label><input type="text" class="bf-input" id="vh-modelo"></div>
-            <div class="col-md-4"><label class="bf-label">Año</label><input type="number" class="bf-input" id="vh-anio"></div>
+            <div class="col-md-6"><label class="bf-label">Placa</label><input type="text" class="bf-input" id="vh-placa" style="text-transform:uppercase;"></div>
+            <div class="col-md-6"><label class="bf-label">Cliente</label><select class="bf-input bf-select" id="vh-cliente"></select></div>
+            <div class="col-md-4"><label class="bf-label">Marca</label><input type="text" class="bf-input" id="vh-marca"></div>
+            <div class="col-md-4"><label class="bf-label">Modelo</label><input type="text" class="bf-input" id="vh-modelo"></div>
+            <div class="col-md-4"><label class="bf-label">Año</label><input type="text" class="bf-input" id="vh-anio"></div>
             <div class="col-md-4"><label class="bf-label">Color</label><input type="text" class="bf-input" id="vh-color"></div>
+            <div class="col-md-4"><label class="bf-label">Kilometraje</label><input type="text" class="bf-input" id="vh-km"></div>
             <div class="col-md-4"><label class="bf-label">VIN</label><input type="text" class="bf-input" id="vh-vin"></div>
-            <div class="col-md-6"><label class="bf-label">Kilometraje</label><input type="number" class="bf-input" id="vh-km"></div>
         </div>
     </div>
-    <div class="modal-footer"><button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button><button type="button" class="btn-bf btn-bf-sm" onclick="App.vehiculos.save()"><i class="fa-solid fa-floppy-disk"></i>Guardar</button></div>
-</div></div></div>
-
-<!-- Modal: Crear OT -->
-<div class="modal fade" id="modal-orden" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content">
-    <div class="modal-header"><h5 class="modal-title" id="modal-orden-title">Nueva Orden de Trabajo</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-    <div class="modal-body">
-        <input type="hidden" id="ot-id">
-        <div class="row g-2">
-            <div class="col-md-6"><label class="bf-label">Cliente *</label><select class="bf-input bf-select" id="ot-cliente"><option value="">Seleccionar...</option></select></div>
-            <div class="col-md-6"><label class="bf-label">Vehículo *</label><select class="bf-input bf-select" id="ot-vehiculo"><option value="">Seleccionar...</option></select></div>
-            <div class="col-md-4"><label class="bf-label">Tipo</label><select class="bf-input bf-select" id="ot-tipo"><option value="correctivo">Correctivo</option><option value="preventivo">Preventivo</option><option value="diagnostico">Diagnóstico</option></select></div>
-            <div class="col-md-4"><label class="bf-label">Prioridad</label><select class="bf-input bf-select" id="ot-prioridad"><option value="media">Media</option><option value="alta">Alta</option><option value="baja">Baja</option></select></div>
-            <div class="col-md-4"><label class="bf-label">Técnico</label><select class="bf-input bf-select" id="ot-tecnico"><option value="">Sin asignar</option></select></div>
-            <div class="col-12"><label class="bf-label">Título *</label><input type="text" class="bf-input" id="ot-titulo"></div>
-            <div class="col-12"><label class="bf-label">Descripción</label><textarea class="bf-input" id="ot-descripcion" rows="3"></textarea></div>
-        </div>
-    </div>
-    <div class="modal-footer"><button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button><button type="button" class="btn-bf btn-bf-sm" onclick="App.ordenes.save()"><i class="fa-solid fa-floppy-disk"></i>Guardar</button></div>
-</div></div></div>
-
-<!-- Modal: Asignar Técnico -->
-<div class="modal fade" id="modal-asignar" tabindex="-1"><div class="modal-dialog modal-sm"><div class="modal-content">
-    <div class="modal-header"><h5 class="modal-title">Asignar Técnico</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-    <div class="modal-body">
-        <input type="hidden" id="asignar-ot-id">
-        <label class="bf-label">Técnico</label>
-        <select class="bf-input bf-select" id="asignar-tecnico"><option value="">Seleccionar...</option></select>
-    </div>
-    <div class="modal-footer"><button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button><button type="button" class="btn-bf btn-bf-sm" onclick="App.ordenes.assign()"><i class="fa-solid fa-user-check"></i>Asignar</button></div>
-</div></div></div>
-
-<!-- Modal: Cambiar Estado -->
-<div class="modal fade" id="modal-cambiar-estado" tabindex="-1"><div class="modal-dialog modal-sm"><div class="modal-content">
-    <div class="modal-header"><h5 class="modal-title">Cambiar Estado</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-    <div class="modal-body">
-        <input type="hidden" id="estado-ot-id">
-        <label class="bf-label">Nuevo Estado</label>
-        <select class="bf-input bf-select" id="cambiar-estado">
-            <option value="enviada">Enviada</option>
-            <option value="aprobada">Aprobada</option>
-            <option value="pendiente_visita">Pendiente Visita</option>
-            <option value="en_sitio">En Sitio</option>
-            <option value="en_progreso">En Progreso</option>
-            <option value="completada">Completada</option>
-            <option value="cerrada">Cerrada</option>
-            <option value="cancelada">Cancelada</option>
-        </select>
-    </div>
-    <div class="modal-footer"><button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button><button type="button" class="btn-bf btn-bf-sm" onclick="App.ordenes.changeStatus()"><i class="fa-solid fa-check"></i>Actualizar</button></div>
-</div></div></div>
-
-<!-- Modal: Costo Adicional -->
-<div class="modal fade" id="modal-costo" tabindex="-1"><div class="modal-dialog modal-sm"><div class="modal-content">
-    <div class="modal-header"><h5 class="modal-title">Agregar Costo Adicional</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-    <div class="modal-body">
-        <input type="hidden" id="costo-ot-id">
-        <div class="mb-2"><label class="bf-label">Concepto *</label><input type="text" class="bf-input" id="costo-concepto"></div>
-        <div class="mb-2"><label class="bf-label">Monto *</label><input type="number" class="bf-input" id="costo-monto" step="0.01"></div>
-    </div>
-    <div class="modal-footer"><button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button><button type="button" class="btn-bf btn-bf-sm" onclick="App.ordenes.addCost()"><i class="fa-solid fa-plus"></i>Agregar</button></div>
-</div></div></div>
-
-<!-- Modal: Nota -->
-<div class="modal fade" id="modal-nota" tabindex="-1"><div class="modal-dialog modal-sm"><div class="modal-content">
-    <div class="modal-header"><h5 class="modal-title">Agregar Nota</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-    <div class="modal-body">
-        <input type="hidden" id="nota-ot-id">
-        <label class="bf-label">Nota *</label>
-        <textarea class="bf-input" id="nota-texto" rows="3"></textarea>
-    </div>
-    <div class="modal-footer"><button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button><button type="button" class="btn-bf btn-bf-sm" onclick="App.ordenes.addNote()"><i class="fa-solid fa-plus"></i>Agregar</button></div>
+    <div class="modal-footer"><button class="btn-bf" onclick="App.vehiculos.save()"><i class="fa-solid fa-save"></i>Guardar</button><button class="btn-bf-outline" data-bs-dismiss="modal">Cancelar</button></div>
 </div></div></div>
 
 <!-- Modal: Técnico -->
-<div class="modal fade" id="modal-tecnico" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content">
-    <div class="modal-header"><h5 class="modal-title" id="modal-tecnico-title">Nuevo Técnico</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+<div class="modal fade" id="modal-tecnico" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title" id="modal-tecnico-title">Técnico</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
     <div class="modal-body">
         <input type="hidden" id="tc-id">
         <div class="row g-2">
-            <div class="col-md-6"><label class="bf-label">Nombre *</label><input type="text" class="bf-input" id="tc-nombre"></div>
-            <div class="col-md-6"><label class="bf-label">Especialidad</label><input type="text" class="bf-input" id="tc-especialidad"></div>
+            <div class="col-md-6"><label class="bf-label">Nombre</label><input type="text" class="bf-input" id="tc-nombre" required></div>
             <div class="col-md-6"><label class="bf-label">Teléfono</label><input type="text" class="bf-input" id="tc-telefono"></div>
             <div class="col-md-6"><label class="bf-label">Email</label><input type="email" class="bf-input" id="tc-email"></div>
-            <div class="col-md-6"><label class="bf-label">Código</label><input type="text" class="bf-input" id="tc-codigo"></div>
+            <div class="col-md-6"><label class="bf-label">Comisión %</label><input type="number" class="bf-input" id="tc-comision" placeholder="Ej: 15" min="0" max="100"></div>
         </div>
     </div>
-    <div class="modal-footer"><button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button><button type="button" class="btn-bf btn-bf-sm" onclick="App.tecnicos.save()"><i class="fa-solid fa-floppy-disk"></i>Guardar</button></div>
+    <div class="modal-footer"><button class="btn-bf" onclick="App.tecnicos.save()"><i class="fa-solid fa-save"></i>Guardar</button><button class="btn-bf-outline" data-bs-dismiss="modal">Cancelar</button></div>
 </div></div></div>
 
 <!-- Modal: Servicio -->
 <div class="modal fade" id="modal-servicio" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
-    <div class="modal-header"><h5 class="modal-title" id="modal-servicio-title">Nuevo Servicio</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-header"><h5 class="modal-title" id="modal-servicio-title">Servicio</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
     <div class="modal-body">
         <input type="hidden" id="sv-id">
-        <div class="mb-2"><label class="bf-label">Nombre *</label><input type="text" class="bf-input" id="sv-nombre"></div>
-        <div class="mb-2"><label class="bf-label">Descripción</label><textarea class="bf-input" id="sv-descripcion" rows="2"></textarea></div>
         <div class="row g-2">
-            <div class="col-md-6 mb-2"><label class="bf-label">Precio</label><input type="number" class="bf-input" id="sv-precio" step="0.01"></div>
-            <div class="col-md-6 mb-2"><label class="bf-label">Duración (min)</label><input type="number" class="bf-input" id="sv-duracion"></div>
-        </div>
-        <div class="mb-2"><label class="bf-label">Categoría</label><select class="bf-input bf-select" id="sv-categoria"><option value="mecanica">Mecánica</option><option value="electrica">Eléctrica</option><option value="carroceria">Carrocería</option><option value="pintura">Pintura</option><option value="lavado">Lavado</option><option value="neumaticos">Neumáticos</option><option value="diagnostico">Diagnóstico</option><option value="otro">Otro</option></select></div>
-    </div>
-    <div class="modal-footer"><button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button><button type="button" class="btn-bf btn-bf-sm" onclick="App.servicios.save()"><i class="fa-solid fa-floppy-disk"></i>Guardar</button></div>
-</div></div></div>
-
-<!-- Modal: Inventario -->
-<div class="modal fade" id="modal-inventario" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content">
-    <div class="modal-header"><h5 class="modal-title" id="modal-inventario-title">Nuevo Item</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-    <div class="modal-body">
-        <input type="hidden" id="inv-id">
-        <div class="row g-2">
-            <div class="col-md-4"><label class="bf-label">Código *</label><input type="text" class="bf-input" id="inv-codigo"></div>
-            <div class="col-md-8"><label class="bf-label">Nombre *</label><input type="text" class="bf-input" id="inv-nombre"></div>
-            <div class="col-md-6"><label class="bf-label">Categoría</label><input type="text" class="bf-input" id="inv-categoria"></div>
-            <div class="col-md-3"><label class="bf-label">Cantidad</label><input type="number" class="bf-input" id="inv-cantidad"></div>
-            <div class="col-md-3"><label class="bf-label">Cant. Mínima</label><input type="number" class="bf-input" id="inv-minima"></div>
-            <div class="col-md-4"><label class="bf-label">Precio Compra</label><input type="number" class="bf-input" id="inv-pcompra" step="0.01"></div>
-            <div class="col-md-4"><label class="bf-label">Precio Venta</label><input type="number" class="bf-input" id="inv-pventa" step="0.01"></div>
-            <div class="col-md-4"><label class="bf-label">Proveedor</label><input type="text" class="bf-input" id="inv-proveedor"></div>
+            <div class="col-12"><label class="bf-label">Nombre</label><input type="text" class="bf-input" id="sv-nombre" required></div>
+            <div class="col-md-6"><label class="bf-label">Categoría</label><select class="bf-input bf-select" id="sv-categoria"><option value="mecanica">Mecánica</option><option value="electrica">Eléctrica</option><option value="pintura">Pintura</option><option value="chapa">Chapa</option><option value="diagnostico">Diagnóstico</option><option value="otros">Otros</option></select></div>
+            <div class="col-md-6"><label class="bf-label">Tipo Comisión</label><select class="bf-input bf-select" id="sv-tipo-comision"><option value="mano_obra">Mano de Obra</option><option value="repuestos">Repuestos</option></select></div>
+            <div class="col-md-6"><label class="bf-label">Precio Sugerido $</label><input type="number" class="bf-input" id="sv-precio" min="0"></div>
         </div>
     </div>
-    <div class="modal-footer"><button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button><button type="button" class="btn-bf btn-bf-sm" onclick="App.inventario.save()"><i class="fa-solid fa-floppy-disk"></i>Guardar</button></div>
+    <div class="modal-footer"><button class="btn-bf" onclick="App.servicios.save()"><i class="fa-solid fa-save"></i>Guardar</button><button class="btn-bf-outline" data-bs-dismiss="modal">Cancelar</button></div>
 </div></div></div>
 
-<!-- Modal: Movimiento Inventario -->
-<div class="modal fade" id="modal-movimiento" tabindex="-1"><div class="modal-dialog modal-sm"><div class="modal-content">
-    <div class="modal-header"><h5 class="modal-title">Registrar Movimiento</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+<!-- Modal: Modelo de Vehículo -->
+<div class="modal fade" id="modal-modelo" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title" id="modal-modelo-title">Modelo de Vehículo</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
     <div class="modal-body">
-        <input type="hidden" id="mov-inv-id">
-        <div class="mb-2"><label class="bf-label">Tipo</label><select class="bf-input bf-select" id="mov-tipo"><option value="entrada">Entrada</option><option value="salida">Salida</option><option value="ajuste">Ajuste</option></select></div>
-        <div class="mb-2"><label class="bf-label">Cantidad</label><input type="number" class="bf-input" id="mov-cantidad"></div>
-        <div class="mb-2"><label class="bf-label">Nota</label><input type="text" class="bf-input" id="mov-nota"></div>
+        <input type="hidden" id="md-id">
+        <div class="row g-2">
+            <div class="col-md-6"><label class="bf-label">Marca</label><input type="text" class="bf-input" id="md-marca"></div>
+            <div class="col-md-6"><label class="bf-label">Modelo</label><input type="text" class="bf-input" id="md-modelo"></div>
+        </div>
     </div>
-    <div class="modal-footer"><button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button><button type="button" class="btn-bf btn-bf-sm" onclick="App.inventario.addMovement()"><i class="fa-solid fa-plus"></i>Registrar</button></div>
-</div></div></div>
-
-<!-- Modal: Pago -->
-<div class="modal fade" id="modal-pago" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
-    <div class="modal-header"><h5 class="modal-title" id="modal-pago-title">Registrar Pago</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-    <div class="modal-body">
-        <input type="hidden" id="pg-id">
-        <div class="mb-2"><label class="bf-label">Orden de Trabajo *</label><select class="bf-input bf-select" id="pg-orden"><option value="">Seleccionar OT...</option></select></div>
-        <div class="mb-2"><label class="bf-label">Monto *</label><input type="number" class="bf-input" id="pg-monto" step="0.01"></div>
-        <div class="mb-2"><label class="bf-label">Método de Pago</label><select class="bf-input bf-select" id="pg-metodo"><option value="efectivo">Efectivo</option><option value="transferencia">Transferencia</option><option value="tarjeta">Tarjeta</option><option value="deposito">Depósito</option></select></div>
-        <div class="mb-2"><label class="bf-label">Referencia</label><input type="text" class="bf-input" id="pg-referencia"></div>
-        <div class="mb-2"><label class="bf-label">Fecha</label><input type="date" class="bf-input" id="pg-fecha"></div>
-        <div class="mb-2"><label class="bf-label">Notas</label><textarea class="bf-input" id="pg-notas" rows="2"></textarea></div>
-    </div>
-    <div class="modal-footer"><button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button><button type="button" class="btn-bf btn-bf-sm" onclick="App.facturacion.save()"><i class="fa-solid fa-floppy-disk"></i>Guardar</button></div>
+    <div class="modal-footer"><button class="btn-bf" onclick="App.modelos.save()"><i class="fa-solid fa-save"></i>Guardar</button><button class="btn-bf-outline" data-bs-dismiss="modal">Cancelar</button></div>
 </div></div></div>
 
 <!-- Modal: Gasto -->
 <div class="modal fade" id="modal-gasto" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
-    <div class="modal-header"><h5 class="modal-title" id="modal-gasto-title">Nuevo Gasto</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-header"><h5 class="modal-title">Nuevo Gasto</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
     <div class="modal-body">
         <input type="hidden" id="gt-id">
-        <div class="mb-2"><label class="bf-label">Concepto *</label><input type="text" class="bf-input" id="gt-concepto"></div>
-        <div class="mb-2"><label class="bf-label">Monto *</label><input type="number" class="bf-input" id="gt-monto" step="0.01"></div>
-        <div class="mb-2"><label class="bf-label">Categoría</label><select class="bf-input bf-select" id="gt-categoria"><option value="alquiler">Alquiler</option><option value="servicios">Servicios</option><option value="transporte">Transporte</option><option value="insumos">Insumos</option><option value="salarios">Salarios</option><option value="marketing">Marketing</option><option value="otros">Otros</option></select></div>
-        <div class="mb-2"><label class="bf-label">Fecha</label><input type="date" class="bf-input" id="gt-fecha"></div>
-        <div class="mb-2"><label class="bf-label">Comprobante</label><input type="file" class="bf-input" id="gt-comprobante" accept="image/*,.pdf"></div>
-    </div>
-    <div class="modal-footer"><button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button><button type="button" class="btn-bf btn-bf-sm" onclick="App.gastos.save()"><i class="fa-solid fa-floppy-disk"></i>Guardar</button></div>
-</div></div></div>
-
-<!-- Modal: Cuenta Contable -->
-<div class="modal fade" id="modal-cuenta" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
-    <div class="modal-header"><h5 class="modal-title" id="modal-cuenta-title">Nueva Cuenta</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-    <div class="modal-body">
-        <input type="hidden" id="cta-id">
-        <div class="mb-2"><label class="bf-label">Código *</label><input type="text" class="bf-input" id="cta-codigo"></div>
-        <div class="mb-2"><label class="bf-label">Nombre *</label><input type="text" class="bf-input" id="cta-nombre"></div>
-        <div class="mb-2"><label class="bf-label">Tipo</label><select class="bf-input bf-select" id="cta-tipo"><option value="activo">Activo</option><option value="pasivo">Pasivo</option><option value="patrimonio">Patrimonio</option><option value="ingreso">Ingreso</option><option value="gasto">Gasto</option></select></div>
-        <div class="mb-2"><label class="bf-label">Naturaleza</label><select class="bf-input bf-select" id="cta-naturaleza"><option value="deudora">Deudora</option><option value="acreedora">Acreedora</option></select></div>
-    </div>
-    <div class="modal-footer"><button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button><button type="button" class="btn-bf btn-bf-sm" onclick="App.contabilidad.saveCuenta()"><i class="fa-solid fa-floppy-disk"></i>Guardar</button></div>
-</div></div></div>
-
-<!-- Modal: Asiento Contable -->
-<div class="modal fade" id="modal-asiento" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content">
-    <div class="modal-header"><h5 class="modal-title" id="modal-asiento-title">Nuevo Asiento</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-    <div class="modal-body">
-        <input type="hidden" id="as-id">
-        <div class="mb-2"><label class="bf-label">Fecha</label><input type="date" class="bf-input" id="as-fecha"></div>
-        <div class="mb-2"><label class="bf-label">Concepto *</label><input type="text" class="bf-input" id="as-concepto"></div>
-        <div class="mb-2">
-            <label class="bf-label">Líneas del Asiento</label>
-            <div id="as-lineas">
-                <div class="row g-2 mb-1 as-linea">
-                    <div class="col-md-4"><select class="bf-input bf-select as-cuenta"><option value="">Cuenta...</option></select></div>
-                    <div class="col-md-3"><input type="number" class="bf-input" placeholder="Debe" step="0.01" data-field="debe"></div>
-                    <div class="col-md-3"><input type="number" class="bf-input" placeholder="Haber" step="0.01" data-field="haber"></div>
-                    <div class="col-md-2 d-flex align-items-center"><button type="button" class="btn-bf-icon danger" onclick="this.closest('.as-linea').remove()"><i class="fa-solid fa-trash"></i></button></div>
-                </div>
-            </div>
-            <button class="btn-bf-outline btn-bf-sm mt-1" onclick="App.contabilidad.addAsientoLine()"><i class="fa-solid fa-plus"></i>Línea</button>
+        <div class="row g-2">
+            <div class="col-12"><label class="bf-label">Concepto</label><input type="text" class="bf-input" id="gt-concepto"></div>
+            <div class="col-md-4"><label class="bf-label">Monto $</label><input type="number" class="bf-input" id="gt-monto" min="0"></div>
+            <div class="col-md-4"><label class="bf-label">Categoría</label><select class="bf-input bf-select" id="gt-categoria"><option value="Alquiler">Alquiler</option><option value="Servicios">Servicios</option><option value="Transporte">Transporte</option><option value="Insumos">Insumos</option><option value="Salarios">Salarios</option><option value="Marketing">Marketing</option><option value="Otros">Otros</option></select></div>
+            <div class="col-md-4"><label class="bf-label">Fecha</label><input type="date" class="bf-input" id="gt-fecha"></div>
+            <div class="col-12"><label class="bf-label">Observaciones</label><textarea class="bf-textarea" id="gt-obs" rows="2"></textarea></div>
         </div>
     </div>
-    <div class="modal-footer"><button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button><button type="button" class="btn-bf btn-bf-sm" onclick="App.contabilidad.saveAsiento()"><i class="fa-solid fa-floppy-disk"></i>Guardar</button></div>
+    <div class="modal-footer"><button class="btn-bf" onclick="App.gastos.save()"><i class="fa-solid fa-save"></i>Guardar</button><button class="btn-bf-outline" data-bs-dismiss="modal">Cancelar</button></div>
 </div></div></div>
 
-<!-- Modal: WhatsApp Test -->
-<div class="modal fade" id="modal-whatsapp-test" tabindex="-1"><div class="modal-dialog modal-sm"><div class="modal-content">
-    <div class="modal-header"><h5 class="modal-title">Test WhatsApp</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+<!-- Modal: Inventario -->
+<div class="modal fade" id="modal-inventario" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title" id="modal-inventario-title">Item</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
     <div class="modal-body">
-        <div class="mb-2"><label class="bf-label">Número (con código de país)</label><input type="text" class="bf-input" id="wa-numero" placeholder="+584141234567"></div>
-        <div class="mb-2"><label class="bf-label">Mensaje</label><textarea class="bf-input" id="wa-mensaje" rows="3">Test desde BizFlow</textarea></div>
+        <input type="hidden" id="inv-id">
+        <div class="row g-2">
+            <div class="col-md-6"><label class="bf-label">Código</label><input type="text" class="bf-input" id="inv-codigo"></div>
+            <div class="col-md-6"><label class="bf-label">Nombre</label><input type="text" class="bf-input" id="inv-nombre"></div>
+            <div class="col-md-6"><label class="bf-label">Categoría</label><input type="text" class="bf-input" id="inv-categoria"></div>
+            <div class="col-md-3"><label class="bf-label">Cantidad</label><input type="number" class="bf-input" id="inv-cantidad" min="0"></div>
+            <div class="col-md-3"><label class="bf-label">Precio Compra</label><input type="number" class="bf-input" id="inv-pcompra" min="0"></div>
+            <div class="col-md-3"><label class="bf-label">Precio Venta</label><input type="number" class="bf-input" id="inv-pventa" min="0"></div>
+            <div class="col-md-3"><label class="bf-label">Proveedor</label><input type="text" class="bf-input" id="inv-proveedor"></div>
+        </div>
     </div>
-    <div class="modal-footer"><button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button><button type="button" class="btn-bf btn-bf-sm" onclick="App.whatsapp.send()"><i class="fa-brands fa-whatsapp"></i>Enviar</button></div>
+    <div class="modal-footer"><button class="btn-bf" onclick="App.inventario.save()"><i class="fa-solid fa-save"></i>Guardar</button><button class="btn-bf-outline" data-bs-dismiss="modal">Cancelar</button></div>
+</div></div></div>
+
+<!-- Modal: Domicilio Config -->
+<div class="modal fade" id="modal-domicilio" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title">Configurar Domicilio</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+        <div class="row g-2">
+            <div class="col-md-6"><label class="bf-label">Latitud</label><input type="text" class="bf-input" id="dom-lat" placeholder="-33.45"></div>
+            <div class="col-md-6"><label class="bf-label">Longitud</label><input type="text" class="bf-input" id="dom-lng" placeholder="-70.67"></div>
+            <div class="col-md-6"><label class="bf-label">Radio Gratis (km)</label><input type="number" class="bf-input" id="dom-radio" min="0" step="0.1"></div>
+            <div class="col-md-6"><label class="bf-label">Tarifa por km ($)</label><input type="number" class="bf-input" id="dom-tarifa" min="0"></div>
+        </div>
+    </div>
+    <div class="modal-footer"><button class="btn-bf" onclick="App.config.saveDomicilio()"><i class="fa-solid fa-save"></i>Guardar</button><button class="btn-bf-outline" data-bs-dismiss="modal">Cancelar</button></div>
+</div></div></div>
+
+<!-- Modal: UltraMsg Config -->
+<div class="modal fade" id="modal-ultramsg" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+    <div class="modal-header"><h5 class="modal-title">Configurar UltraMsg</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+        <div class="row g-2">
+            <div class="col-12"><label class="bf-label">Instance ID</label><input type="text" class="bf-input" id="ultra-instance"></div>
+            <div class="col-12"><label class="bf-label">Token</label><input type="text" class="bf-input" id="ultra-token"></div>
+            <div class="col-md-6"><label class="bf-label">Teléfono (con código país)</label><input type="text" class="bf-input" id="ultra-phone" placeholder="56912345678"></div>
+            <div class="col-md-6"><label class="bf-label">Nombre del negocio</label><input type="text" class="bf-input" id="ultra-nombre"></div>
+        </div>
+    </div>
+    <div class="modal-footer"><button class="btn-bf" onclick="App.config.saveUltraMsg()"><i class="fa-solid fa-save"></i>Guardar</button><button class="btn-bf-outline" data-bs-dismiss="modal">Cancelar</button></div>
+</div></div></div>
+
+<!-- Modal: OT Express -->
+<div class="modal fade" id="modal-express" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+    <div class="modal-header" style="background:linear-gradient(135deg,#f59e0b,#ef4444);color:#fff;border:none;">
+        <h5 class="modal-title" style="color:#fff;"><i class="fa-solid fa-bolt me-2"></i>OT Express - Creación Rápida</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+    </div>
+    <div class="modal-body">
+        <div class="text-center mb-3">
+            <span class="badge-express">EXPRESS</span>
+            <div style="font-size:0.82rem;color:#64748b;margin-top:0.25rem;">Orden aprobada automáticamente</div>
+        </div>
+        <div class="row g-2">
+            <div class="col-md-6"><label class="bf-label">Patente *</label><input type="text" class="bf-input" id="exp-patente" style="text-transform:uppercase;"></div>
+            <div class="col-md-3"><label class="bf-label">Marca</label><input type="text" class="bf-input" id="exp-marca"></div>
+            <div class="col-md-3"><label class="bf-label">Modelo</label><input type="text" class="bf-input" id="exp-modelo"></div>
+            <div class="col-md-6"><label class="bf-label">Nombre Cliente *</label><input type="text" class="bf-input" id="exp-nombre"></div>
+            <div class="col-md-6"><label class="bf-label">Teléfono *</label><input type="text" class="bf-input" id="exp-telefono"></div>
+            <div class="col-12"><label class="bf-label">Dirección *</label><input type="text" class="bf-input" id="exp-direccion"></div>
+            <div class="col-12"><label class="bf-label">Notas</label><textarea class="bf-textarea" id="exp-notas" rows="2"></textarea></div>
+        </div>
+    </div>
+    <div class="modal-footer"><button class="btn-bf" id="btn-express-save" onclick="App.nuevaOrden.saveExpress()"><i class="fa-solid fa-bolt"></i>Crear OT Express</button><button class="btn-bf-outline" data-bs-dismiss="modal">Cancelar</button></div>
 </div></div></div>
 
 <!-- Modal: Photo Preview -->
 <div class="modal fade" id="modal-photo-preview" tabindex="-1"><div class="modal-dialog modal-lg"><div class="modal-content">
     <div class="modal-header"><h5 class="modal-title">Foto</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-    <div class="modal-body text-center"><img id="photo-preview-img" src="" alt="Preview" style="max-width:100%;max-height:70vh;border-radius:8px;"></div>
+    <div class="modal-body text-center"><img id="photo-preview-img" src="" alt="Foto" style="max-width:100%;max-height:70vh;object-fit:contain;"></div>
 </div></div></div>
 
 <!-- Bootstrap JS -->

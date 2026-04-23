@@ -1,464 +1,737 @@
-// ============================================
-// BIZFLOW - Cierre Técnico de Orden de Trabajo
-// Cloudflare Pages Function
-// GET  ?token=xxx&notas=xxx&pago_completado=true&metodo_pago=Efectivo
-// POST ?token=xxx&confirmar_firma=si  → Close order + save signature
-// ============================================
+import { chileNow } from '../lib/db-helpers.js';
 
-import {
-  handleOptions,
-  htmlResponse,
-  jsonResponse,
-  getOrderByToken,
-  buildPageHead,
-  buildOrderInfoCard,
-  buildClientInfoCard,
-  buildVehicleInfoCard,
-  buildDomicilioCard,
-  buildServicesCard,
-  buildChecklistCard,
-  buildCostsCard,
-  buildTotalsCard,
-  buildNotesCard,
-  buildSignatureCanvasHtml,
-  buildSignatureCanvasScript,
-  buildJsPDFGeneratorScript,
-  getJsPDFScript,
-  escapeHtml,
-  formatDateTime,
-} from '../lib/db-helpers.js';
-
-export async function onRequestOptions() {
-  return handleOptions();
-}
-
-// ─────────────────────────────────────────────
-// GET: Render technician closure page
-// ─────────────────────────────────────────────
 export async function onRequestGet(context) {
   const { request, env } = context;
   const url = new URL(request.url);
   const token = url.searchParams.get('token');
+  const notas = url.searchParams.get('notas');
+  const pagoCompletado = url.searchParams.get('pago_completado') === 'true';
+  const metodoPago = url.searchParams.get('metodo_pago');
 
   if (!token) {
-    return htmlResponse(renderError('Token no proporcionado', 'El enlace de acceso es inv\u00e1lido.'));
+    return new Response('Token no proporcionado', { status: 400 });
   }
 
-  const data = await getOrderByToken(env.DB, token);
-  if (!data) {
-    return htmlResponse(renderError('Enlace inv\u00e1lido o expirado', 'No se encontr\u00f3 ninguna orden de trabajo asociada a este enlace.'));
+  try {
+    // Buscar orden por el token de firma del técnico
+    const orden = await env.DB.prepare(`
+      SELECT
+        o.*,
+        c.nombre as cliente_nombre,
+        c.telefono as cliente_telefono,
+        c.rut as cliente_rut,
+        t.nombre as tecnico_nombre
+      FROM OrdenesTrabajo o
+      LEFT JOIN Clientes c ON o.cliente_id = c.id
+      LEFT JOIN Tecnicos t ON o.tecnico_asignado_id = t.id
+      WHERE o.token_firma_tecnico = ?
+    `).bind(token).first();
+
+    if (!orden) {
+      return getHTMLResponse('Token Inválido', 'El link de firma no es válido o ha expirado.', false);
+    }
+
+    // Obtener costos adicionales
+    let costosAdicionales = [];
+    let totalCostos = 0;
+    try {
+      const { results } = await env.DB.prepare(
+        'SELECT concepto, monto, categoria FROM CostosAdicionales WHERE orden_id = ? ORDER BY fecha_registro DESC'
+      ).bind(orden.id).all();
+      costosAdicionales = results || [];
+      totalCostos = costosAdicionales.reduce((sum, c) => sum + Number(c.monto || 0), 0);
+    } catch (e) {
+      console.log('CostosAdicionales no disponible:', e.message);
+    }
+
+    const numeroFormateado = String(orden.numero_orden).padStart(6, '0');
+    const tieneFirma = !!orden.firma_imagen;
+
+    // Generar HTML con toda la información
+    const html = getApprovalPage(orden, numeroFormateado, token, tieneFirma, notas, pagoCompletado, metodoPago, costosAdicionales, totalCostos);
+
+    return new Response(html, {
+      headers: { 'Content-Type': 'text/html; charset=utf-8' }
+    });
+
+  } catch (error) {
+    console.error('Error en aprobación de técnico:', error);
+    return new Response('Error interno del servidor', { status: 500 });
   }
-
-  const { order, client, vehicle, costs, config } = data;
-
-  // Get extra params from URL
-  const notasCierre = url.searchParams.get('notas') || '';
-  const pagoCompletado = url.searchParams.get('pago_completado') === 'true';
-  const metodoPago = url.searchParams.get('metodo_pago') || '';
-
-  // If already closed, show confirmation
-  if (order.estado === 'Cerrada') {
-    return htmlResponse(renderAlreadyClosed(order, client, vehicle, costs, config));
-  }
-
-  // Show closure page
-  return htmlResponse(renderClosurePage(order, client, vehicle, costs, config, token, notasCierre, pagoCompletado, metodoPago));
 }
 
-// ─────────────────────────────────────────────
-// POST: Save signature and close order
-// ─────────────────────────────────────────────
 export async function onRequestPost(context) {
   const { request, env } = context;
   const url = new URL(request.url);
   const token = url.searchParams.get('token');
-  const confirmar = url.searchParams.get('confirmar_firma');
+  const notas = url.searchParams.get('notas');
+  const pagoCompletado = url.searchParams.get('pago_completado') === 'true';
+  const metodoPago = url.searchParams.get('metodo_pago');
 
-  if (!token || confirmar !== 'si') {
-    return jsonResponse({ error: 'Par\u00e1metros inv\u00e1lidos' }, 400);
-  }
-
-  const data = await getOrderByToken(env.DB, token);
-  if (!data) {
-    return jsonResponse({ error: 'Orden no encontrada' }, 404);
-  }
-
-  const { order } = data;
-
-  if (order.estado === 'Cerrada') {
-    return jsonResponse({ error: 'La orden ya fue cerrada', alreadyClosed: true });
-  }
-
-  let body;
-  try {
-    body = await request.json();
-  } catch {
-    return jsonResponse({ error: 'Body inv\u00e1lido' }, 400);
-  }
-
-  const firma = body.firma;
-  if (!firma) {
-    return jsonResponse({ error: 'No se recibi\u00f3 la firma' }, 400);
-  }
-
-  const now = new Date().toISOString();
-
-  // Close the order: set estado and estado_trabajo to 'Cerrada'
-  await env.DB.prepare(`
-    UPDATE OrdenesTrabajo
-    SET estado = 'Cerrada',
-        estado_trabajo = 'Cerrada',
-        firma_imagen = COALESCE(firma_imagen, ?),
-        fecha_aprobacion = COALESCE(fecha_aprobacion, ?),
-        fecha_completado = ?
-    WHERE token = ?
-  `).bind(firma, now, now, token).run();
-
-  return jsonResponse({ success: true, message: 'Orden cerrada correctamente' });
-}
-
-// ─────────────────────────────────────────────
-// Render functions
-// ─────────────────────────────────────────────
-
-function renderError(title, message) {
-  return `<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Error - BizFlow</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-  <style>
-    body { font-family: 'Inter', sans-serif; background: #f9fafb; margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-    .error-box { text-align: center; padding: 40px; background: white; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); max-width: 420px; width: 90%; }
-    .error-icon { width: 72px; height: 72px; border-radius: 50%; background: #fef2f2; color: #dc2626; display: flex; align-items: center; justify-content: center; font-size: 2rem; margin: 0 auto 20px; }
-    .error-box h2 { font-size: 1.2rem; font-weight: 700; color: #111827; margin-bottom: 8px; }
-    .error-box p { color: #6b7280; font-size: 0.9rem; margin: 0; }
-  </style>
-</head>
-<body>
-  <div class="error-box">
-    <div class="error-icon"><i class="fas fa-link-slash"></i></div>
-    <h2>${escapeHtml(title)}</h2>
-    <p>${escapeHtml(message)}</p>
-  </div>
-</body>
-</html>`;
-}
-
-function renderAlreadyClosed(order, client, vehicle, costs, config) {
-  const html = buildPageHead('Orden Cerrada', config);
-  return `${html}
-<body>
-<div class="page-wrapper">
-  <div class="top-bar" style="background:linear-gradient(135deg, #374151 0%, #111827 100%);">
-    <h1><i class="fas fa-lock me-2"></i>Orden Cerrada</h1>
-    <div class="subtitle">${escapeHtml(config?.negocio_nombre || 'BizFlow')}</div>
-  </div>
-  <div class="content">
-    <div class="card" style="padding:0;overflow:hidden;">
-      <div style="background:linear-gradient(135deg,#e5e7eb 0%,#d1d5db 100%);padding:30px 20px;text-align:center;">
-        <div style="font-size:3rem;margin-bottom:12px;">\u2705</div>
-        <h2 style="font-size:1.3rem;font-weight:800;color:#1f2937;margin:0 0 6px;">\u00a1Orden Cerrada!</h2>
-        <p style="color:#4b5563;font-size:0.9rem;margin:0;">
-          Esta orden fue cerrada el ${order.fecha_completado ? formatDateTime(order.fecha_completado) : 'fecha no registrada'}
-        </p>
-      </div>
-    </div>
-
-    ${buildOrderInfoCard(order)}
-    ${buildClientInfoCard(client, order)}
-    ${buildVehicleInfoCard(order, vehicle)}
-    ${buildDomicilioCard(order)}
-    ${buildServicesCard(order)}
-    ${buildChecklistCard(order)}
-    ${buildCostsCard(costs)}
-    ${buildTotalsCard(order)}
-    ${buildNotesCard(order)}
-
-    ${order.firma_imagen ? `
-    <div class="card">
-      <div class="card-header">
-        <div class="icon-circle"><i class="fas fa-signature"></i></div>
-        <h2>Firma Registrada</h2>
-      </div>
-      <img id="signatureImg" src="${order.firma_imagen}" class="signature-preview" alt="Firma">
-    </div>` : ''}
-
-    <div class="btn-group-actions no-print">
-      <button class="btn-action btn-pdf" onclick="generatePDF()">
-        <i class="fas fa-file-pdf me-2"></i>Descargar PDF
-      </button>
-      <a id="whatsappLink" href="#" class="btn-action btn-whatsapp" target="_blank">
-        <i class="fab fa-whatsapp me-2"></i>Compartir por WhatsApp
-      </a>
-    </div>
-
-    <!-- Hidden PDF data -->
-    <span id="bizName" style="display:none">${escapeHtml(config?.negocio_nombre || '')}</span>
-    <span id="bizAddr" style="display:none">${escapeHtml(config?.negocio_direccion || '')}</span>
-    <span id="bizPhone" style="display:none">${escapeHtml(config?.negocio_telefono || '')}</span>
-    <span id="bizEmail" style="display:none">${escapeHtml(config?.negocio_email || '')}</span>
-    <span id="clientName" style="display:none">${escapeHtml(client?.nombre || '')}</span>
-    <span id="clientPhone" style="display:none">${escapeHtml(client?.telefono || '')}</span>
-    <span id="clientAddr" style="display:none">${escapeHtml(client?.direccion || order?.direccion || '')}</span>
-    <span id="clientRut" style="display:none">${escapeHtml(client?.rut || '\u2014')}</span>
-    <span id="vehiclePatente" style="display:none">${escapeHtml(vehicle?.patente_placa || order?.patente_placa || '')}</span>
-    <span id="vehicleMarca" style="display:none">${escapeHtml(vehicle?.marca || order?.marca || '')}</span>
-    <span id="vehicleModelo" style="display:none">${escapeHtml(vehicle?.modelo || order?.modelo || '')}</span>
-    <span id="vehicleAnio" style="display:none">${escapeHtml(String(vehicle?.anio || order?.anio || ''))}</span>
-    <span id="vehicleCilindrada" style="display:none">${escapeHtml(vehicle?.cilindrada || order?.cilindrada || '\u2014')}</span>
-    <span id="vehicleCombustible" style="display:none">${escapeHtml(vehicle?.combustible || order?.combustible || '')}</span>
-    <span id="vehicleKm" style="display:none">${escapeHtml(String(vehicle?.kilometraje || order?.kilometraje || ''))}</span>
-    <span id="domDistancia" style="display:none">${(parseFloat(order.distancia_km) || 0).toFixed(1)} km</span>
-    <span id="domCargo" style="display:none">${'$' + (parseFloat(order.cargo_domicilio) || 0).toLocaleString('es-MX')}</span>
-    <span id="fuelLevel" style="display:none">${escapeHtml(order.nivel_combustible || '\u2014')}</span>
-    <span id="totalValue" style="display:none">${'$' + (parseFloat(order.monto_total) || 0).toLocaleString('es-MX')}</span>
-    <span id="abonoValue" style="display:none">${(parseFloat(order.monto_abono) || 0) > 0 ? '$' + (parseFloat(order.monto_abono)).toLocaleString('es-MX') : ''}</span>
-    <span id="restanteValue" style="display:none">${'$' + (parseFloat(order.monto_restante) || 0).toLocaleString('es-MX')}</span>
-    <span id="notesText" style="display:none">${escapeHtml((order.notas || '') + (order.diagnostico_observaciones ? '\n' + order.diagnostico_observaciones : ''))}</span>
-    <span id="orderNumber" style="display:none">#${escapeHtml(String(order.numero_orden || '').padStart(5, '0'))}</span>
-    <span id="orderDate" style="display:none">${escapeHtml(order.fecha_ingreso || '')}</span>
-    <span id="orderStatus" style="display:none">${escapeHtml(order.estado || '')}</span>
-  </div>
-</div>
-
-${getJsPDFScript()}
-${buildJsPDFGeneratorScript('tecnico')}
-<script>
-(function(){
-  const phone = '${escapeHtml(client?.telefono || '')}';
-  const link = document.getElementById('whatsappLink');
-  if (phone && link) {
-    const num = '${escapeHtml(String(order.numero_orden || '').padStart(5, '0'))}';
-    const text = encodeURIComponent('Hola, su orden de trabajo #' + num + ' ha sido cerrada. Puede retirar su veh\u00edculo. Gracias.');
-    link.href = 'https://wa.me/' + phone.replace(/[^0-9+]/g,'') + '?text=' + text;
-  } else if (link) {
-    link.style.display = 'none';
-  }
-})();
-</script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>`;
-}
-
-function renderClosurePage(order, client, vehicle, costs, config, token, notasCierre, pagoCompletado, metodoPago) {
-  const html = buildPageHead('Cierre T\u00e9cnico', config);
-  return `${html}
-<body>
-<div class="page-wrapper">
-  <div class="top-bar" style="background:linear-gradient(135deg, #374151 0%, #111827 100%);">
-    <h1><i class="fas fa-wrench me-2"></i>Cierre de Orden</h1>
-    <div class="subtitle">${escapeHtml(config?.negocio_nombre || 'BizFlow')} \u2014 Firma del cliente para entrega</div>
-  </div>
-  <div class="content">
-
-    <!-- Closure info banner -->
-    <div class="card" style="background:linear-gradient(135deg,#f3f4f6 0%,#e5e7eb 100%);border-color:#d1d5db;">
-      <div style="display:flex;align-items:flex-start;gap:12px;">
-        <div style="width:44px;height:44px;border-radius:12px;background:#374151;color:white;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">
-          <i class="fas fa-clipboard-check"></i>
-        </div>
-        <div>
-          <h3 style="font-size:1rem;font-weight:700;color:#1f2937;margin:0 0 4px;">Entrega de veh\u00edculo</h3>
-          <p style="font-size:0.85rem;color:#4b5563;margin:0;">
-            El t\u00e9cnico ha completado el trabajo. Firme para confirmar la entrega de su veh\u00edculo y aceptar los trabajos realizados.
-          </p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Closing notes from technician -->
-    ${notasCierre ? `
-    <div class="card">
-      <div class="card-header">
-        <div class="icon-circle" style="background:#e5e7eb;color:#374151;"><i class="fas fa-comment-dots"></i></div>
-        <h2>Notas del Cierre</h2>
-      </div>
-      <div class="notes-box">${escapeHtml(notasCierre)}</div>
-    </div>` : ''}
-
-    <!-- Payment info -->
-    <div class="card">
-      <div class="card-header">
-        <div class="icon-circle" style="background:#dbeafe;color:#2563eb;"><i class="fas fa-credit-card"></i></div>
-        <h2>Estado de Pago</h2>
-      </div>
-      <div class="info-row">
-        <span class="info-label">Pago completado</span>
-        <span class="info-value">
-          <span class="badge ${pagoCompletado ? 'badge-approved' : 'badge-pending'}">
-            ${pagoCompletado ? 'S\u00ed' : 'No'}
-          </span>
-        </span>
-      </div>
-      ${metodoPago ? `
-      <div class="info-row">
-        <span class="info-label">M\u00e9todo de pago</span>
-        <span class="info-value">${escapeHtml(metodoPago)}</span>
-      </div>` : ''}
-      ${!pagoCompletado && (parseFloat(order.monto_restante) || 0) > 0 ? `
-      <div class="info-row">
-        <span class="info-label">Monto pendiente</span>
-        <span class="info-value" style="color:var(--danger);font-weight:700;">
-          ${'$' + (parseFloat(order.monto_restante) || 0).toLocaleString('es-MX')}
-        </span>
-      </div>` : ''}
-    </div>
-
-    ${buildOrderInfoCard(order)}
-    ${buildClientInfoCard(client, order)}
-    ${buildVehicleInfoCard(order, vehicle)}
-    ${buildDomicilioCard(order)}
-    ${buildServicesCard(order)}
-    ${buildChecklistCard(order)}
-    ${buildCostsCard(costs)}
-    ${buildTotalsCard(order)}
-    ${buildNotesCard(order)}
-
-    ${buildSignatureCanvasHtml()}
-
-    <div id="loadingOverlay" style="display:none;text-align:center;padding:20px;">
-      <div class="spinner-border" role="status" style="width:2.5rem;height:2.5rem;color:#374151;">
-        <span class="visually-hidden">Procesando...</span>
-      </div>
-      <p style="margin-top:10px;color:var(--gray-500);font-size:0.9rem;">Cerrando orden y guardando firma...</p>
-    </div>
-
-    <div id="actionButtons">
-      <button class="btn-action" style="background:linear-gradient(135deg,#374151 0%,#111827 100%);color:white;box-shadow:0 4px 14px rgba(55,65,81,0.4);" onclick="submitClosure()">
-        <i class="fas fa-check-circle me-2"></i>FIRMAR Y CERRAR ORDEN
-      </button>
-      <button class="btn-action btn-danger-outline" onclick="cancelClosure()">
-        <i class="fas fa-times me-2"></i>CANCELAR
-      </button>
-    </div>
-
-    <!-- Hidden PDF data -->
-    <span id="bizName" style="display:none">${escapeHtml(config?.negocio_nombre || '')}</span>
-    <span id="bizAddr" style="display:none">${escapeHtml(config?.negocio_direccion || '')}</span>
-    <span id="bizPhone" style="display:none">${escapeHtml(config?.negocio_telefono || '')}</span>
-    <span id="bizEmail" style="display:none">${escapeHtml(config?.negocio_email || '')}</span>
-    <span id="clientName" style="display:none">${escapeHtml(client?.nombre || '')}</span>
-    <span id="clientPhone" style="display:none">${escapeHtml(client?.telefono || '')}</span>
-    <span id="clientAddr" style="display:none">${escapeHtml(client?.direccion || order?.direccion || '')}</span>
-    <span id="clientRut" style="display:none">${escapeHtml(client?.rut || '\u2014')}</span>
-    <span id="vehiclePatente" style="display:none">${escapeHtml(vehicle?.patente_placa || order?.patente_placa || '')}</span>
-    <span id="vehicleMarca" style="display:none">${escapeHtml(vehicle?.marca || order?.marca || '')}</span>
-    <span id="vehicleModelo" style="display:none">${escapeHtml(vehicle?.modelo || order?.modelo || '')}</span>
-    <span id="vehicleAnio" style="display:none">${escapeHtml(String(vehicle?.anio || order?.anio || ''))}</span>
-    <span id="vehicleCilindrada" style="display:none">${escapeHtml(vehicle?.cilindrada || order?.cilindrada || '\u2014')}</span>
-    <span id="vehicleCombustible" style="display:none">${escapeHtml(vehicle?.combustible || order?.combustible || '')}</span>
-    <span id="vehicleKm" style="display:none">${escapeHtml(String(vehicle?.kilometraje || order?.kilometraje || ''))}</span>
-    <span id="domDistancia" style="display:none">${(parseFloat(order.distancia_km) || 0).toFixed(1)} km</span>
-    <span id="domCargo" style="display:none">${'$' + (parseFloat(order.cargo_domicilio) || 0).toLocaleString('es-MX')}</span>
-    <span id="fuelLevel" style="display:none">${escapeHtml(order.nivel_combustible || '\u2014')}</span>
-    <span id="totalValue" style="display:none">${'$' + (parseFloat(order.monto_total) || 0).toLocaleString('es-MX')}</span>
-    <span id="abonoValue" style="display:none">${(parseFloat(order.monto_abono) || 0) > 0 ? '$' + (parseFloat(order.monto_abono)).toLocaleString('es-MX') : ''}</span>
-    <span id="restanteValue" style="display:none">${'$' + (parseFloat(order.monto_restante) || 0).toLocaleString('es-MX')}</span>
-    <span id="notesText" style="display:none">${escapeHtml((order.notas || '') + (order.diagnostico_observaciones ? '\n' + order.diagnostico_observaciones : '') + (notasCierre ? '\nNotas cierre: ' + notasCierre : ''))}</span>
-    <span id="orderNumber" style="display:none">#${escapeHtml(String(order.numero_orden || '').padStart(5, '0'))}</span>
-    <span id="orderDate" style="display:none">${escapeHtml(order.fecha_ingreso || '')}</span>
-    <span id="orderStatus" style="display:none">${escapeHtml(order.estado || '')}</span>
-
-  </div>
-</div>
-
-${getJsPDFScript()}
-${buildSignatureCanvasScript()}
-${buildJsPDFGeneratorScript('tecnico')}
-<script>
-const TOKEN = '${token}';
-
-async function submitClosure() {
-  if (window.isSignatureEmpty()) {
-    showToast('Por favor firme antes de continuar', 'warning');
-    return;
-  }
-
-  const firma = window.getSignatureData();
-  if (!firma) {
-    showToast('Error al capturar la firma', 'danger');
-    return;
-  }
-
-  if (!confirm('\u00bfConfirma la firma para el cierre y entrega del veh\u00edculo?')) return;
-
-  document.getElementById('loadingOverlay').style.display = 'block';
-  document.getElementById('actionButtons').style.display = 'none';
-  document.getElementById('signatureCard').style.display = 'none';
-
-  try {
-    const resp = await fetch(window.location.pathname + '?token=' + TOKEN + '&confirmar_firma=si', {
-      method: 'POST',
+  if (!token) {
+    return new Response(JSON.stringify({ success: false, error: 'Token no proporcionado' }), {
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ firma }),
+      status: 400
+    });
+  }
+
+  try {
+    const data = await request.json();
+    const firma = data.firma;
+
+    if (!firma) {
+      return new Response(JSON.stringify({ success: false, error: 'Firma no proporcionada' }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 400
+      });
+    }
+
+    // Buscar orden y verificar token
+    const orden = await env.DB.prepare(
+      `SELECT o.id, o.estado, o.estado_trabajo, o.notas, c.telefono as cliente_telefono
+       FROM OrdenesTrabajo o
+       LEFT JOIN Clientes c ON o.cliente_id = c.id
+       WHERE o.token_firma_tecnico = ?`
+    ).bind(token).first();
+
+    if (!orden) {
+      return new Response(JSON.stringify({ success: false, error: 'Orden no encontrada' }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 404
+      });
+    }
+
+    const esPrimeraVez = !orden.firma_imagen;
+
+    // Aplicar notas de cierre si existen
+    let notasActualizadas = orden.notas || '';
+    if (notas) {
+      notasActualizadas = notasActualizadas ? `${notasActualizadas}\nCierre: ${notas}` : `Cierre: ${notas}`;
+    }
+
+    // Guardar firma y cerrar la orden
+    await env.DB.prepare(`
+      UPDATE OrdenesTrabajo
+      SET firma_imagen = ?, estado = 'Aprobada', estado_trabajo = 'Cerrada',
+          fecha_aprobacion = ${chileNow()}, fecha_completado = ${chileNow()},
+          notas = ?, pagado = ?, metodo_pago = ?
+      WHERE id = ?
+    `).bind(firma, notasActualizadas, pagoCompletado ? 1 : 0, metodoPago || null, orden.id).run();
+
+    // Registrar en seguimiento
+    await env.DB.prepare(`
+      INSERT INTO SeguimientoTrabajo (orden_id, tecnico_id, estado_anterior, estado_nuevo, observaciones)
+      VALUES (?, (SELECT tecnico_asignado_id FROM OrdenesTrabajo WHERE id = ?), ?, ?, ?)
+    `).bind(
+      orden.id,
+      orden.id,
+      orden.estado_trabajo,
+      'Cerrada',
+      `Firma del cliente y cierre final. ${notas ? 'Notas: ' + notas : ''}`
+    ).run();
+
+    // Si es la primera vez que firma, enviar notificación
+    if (esPrimeraVez) {
+      console.log('PRIMERA FIRMA - Enviando notificación con PDF a:', orden.cliente_telefono);
+    }
+
+    return new Response(JSON.stringify({
+      success: true,
+      es_primera_vez: esPrimeraVez,
+      mensaje: 'Orden aceptada y cerrada correctamente'
+    }), {
+      headers: { 'Content-Type': 'application/json' }
     });
 
-    const data = await resp.json();
+  } catch (error) {
+    console.error('Error al aprobar orden:', error);
+    return new Response(JSON.stringify({ success: false, error: error.message }), {
+      headers: { 'Content-Type': 'application/json' },
+      status: 500
+    });
+  }
+}
 
-    if (data.success) {
-      showClosureConfirmation();
-    } else if (data.alreadyClosed) {
-      showToast('Esta orden ya fue cerrada', 'info');
-      setTimeout(() => location.reload(), 1500);
-    } else {
-      throw new Error(data.error || 'Error desconocido');
+function getHTMLResponse(titulo, mensaje, esExito) {
+  const color = esExito ? '#28a745' : '#dc3545';
+  const icono = esExito ? '✓' : '✗';
+
+  const html = '' +
+    '<!DOCTYPE html>' +
+    '<html lang="es">' +
+    '<head>' +
+    '<meta charset="UTF-8">' +
+    '<meta name="viewport" content="width=device-width, initial-scale=1.0">' +
+    '<title>' + titulo + '</title>' +
+    '<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">' +
+    '<style>' +
+    'body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; }' +
+    '.card { border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); max-width: 500px; width: 90%; }' +
+    '</style>' +
+    '</head>' +
+    '<body>' +
+    '<div class="card">' +
+    '<div class="card-body text-center py-5">' +
+    '<div style="font-size: 5rem; color: ' + color + ';">' + icono + '</div>' +
+    '<h3 class="mt-4">' + titulo + '</h3>' +
+    '<p class="text-muted">' + mensaje + '</p>' +
+    '</div>' +
+    '</div>' +
+    '</body>' +
+    '</html>';
+
+  return new Response(html, {
+    headers: { 'Content-Type': 'text/html; charset=utf-8' }
+  });
+}
+
+function getApprovalPage(orden, numeroFormateado, token, tieneFirma, notas = null, pagoCompletado = null, metodoPago = null, costosAdicionales = [], totalCostos = 0) {
+  const estadoClass = obtenerClaseEstado(orden.estado_trabajo);
+  const montoBase = Number(orden.monto_total || 0);
+  const montoFinal = montoBase + totalCostos;
+
+  // =============================================
+  // CONSTRUIR HTML DE TRABAJOS (con precios)
+  // =============================================
+  let trabajosHtml = '';
+  let servicios = [];
+  if (orden.servicios_seleccionados) {
+    try {
+      const parsed = typeof orden.servicios_seleccionados === 'string'
+        ? JSON.parse(orden.servicios_seleccionados)
+        : orden.servicios_seleccionados;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        servicios = parsed;
+      }
+    } catch (e) {}
+  }
+  if (servicios.length > 0) {
+    let subtotal = 0;
+    let hasEdited = false;
+    trabajosHtml += '<div class="table-responsive"><table class="table table-sm table-bordered"><thead class="table-light"><tr><th>Servicio</th><th>Categoría</th><th>Tipo</th><th class="text-end">Precio</th></tr></thead><tbody>';
+    servicios.forEach(function(s) {
+      const precio = Number(s.precio_final || s.precio_sugerido || 0);
+      subtotal += precio;
+      if (s.editado) hasEdited = true;
+      const tipo = s.tipo_comision === 'mano_obra' ? '<span class="badge bg-warning text-dark" style="font-size:0.65rem;">Mano de Obra</span>' : '<span class="badge bg-secondary" style="font-size:0.65rem;">Repuestos</span>';
+      const editMark = s.editado ? ' *' : '';
+      trabajosHtml += '<tr><td>' + (s.nombre || s.nombre_servicio || '') + editMark + '</td><td>' + (s.categoria || '') + '</td><td>' + tipo + '</td><td class="text-end fw-bold">$' + precio.toLocaleString('es-CL', { maximumFractionDigits: 0 }) + '</td></tr>';
+    });
+    trabajosHtml += '<tr class="table-warning"><td class="fw-bold" colspan="3">Subtotal Servicios</td><td class="text-end fw-bold fs-5">$' + subtotal.toLocaleString('es-CL', { maximumFractionDigits: 0 }) + '</td></tr>';
+    trabajosHtml += '</tbody></table></div>';
+    if (hasEdited) {
+      trabajosHtml += '<small class="text-muted">* Precio editado manualmente</small>';
     }
-  } catch (err) {
-    document.getElementById('loadingOverlay').style.display = 'none';
-    document.getElementById('actionButtons').style.display = '';
-    document.getElementById('signatureCard').style.display = '';
-    showToast('Error: ' + err.message, 'danger');
+  } else {
+    trabajosHtml += '<ul>';
+    if (orden.trabajo_frenos) trabajosHtml += '<li><strong>Frenos:</strong> ' + (orden.detalle_frenos || 'Sin detalle') + '</li>';
+    if (orden.trabajo_luces) trabajosHtml += '<li><strong>Luces:</strong> ' + (orden.detalle_luces || 'Sin detalle') + '</li>';
+    if (orden.trabajo_tren_delantero) trabajosHtml += '<li><strong>Tren Delantero:</strong> ' + (orden.detalle_tren_delantero || 'Sin detalle') + '</li>';
+    if (orden.trabajo_correas) trabajosHtml += '<li><strong>Correas:</strong> ' + (orden.detalle_correas || 'Sin detalle') + '</li>';
+    if (orden.trabajo_componentes) trabajosHtml += '<li><strong>Componentes:</strong> ' + (orden.detalle_componentes || 'Sin detalle') + '</li>';
+    if (trabajosHtml === '<ul>') trabajosHtml += '<li>No hay trabajos seleccionados</li>';
+    trabajosHtml += '</ul>';
   }
-}
 
-function cancelClosure() {
-  if (confirm('\u00bfEst\u00e1 seguro de que desea cancelar? No se realizar\u00e1 ning\u00fan cambio.')) {
-    window.location.href = window.location.pathname + '?token=' + TOKEN;
+  // =============================================
+  // CONSTRUIR HTML DE CHECKLIST DEL VEHÍCULO
+  // =============================================
+  let checklistHtml = '<div class="row"><div class="col-md-6">';
+  checklistHtml += '<p><strong>Nivel de Combustible:</strong> ' + (orden.nivel_combustible || 'No registrado') + '</p>';
+  checklistHtml += '</div><div class="col-md-6">';
+  checklistHtml += '<p><strong>Estado de Carrocería:</strong></p><ul>';
+  const danios = [];
+  if (orden.check_paragolfe_delantero_der) danios.push('Parachoques delantero derecho');
+  if (orden.check_puerta_delantera_der) danios.push('Puerta delantera derecha');
+  if (orden.check_puerta_trasera_der) danios.push('Puerta trasera derecha');
+  if (orden.check_paragolfe_trasero_izq) danios.push('Parachoques trasero izquierdo');
+  if (orden.check_otros_carroceria) danios.push(orden.check_otros_carroceria);
+  if (danios.length === 0) {
+    checklistHtml += '<li class="text-muted">Sin daños registrados</li>';
+  } else {
+    danios.forEach(function(d) {
+      checklistHtml += '<li><span class="text-warning">&#9888;&#65039;</span> ' + d + '</li>';
+    });
   }
+  checklistHtml += '</ul></div></div>';
+  const tieneChecklist = orden.nivel_combustible || danios.length > 0;
+
+  // =============================================
+  // CONSTRUIR HTML DE OBSERVACIONES
+  // =============================================
+  const diagnosticoObs = orden.diagnostico_observaciones || '';
+  let observacionesHtml = '';
+  if (diagnosticoObs) {
+    observacionesHtml = '<p>' + diagnosticoObs.replace(/\n/g, '<br>') + '</p>';
+  }
+
+  // =============================================
+  // CONSTRUIR HTML DE COSTOS ADICIONALES
+  // =============================================
+  let costosHtml = '';
+  if (costosAdicionales && costosAdicionales.length > 0) {
+    costosHtml += '<div class="table-responsive"><table class="table table-sm table-bordered">';
+    costosHtml += '<thead><tr><th>Concepto</th><th>Tipo</th><th class="text-end">Monto</th></tr></thead><tbody>';
+    costosAdicionales.forEach(function(c) {
+      const catBadge = c.categoria === 'Repuestos/Materiales'
+        ? '<span class="badge bg-secondary">Repuesto</span>'
+        : '<span class="badge bg-warning text-dark">Mano de Obra</span>';
+      costosHtml += '<tr><td>' + (c.concepto || 'Gasto adicional') + '</td><td>' + catBadge + '</td><td class="text-end fw-bold text-danger">$' + Number(c.monto || 0).toLocaleString('es-CL') + '</td></tr>';
+    });
+    costosHtml += '</tbody></table></div>';
+    if (totalCostos > 0) {
+      costosHtml += '<small class="text-muted">Base: $' + montoBase.toLocaleString('es-CL') + ' + Extras: $' + totalCostos.toLocaleString('es-CL') + ' = <strong class="text-danger">Total: $' + montoFinal.toLocaleString('es-CL') + '</strong></small>';
+    }
+  }
+
+  // =============================================
+  // PROCESAR NOTAS
+  // =============================================
+  let notasCierre = '';
+  let otrasNotas = '';
+  if (orden.notas) {
+    const notasArray = orden.notas.split('\n');
+    for (const nota of notasArray) {
+      if (nota.startsWith('Cierre: ')) {
+        notasCierre = nota.replace('Cierre: ', '');
+      } else {
+        otrasNotas += (otrasNotas ? '\n' : '') + nota;
+      }
+    }
+  }
+  let notasHtml = '';
+  if (notasCierre || otrasNotas || diagnosticoObs) {
+    notasHtml += '<h6 class="fw-bold">OBSERVACIONES</h6>';
+    if (diagnosticoObs) notasHtml += '<p><em>' + diagnosticoObs.replace(/\n/g, '<br>') + '</em></p>';
+    if (notasCierre) notasHtml += '<p><strong>Notas de cierre:</strong> ' + notasCierre + '</p>';
+    if (otrasNotas) notasHtml += '<p>' + otrasNotas.replace(/\n/g, '<br>') + '</p>';
+  }
+
+  // =============================================
+  // CONTENIDO PRINCIPAL (firma o cerrada)
+  // =============================================
+  let contenidoPrincipal = '';
+
+  if (orden.estado_trabajo === 'Cerrada') {
+    // ORDEN CERRADA - Mostrar firma + botón descargar PDF
+    contenidoPrincipal = '' +
+      '<div class="text-center py-4">' +
+      '<div style="font-size: 4rem; color: #28a745;">&#10003;</div>' +
+      '<h3 class="mt-3">¡Orden Aprobada!</h3>' +
+      '<p class="text-muted">Su firma ha sido guardada exitosamente.</p>' +
+      '<p class="small text-muted mb-3">Fecha de aprobación: ' + (orden.fecha_aprobacion || 'N/A') + '</p>' +
+      '</div>' +
+      // Firma
+      '<div class="card mb-4 border-success">' +
+      '<div class="card-header bg-success text-white">' +
+      '<h6 class="mb-0"><i class="fas fa-signature me-2"></i>Firma del Cliente</h6>' +
+      '</div>' +
+      '<div class="card-body text-center">' +
+      '<img src="' + orden.firma_imagen + '" alt="Firma del cliente" style="max-width: 100%; max-height: 200px; border: 1px solid #ddd; border-radius: 10px;" />' +
+      '</div>' +
+      '</div>' +
+      // Botón Descargar PDF
+      '<div class="d-grid gap-2 mb-3">' +
+      '<button class="btn btn-danger btn-lg" onclick="descargarPDF()">' +
+      '<i class="fas fa-file-pdf me-2"></i>Descargar PDF de la Orden</button>' +
+      '<button class="btn btn-outline-secondary btn-lg" onclick="window.print()">' +
+      '<i class="fas fa-print me-2"></i>Imprimir</button>' +
+      '</div>' +
+      // Link a ver-ot (usando el token correcto de la orden)
+      '<p class="text-center mt-3">' +
+      '<a href="/ver-ot?token=' + (orden.token || '') + '" target="_blank" class="text-decoration-none">' +
+      '<i class="fas fa-external-link-alt me-1"></i>Ver OT completa en otra pestaña</a>' +
+      '</p>';
+  } else {
+    // ORDEN ABIERTA - Mostrar canvas de firma
+    contenidoPrincipal = '' +
+      '<div class="alert alert-info">' +
+      '<h5><i class="fas fa-info-circle me-2"></i>Información Importante</h5>' +
+      '<p>Por favor revise detalladamente la orden de trabajo antes de firmar. ' +
+      'Al firmar, usted autoriza los trabajos indicados y sus montos.</p>' +
+      '</div>' +
+      '<div class="card mb-4">' +
+      '<div class="card-header">' +
+      '<h6 class="mb-0"><i class="fas fa-signature me-2"></i>Firma del Cliente</h6>' +
+      '</div>' +
+      '<div class="card-body">' +
+      '<p class="text-muted">Utilice el mouse o toque la pantalla para firmar en el área a continuación:</p>' +
+      '<canvas id="firma-canvas" style="width: 100%; height: 200px; border: 2px dashed #ccc; border-radius: 10px;"></canvas>' +
+      '<button class="btn btn-outline-secondary btn-sm w-100 mt-2" onclick="limpiarFirma()">' +
+      '<i class="fas fa-eraser me-2"></i>Limpiar Firma' +
+      '</button>' +
+      '</div>' +
+      '</div>' +
+      '<div class="d-grid gap-2">' +
+      '<button class="btn btn-success btn-lg" onclick="guardarFirma()">' +
+      '<i class="fas fa-check-circle me-2"></i>Aprobar y Firmar Orden' +
+      '</button>' +
+      '</div>';
+  }
+
+  // =============================================
+  // ARMAR HTML COMPLETO
+  // =============================================
+  const ordenJson = JSON.stringify(orden);
+  const costosJson = JSON.stringify(costosAdicionales || []);
+  const totalCostosNum = totalCostos;
+  const montoFinalNum = montoFinal;
+
+  const html = '' +
+    '<!DOCTYPE html>' +
+    '<html lang="es">' +
+    '<head>' +
+    '<meta charset="UTF-8">' +
+    '<meta name="viewport" content="width=device-width, initial-scale=1.0">' +
+    '<title>Orden de Trabajo #' + numeroFormateado + ' - Global Pro Automotriz</title>' +
+    '<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">' +
+    '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">' +
+    '<style>' +
+    '@media print { .no-print { display: none !important; } body { background: white !important; } }' +
+    'body { background: #f5f5f5; }' +
+    '.orden-card { box-shadow: 0 2px 10px rgba(0,0,0,0.1); border-radius: 15px; margin-bottom: 20px; }' +
+    '</style>' +
+    '</head>' +
+    '<body>' +
+    '<nav class="navbar navbar-dark no-print" style="background: #a80000;">' +
+    '<div class="container">' +
+    '<a class="navbar-brand fw-bold" href="#">' +
+    '<i class="fas fa-wrench me-2"></i>GLOBAL PRO AUTOMOTRIZ' +
+    '</a>' +
+    '</div>' +
+    '</nav>' +
+    '<div style="width:100%;text-align:center;line-height:0;"><img src="/banner.jpeg" alt="Global Pro Automotriz" style="width:100%;max-width:600px;height:auto;display:block;margin:0 auto;border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,0.15);"></div>' +
+    '<div class="container py-4">' +
+
+    // === TARJETA PRINCIPAL DE LA OT ===
+    '<div class="orden-card card">' +
+    '<div class="card-header bg-danger text-white">' +
+    '<h5 class="mb-0"><i class="fas fa-file-alt me-2"></i>ORDEN DE TRABAJO #' + numeroFormateado + '</h5>' +
+    '</div>' +
+    '<div class="card-body">' +
+
+    // Datos del cliente
+    '<div class="row mb-4">' +
+    '<div class="col-md-6">' +
+    '<h6 class="fw-bold">DATOS DEL CLIENTE</h6>' +
+    '<p><strong>Nombre:</strong> ' + (orden.cliente_nombre || 'N/A') + '</p>' +
+    '<p><strong>RUT:</strong> ' + (orden.cliente_rut || 'N/A') + '</p>' +
+    '<p><strong>Fecha Ingreso:</strong> ' + (orden.fecha_ingreso || 'N/A') + '</p>' +
+    '<p><strong>Técnico:</strong> ' + (orden.tecnico_nombre || 'N/A') + '</p>' +
+    '</div>' +
+
+    // Datos del vehículo
+    '<div class="col-md-6">' +
+    '<h6 class="fw-bold">DATOS DEL VEHÍCULO</h6>' +
+    '<p><strong>Patente:</strong> ' + (orden.patente_placa || 'N/A') + '</p>' +
+    '<p><strong>Marca/Modelo:</strong> ' + (orden.marca || '') + ' ' + (orden.modelo || '') + ' (' + (orden.anio || 'N/A') + ')</p>' +
+    '<p><strong>Estado:</strong> <span class="badge ' + estadoClass + '">' + (orden.estado_trabajo || 'N/A') + '</span></p>' +
+    '</div>' +
+    '</div>' +
+
+    '<hr>' +
+
+    // Diagnóstico / Trabajos
+    '<h6 class="fw-bold">DIAGNÓSTICO / TRABAJOS</h6>' +
+    trabajosHtml +
+    '<hr>' +
+
+    // Checklist del vehículo
+    (tieneChecklist ? '<h6 class="fw-bold">CHECKLIST DEL VEHÍCULO</h6>' + checklistHtml + '<hr>' : '') +
+
+    // Observaciones
+    (notasHtml ? notasHtml + '<hr>' : '') +
+
+    // Costos adicionales
+    (costosHtml ? '<h6 class="fw-bold"><i class="fas fa-receipt me-2"></i>GASTOS ADICIONALES</h6>' + costosHtml + '<hr>' : '') +
+
+    // Domicilio (informativo)
+    (Number(orden.distancia_km || 0) > 0 ?
+      '<h6 class="fw-bold" style="color:#0066cc;"><i class="fas fa-truck me-2"></i>DOMICILIO (Pago directo al tecnico)</h6>' +
+      '<div class="alert alert-info py-2 mb-3">' +
+      '<p class="mb-1"><strong>Distancia recorrida:</strong> ' + Number(orden.distancia_km).toFixed(1) + ' km</p>' +
+      (Number(orden.cargo_domicilio || 0) > 0 ?
+        '<p class="mb-1"><strong>Cargo por domicilio:</strong> <span class="text-danger fw-bold">$' + Number(orden.cargo_domicilio).toLocaleString('es-CL') + '</span></p>' :
+        '<p class="mb-1"><strong>Cargo:</strong> <span class="text-success">Dentro del radio gratuito</span></p>'
+      ) +
+      '<small class="text-muted"><em>NOTA: Este valor NO esta incluido en el total de la factura. El pago se realiza directamente al tecnico.</em></small>' +
+      '</div><hr>' : '') +
+
+    // Valores
+    '<h6 class="fw-bold">VALORES</h6>' +
+    '<div class="row text-center mb-3">' +
+    '<div class="col-4">' +
+    '<div class="p-3 bg-light rounded"><small class="text-muted">Total</small><div class="h4">$' + montoFinal.toLocaleString('es-CL') + '</div></div>' +
+    '</div>' +
+    '<div class="col-4">' +
+    '<div class="p-3 bg-light rounded"><small class="text-muted">Abono</small><div class="h4">$' + ((orden.monto_abono || 0).toLocaleString('es-CL')) + '</div></div>' +
+    '</div>' +
+    '<div class="col-4">' +
+    '<div class="p-3 bg-light rounded"><small class="text-muted">Restante</small><div class="h4">$' + ((montoFinal - Number(orden.monto_abono || 0)).toLocaleString('es-CL')) + '</div></div>' +
+    '</div>' +
+    '</div>' +
+    (orden.metodo_pago ? '<p class="text-center"><strong>Método de Pago:</strong> ' + orden.metodo_pago + '</p>' : '') +
+    (notas ? '<hr><h6 class="fw-bold">NOTAS DEL TÉCNICO</h6><p>' + notas.replace(/\n/g, '<br>') + '</p>' : '') +
+    (pagoCompletado !== null ? '<hr><h6 class="fw-bold">PAGO</h6><p>' + (pagoCompletado ? '<span class="text-success fw-bold">Pago completado</span>' : '<span class="text-danger fw-bold">Pago pendiente</span>') + (metodoPago ? ' (' + metodoPago + ')' : '') + '</p>' : '') +
+
+    '</div>' +
+    '</div>' +
+
+    // === CONTENIDO PRINCIPAL (firma o cerrada) ===
+    contenidoPrincipal +
+
+    '</div>' + // cierra container
+
+    // === SCRIPTS ===
+    '<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"><\/script>' +
+    '<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>' +
+    '<script>' +
+
+    // === CANVAS DE FIRMA ===
+    'let canvas, ctx, drawing = false;' +
+    'document.addEventListener("DOMContentLoaded", function() {' +
+    '  canvas = document.getElementById("firma-canvas");' +
+    '  if (canvas) {' +
+    '    const rect = canvas.getBoundingClientRect();' +
+    '    canvas.width = rect.width;' +
+    '    canvas.height = 200;' +
+    '    ctx = canvas.getContext("2d");' +
+    '    ctx.strokeStyle = "#000";' +
+    '    ctx.lineWidth = 2;' +
+    '    ctx.lineCap = "round";' +
+    '    canvas.addEventListener("mousedown", startDrawing);' +
+    '    canvas.addEventListener("mousemove", draw);' +
+    '    canvas.addEventListener("mouseup", stopDrawing);' +
+    '    canvas.addEventListener("mouseout", stopDrawing);' +
+    '    canvas.addEventListener("touchstart", function(e) { e.preventDefault(); startDrawing(e.touches[0]); });' +
+    '    canvas.addEventListener("touchmove", function(e) { e.preventDefault(); draw(e.touches[0]); });' +
+    '    canvas.addEventListener("touchend", stopDrawing);' +
+    '  }' +
+    '});' +
+    'function startDrawing(e) { drawing = true; ctx.beginPath(); const rect = canvas.getBoundingClientRect(); ctx.moveTo((e.clientX||e.pageX) - rect.left, (e.clientY||e.pageY) - rect.top); }' +
+    'function draw(e) { if (!drawing) return; const rect = canvas.getBoundingClientRect(); ctx.lineTo((e.clientX||e.pageX) - rect.left, (e.clientY||e.pageY) - rect.top); ctx.stroke(); }' +
+    'function stopDrawing() { drawing = false; }' +
+    'function limpiarFirma() { ctx.clearRect(0, 0, canvas.width, canvas.height); }' +
+
+    // === GUARDAR FIRMA ===
+    'async function guardarFirma() {' +
+    '  const blank = document.createElement("canvas"); blank.width = canvas.width; blank.height = canvas.height;' +
+    '  if (canvas.toDataURL() === blank.toDataURL()) { alert("Por favor, firme en el área designada"); return; }' +
+    '  const firmaData = canvas.toDataURL("image/png");' +
+    '  try {' +
+    '    const response = await fetch(window.location.href, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ firma: firmaData }) });' +
+    '    const data = await response.json();' +
+    '    if (data.success) { window.location.reload(); } else { alert("Error: " + data.error); }' +
+    '  } catch (error) { console.error("Error:", error); alert("Error al guardar la firma. Intente nuevamente."); }' +
+    '}' +
+
+    // === GENERAR PDF COMPLETO ===
+    'function loadImage(src) {' +
+    '  return new Promise(function(resolve) {' +
+    '    var img = new Image(); img.crossOrigin = "anonymous";' +
+    '    var t = setTimeout(function() { resolve(null); }, 3000);' +
+    '    img.onload = function() { clearTimeout(t); resolve(img); };' +
+    '    img.onerror = function() { clearTimeout(t); resolve(null); };' +
+    '    img.src = src;' +
+    '  });' +
+    '}' +
+
+    'async function descargarPDF() {' +
+    '  const { jsPDF } = window.jspdf;' +
+    '  const doc = new jsPDF("p", "mm", "a4");' +
+    '  const ordenData = ' + ordenJson + ';' +
+    '  const costosData = ' + costosJson + ';' +
+    '  const totalExtras = ' + totalCostosNum + ';' +
+    '  const montoFinal = ' + montoFinalNum + ';' +
+    '  const numeroFormateado = "' + numeroFormateado + '";' +
+    '  const pageWidth = doc.internal.pageSize.getWidth();' +
+    '  const pageHeight = doc.internal.pageSize.getHeight();' +
+    '  const leftMargin = 10;' +
+    '  let yPos = 15;' +
+
+    // Watermark + Banner
+    '  var logoImg = await loadImage("corto.jpg");' +
+    '  var bannerImg = await loadImage("banner.jpeg");' +
+    '  if (logoImg) { doc.setGState(new doc.GState({ opacity: 0.08 })); var wmW = 80; var wmH = (logoImg.naturalHeight / logoImg.naturalWidth) * wmW; doc.addImage(logoImg, "JPEG", (pageWidth - wmW) / 2, (pageHeight - wmH) / 2, wmW, wmH); doc.setGState(new doc.GState({ opacity: 1 })); }' +
+    '  if (logoImg) { doc.addImage(logoImg, "JPEG", leftMargin, 5, 15, 10); }' +
+    '  if (bannerImg) { var bw = pageWidth - (leftMargin * 2); var bh = (bannerImg.naturalHeight / bannerImg.naturalWidth) * bw; var maxH = 30; var fbh = Math.min(bh, maxH); var fbw = (bannerImg.naturalWidth / bannerImg.naturalHeight) * fbh; doc.addImage(bannerImg, "JPEG", (pageWidth - fbw) / 2, yPos, fbw, fbh); yPos += fbh + 3; }' +
+
+    // Header
+    '  doc.setFontSize(8); doc.setTextColor(128,128,128); doc.text("OT #" + numeroFormateado, pageWidth - 15, 10, { align: "right" });' +
+    '  doc.setFontSize(16); doc.setTextColor(168,0,0); doc.text("ORDEN DE TRABAJO", pageWidth / 2, yPos, { align: "center" }); yPos += 8;' +
+    '  doc.setFontSize(10); doc.text("GLOBAL PRO AUTOMOTRIZ", pageWidth / 2, yPos, { align: "center" }); yPos += 10;' +
+
+    // Sección 1: Info Taller
+    '  doc.setTextColor(0,0,0); doc.setFontSize(9); doc.setFont(undefined, "bold"); doc.text("1. INFORMACION DEL TALLER", leftMargin, yPos); yPos += 6;' +
+    '  doc.setFont(undefined, "normal"); doc.setFontSize(7);' +
+    '  doc.text("Empresa: Global Pro Automotriz", leftMargin, yPos); yPos += 4;' +
+    '  doc.text("Direccion: Padre Alberto Hurtado 3596, Pedro Aguirre Cerda", leftMargin, yPos); yPos += 4;' +
+    '  doc.text("Contactos: +56 9 3902 6185", leftMargin, yPos); yPos += 10;' +
+
+    // Sección 2: Datos del Cliente
+    '  doc.setFontSize(9); doc.setFont(undefined, "bold"); doc.text("2. DATOS DEL CLIENTE", leftMargin, yPos); yPos += 6;' +
+    '  doc.setFont(undefined, "normal"); doc.setFontSize(7);' +
+    '  doc.text("Cliente: " + (ordenData.cliente_nombre || "N/A"), leftMargin, yPos); yPos += 4;' +
+    '  doc.text("RUT: " + (ordenData.cliente_rut || "N/A"), leftMargin, yPos); yPos += 4;' +
+    '  doc.text("Telefono: " + (ordenData.cliente_telefono || "N/A"), leftMargin, yPos); yPos += 4;' +
+    '  doc.text("Fecha Ingreso: " + (ordenData.fecha_ingreso || "N/A"), leftMargin, yPos); yPos += 10;' +
+
+    // Sección 3: Datos del Vehículo
+    '  doc.setFontSize(9); doc.setFont(undefined, "bold"); doc.text("3. DATOS DEL VEHICULO", leftMargin, yPos); yPos += 6;' +
+    '  doc.setFont(undefined, "normal"); doc.setFontSize(7);' +
+    '  doc.text("Patente: " + (ordenData.patente_placa || "N/A"), leftMargin, yPos); yPos += 4;' +
+    '  doc.text("Marca/Modelo: " + (ordenData.marca || "N/A") + " " + (ordenData.modelo || "") + " (" + (ordenData.anio || "N/A") + ")", leftMargin, yPos); yPos += 10;' +
+
+    // Sección 4: Diagnóstico / Trabajos
+    '  doc.setFontSize(9); doc.setFont(undefined, "bold"); doc.text("4. DIAGNOSTICO / TRABAJOS", leftMargin, yPos); yPos += 6;' +
+    '  doc.setFont(undefined, "normal"); doc.setFontSize(7);' +
+    '  var srvs = [];' +
+    '  if (ordenData.servicios_seleccionados) { try { var sp = typeof ordenData.servicios_seleccionados === "string" ? JSON.parse(ordenData.servicios_seleccionados) : ordenData.servicios_seleccionados; if (Array.isArray(sp) && sp.length > 0) srvs = sp; } catch(e) {} }' +
+    '  if (srvs.length > 0) {' +
+    '    var sub = 0;' +
+    '    srvs.forEach(function(s) {' +
+    '      if (yPos > 260) { doc.addPage(); yPos = 20; }' +
+    '      var pr = Number(s.precio_final || s.precio_sugerido || 0); sub += pr;' +
+    '      var tp = s.tipo_comision === "mano_obra" ? "MO" : "Rep";' +
+    '      doc.text("[x] " + (s.nombre || s.nombre_servicio || "") + " [" + tp + "] $" + pr.toLocaleString("es-CL", {maximumFractionDigits: 0}), leftMargin, yPos);' +
+    '      yPos += 5;' +
+    '    });' +
+    '    if (yPos > 260) { doc.addPage(); yPos = 20; }' +
+    '    doc.setFont(undefined, "bold"); doc.setFontSize(8);' +
+    '    doc.text("Subtotal Servicios: $" + sub.toLocaleString("es-CL", {maximumFractionDigits: 0}), leftMargin, yPos);' +
+    '    yPos += 6; doc.setFont(undefined, "normal"); doc.setFontSize(7);' +
+    '  } else {' +
+    '    var diagChecks = [];' +
+    '    if (ordenData.diagnostico_checks) { try { var dp = typeof ordenData.diagnostico_checks === "string" ? JSON.parse(ordenData.diagnostico_checks) : ordenData.diagnostico_checks; if (Array.isArray(dp) && dp.length > 0) diagChecks = dp; } catch(e) {} }' +
+    '    if (diagChecks.length === 0) {' +
+    '      if (ordenData.trabajo_frenos) diagChecks.push("Frenos");' +
+    '      if (ordenData.trabajo_luces) diagChecks.push("Luces");' +
+    '      if (ordenData.trabajo_tren_delantero) diagChecks.push("Tren Delantero");' +
+    '      if (ordenData.trabajo_correas) diagChecks.push("Correas");' +
+    '      if (ordenData.trabajo_componentes) diagChecks.push("Componentes");' +
+    '    }' +
+    '    if (diagChecks.length === 0) { doc.text("- Sin diagnostico", leftMargin, yPos); yPos += 5; }' +
+    '    else { diagChecks.forEach(function(item) { if (yPos > 260) { doc.addPage(); yPos = 20; } doc.text("- " + item, leftMargin, yPos); yPos += 5; }); }' +
+    '  }' +
+    '  yPos += 5;' +
+
+    // Sección 5: Checklist del vehículo
+    '  var tieneCheck = ordenData.nivel_combustible || ordenData.check_paragolfe_delantero_der || ordenData.check_puerta_delantera_der || ordenData.check_puerta_trasera_der || ordenData.check_paragolfe_trasero_izq || ordenData.check_otros_carroceria;' +
+    '  if (tieneCheck) {' +
+    '    if (yPos > 245) { doc.addPage(); yPos = 20; }' +
+    '    doc.setFontSize(9); doc.setFont(undefined, "bold"); doc.text("5. CHECKLIST DEL VEHICULO", leftMargin, yPos); yPos += 6;' +
+    '    doc.setFont(undefined, "normal"); doc.setFontSize(7);' +
+    '    doc.text("Combustible: " + (ordenData.nivel_combustible || "No registrado"), leftMargin, yPos); yPos += 5;' +
+    '    doc.text("Estado de Carroceria:", leftMargin, yPos); yPos += 4;' +
+    '    var danios = [];' +
+    '    if (ordenData.check_paragolfe_delantero_der) danios.push("Parachoques delantero derecho");' +
+    '    if (ordenData.check_puerta_delantera_der) danios.push("Puerta delantera derecha");' +
+    '    if (ordenData.check_puerta_trasera_der) danios.push("Puerta trasera derecha");' +
+    '    if (ordenData.check_paragolfe_trasero_izq) danios.push("Parachoques trasero izquierdo");' +
+    '    if (ordenData.check_otros_carroceria) danios.push(ordenData.check_otros_carroceria);' +
+    '    if (danios.length === 0) { doc.text("  Sin daños registrados", leftMargin, yPos); yPos += 5; }' +
+    '    else { danios.forEach(function(d) { if (yPos > 260) { doc.addPage(); yPos = 20; } doc.text("  * " + d, leftMargin, yPos); yPos += 4; }); }' +
+    '    yPos += 5;' +
+    '  }' +
+
+    // Sección 6: Observaciones
+    '  var diagnosticoObs = ordenData.diagnostico_observaciones || "";' +
+    '  if (diagnosticoObs) {' +
+    '    if (yPos > 245) { doc.addPage(); yPos = 20; }' +
+    '    doc.setFontSize(9); doc.setFont(undefined, "bold"); doc.text("OBSERVACIONES", leftMargin, yPos); yPos += 6;' +
+    '    doc.setFont(undefined, "normal"); doc.setFontSize(7);' +
+    '    doc.setFont(undefined, "italic"); doc.setTextColor(80,80,80);' +
+    '    doc.text(diagnosticoObs, leftMargin, yPos); yPos += 5;' +
+    '    doc.setFont(undefined, "normal"); doc.setTextColor(0,0,0);' +
+    '    yPos += 3;' +
+    '  }' +
+
+    // Sección 7: Valores
+    '  if (yPos > 245) { doc.addPage(); yPos = 20; }' +
+    '  doc.setFontSize(9); doc.setFont(undefined, "bold"); doc.text("6. VALORES", leftMargin, yPos); yPos += 6;' +
+    '  doc.setFont(undefined, "normal"); doc.setFontSize(7);' +
+    '  doc.text("Total: $" + montoFinal.toLocaleString("es-CL"), leftMargin, yPos); yPos += 4;' +
+    (totalCostos > 0 ? '  doc.text("(Base: $" + (montoBase.toLocaleString("es-CL")) + " + Extras: $" + totalCostos.toLocaleString("es-CL") + ")", leftMargin, yPos); yPos += 4;' : '') +
+    '  doc.text("Abono: $" + ((ordenData.monto_abono || 0).toLocaleString("es-CL")), leftMargin, yPos); yPos += 4;' +
+    '  doc.text("Restante: $" + (montoFinal - (ordenData.monto_abono || 0)).toLocaleString("es-CL"), leftMargin, yPos); yPos += 10;' +
+
+    // Sección 8: Domicilio (informativo, pago directo al tecnico)
+    '  var domDist = Number(ordenData.distancia_km || 0);' +
+    '  var domCargo = Number(ordenData.cargo_domicilio || 0);' +
+    '  var domModo = ordenData.domicilio_modo_cobro || "";' +
+    '  if (domDist > 0) {' +
+    '    if (yPos > 245) { doc.addPage(); yPos = 20; }' +
+    '    doc.setFontSize(9); doc.setFont(undefined, "bold"); doc.setTextColor(0,102,204); doc.text("8. DOMICILIO (Pago directo al tecnico)", leftMargin, yPos); yPos += 6;' +
+    '    doc.setFont(undefined, "normal"); doc.setFontSize(7); doc.setTextColor(0,0,0);' +
+    '    doc.text("Distancia recorrida: " + domDist + " km", leftMargin, yPos); yPos += 4;' +
+    '    if (domCargo > 0) {' +
+    '      doc.text("Cargo por domicilio: $" + domCargo.toLocaleString("es-CL") + " (pago directo al tecnico)", leftMargin, yPos); yPos += 4;' +
+    '    } else {' +
+    '      doc.text("Dentro del radio de cobertura gratuito", leftMargin, yPos); yPos += 4;' +
+    '    }' +
+    '    doc.setFont(undefined, "italic"); doc.setTextColor(100,100,100); doc.text("NOTA: Este valor NO esta incluido en el total de la factura. El pago se realiza directamente al tecnico.", leftMargin, yPos); yPos += 8;' +
+    '    doc.setFont(undefined, "normal"); doc.setTextColor(0,0,0);' +
+    '  }' +
+
+    // Sección 9: Gastos adicionales
+    '  if (costosData && costosData.length > 0) {' +
+    '    if (yPos > 245) { doc.addPage(); yPos = 20; }' +
+    '    doc.setFontSize(9); doc.setFont(undefined, "bold"); doc.setTextColor(168,0,0); doc.text("9. GASTOS ADICIONALES", leftMargin, yPos); yPos += 6;' +
+    '    doc.setFont(undefined, "normal"); doc.setFontSize(7); doc.setTextColor(0,0,0);' +
+    '    costosData.forEach(function(c) { if (yPos > 260) { doc.addPage(); yPos = 20; } doc.text("  - " + (c.concepto || "Gasto") + " (" + (c.categoria || "N/A") + "): $" + Number(c.monto || 0).toLocaleString("es-CL"), leftMargin, yPos); yPos += 5; });' +
+    '    yPos += 4;' +
+    '  }' +
+
+    // Sección 9: Notas
+    '  const notas = ' + JSON.stringify(orden.notas || '') + ';' +
+    '  if (notas) {' +
+    '    if (yPos > 245) { doc.addPage(); yPos = 20; }' +
+    '    const notasArr = notas.split("\\n");' +
+    '    let ncierre = ""; let notras = "";' +
+    '    for (const n of notasArr) { if (n.startsWith("Cierre: ")) { ncierre = n.replace("Cierre: ", ""); } else { notras += (notras ? "\\n" : "") + n; } }' +
+    '    doc.setFontSize(9); doc.setFont(undefined, "bold"); doc.text("10. NOTAS", leftMargin, yPos); yPos += 6;' +
+    '    doc.setFont(undefined, "normal"); doc.setFontSize(7);' +
+    '    if (ncierre) { doc.text("Cierre: " + ncierre, leftMargin, yPos); yPos += 4; }' +
+    '    if (notras) { doc.text("Otras: " + notras.replace(/\\n/g, ", "), leftMargin, yPos); yPos += 4; }' +
+    '    yPos += 6;' +
+    '  }' +
+
+    // Firma
+    '  if (ordenData.firma_imagen) {' +
+    '    if (yPos > 235) { doc.addPage(); yPos = 20; }' +
+    '    try {' +
+    '      doc.setFontSize(9); doc.setFont(undefined, "bold"); doc.text("FIRMA DEL CLIENTE", leftMargin, yPos); yPos += 4;' +
+    '      doc.setFont(undefined, "normal"); doc.setFontSize(7); doc.text("Fecha: " + (ordenData.fecha_aprobacion || "N/A"), leftMargin, yPos); yPos += 6;' +
+    '      doc.addImage(ordenData.firma_imagen, "PNG", leftMargin, yPos, 50, 30);' +
+    '    } catch(e) { console.error("Error firma PDF:", e); }' +
+    '  }' +
+
+    // Footer
+    '  doc.setFontSize(6); doc.setTextColor(128,128,128);' +
+    '  doc.text("Generado: " + new Date().toLocaleString("es-CL"), pageWidth / 2, pageHeight - 10, { align: "center" });' +
+    '  doc.text("Global Pro Automotriz - Padre Alberto Hurtado 3596, Pedro Aguirre Cerda", pageWidth / 2, pageHeight - 6, { align: "center" });' +
+
+    '  doc.save("OT-' + numeroFormateado + '-' + (orden.patente_placa || 'N/A') + '.pdf");' +
+    '}' +
+
+    '<\/script>' +
+    '</body>' +
+    '</html>';
+
+  return html;
 }
 
-function showClosureConfirmation() {
-  document.getElementById('loadingOverlay').style.display = 'none';
-  const content = document.querySelector('.content');
-  content.innerHTML = \`
-    <div class="card" style="padding:0;overflow:hidden;">
-      <div style="background:linear-gradient(135deg,#d1fae5 0%,#a7f3d0 100%);padding:40px 20px;text-align:center;">
-        <div style="width:80px;height:80px;border-radius:50%;background:#059669;color:white;display:flex;align-items:center;justify-content:center;font-size:2.5rem;margin:0 auto 20px;animation:scaleIn 0.5s cubic-bezier(0.175,0.885,0.32,1.275);">
-          <i class="fas fa-check"></i>
-        </div>
-        <h2 style="font-size:1.5rem;font-weight:800;color:#065f46;margin:0 0 8px;">\u00a1Orden Cerrada!</h2>
-        <p style="color:#047857;font-size:0.95rem;margin:0 0 4px;">La orden de trabajo ha sido cerrada exitosamente.</p>
-        <p style="color:#047857;font-size:0.85rem;margin:0;opacity:0.8;">Su firma ha sido registrada como conformidad con el trabajo realizado.</p>
-      </div>
-    </div>
-    <div class="btn-group-actions" style="margin-top:20px;">
-      <button class="btn-action btn-pdf" onclick="generatePDF()">
-        <i class="fas fa-file-pdf me-2"></i>Descargar PDF
-      </button>
-      <a href="https://wa.me/${(client?.telefono || '').replace(/[^0-9+]/g,'')}" class="btn-action btn-whatsapp" target="_blank">
-        <i class="fab fa-whatsapp me-2"></i>Compartir por WhatsApp
-      </a>
-    </div>
-  \`;
-}
-
-function showToast(message, type) {
-  const toast = document.createElement('div');
-  toast.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:' +
-    (type === 'danger' ? '#dc2626' : type === 'warning' ? '#f59e0b' : '#374151') +
-    ';color:white;padding:12px 24px;border-radius:10px;font-size:0.9rem;font-weight:500;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.2);animation:fadeInUp 0.3s ease;';
-  toast.textContent = message;
-  document.body.appendChild(toast);
-  setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity 0.3s'; setTimeout(() => toast.remove(), 300); }, 3000);
-}
-</script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>`;
+function obtenerClaseEstado(estado) {
+  const clases = {
+    'Pendiente Visita': 'bg-warning',
+    'En Sitio': 'bg-info',
+    'En Progreso': 'bg-primary',
+    'Pendiente Piezas': 'bg-secondary',
+    'Completada': 'bg-success',
+    'Aprobada': 'bg-success',
+    'Usuario Satisfecho': 'bg-success',
+    'No Completada': 'bg-danger',
+    'Cerrada': 'bg-success'
+  };
+  return clases[estado] || 'bg-secondary';
 }

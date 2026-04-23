@@ -1,103 +1,204 @@
-// ============================================================
-// BizFlow - Cálculo de Distancia y Geolocalización
-// Geolocation API + OSRM Routing + Haversine
-// ============================================================
+// ============================================
+// LIB: CALCULO DE DISTANCIA Y CARGO POR DOMICILIO
+// Global Pro Automotriz
+// - Usa OSRM (gratis, sin API key) para distancia real por carretera
+// - Fallback a Haversine (linea recta * 1.3) si OSRM falla
+// ============================================
 
-// Fórmula de Haversine para distancia entre dos puntos GPS
-// Retorna distancia en kilómetros
-export function haversine(lat1, lon1, lat2, lon2) {
-  const R = 6371; // Radio de la Tierra en km
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+// Calcular distancia via OSRM (gratis, sin API key, sin tarjeta)
+async function obtenerDistanciaOSRM(origenLat, origenLng, destinoLat, destinoLng) {
+  try {
+    var url = 'https://router.project-osrm.org/route/v1/driving/' +
+      origenLng + ',' + origenLat + ';' +
+      destinoLng + ',' + destinoLat +
+      '?overview=false';
+
+    var response = await fetch(url, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    });
+
+    if (!response.ok) return null;
+
+    var data = await response.json();
+
+    if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
+      // OSRM devuelve distancia en metros
+      var distanciaMetros = data.routes[0].distance;
+      return distanciaMetros / 1000; // convertir a km
+    }
+
+    return null;
+  } catch (e) {
+    console.log('OSRM no disponible, usando Haversine:', e.message);
+    return null;
+  }
+}
+
+// Fallback: Haversine (linea recta) con factor de correccion ~1.3
+function distanciaHaversine(lat1, lon1, lat2, lon2) {
+  var R = 6371; // Radio de la Tierra en km
+  var dLat = (lat2 - lat1) * Math.PI / 180;
+  var dLon = (lon2 - lon1) * Math.PI / 180;
+  var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
     Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
 
-function toRad(deg) {
-  return deg * (Math.PI / 180);
-}
+// Obtener configuracion de domicilio desde ConfigKV
+async function getConfigDomicilio(env) {
+  var config = {
+    habilitado: false,
+    taller_lat: 0,
+    taller_lng: 0,
+    radio_gratis_km: 5,
+    tarifa_por_km: 500,
+    cargo_minimo: 1000,
+    modo_cobro: 'pago_directo_tecnico', // pago_directo_tecnico | no_cobrar | sumar_factura
+    cobertura_maxima_km: 50
+  };
 
-// Calcular distancia y tiempo estimado usando OSRM (routing)
-// @param {number} lat1 - Latitud origen
-// @param {number} lon1 - Longitud origen
-// @param {number} lat2 - Latitud destino
-// @param {number} lon2 - Longitud destino
-// @returns {object} - { distanciaKm, tiempoMinutos, ruta }
-export async function calcularRutaOSRM(lat1, lon1, lat2, lon2) {
-  try {
-    const url = `https://router.project-osrm.org/route/v1/driving/${lon1},${lat1};${lon2},${lat2}?overview=full&geometries=geojson`;
-    const response = await fetch(url);
-    const data = await response.json();
+  var keys = [
+    'domicilio_habilitado', 'domicilio_taller_lat', 'domicilio_taller_lng',
+    'domicilio_radio_gratis_km', 'domicilio_tarifa_por_km', 'domicilio_cargo_minimo',
+    'domicilio_modo_cobro', 'domicilio_cobertura_maxima_km'
+  ];
 
-    if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
-      const route = data.routes[0];
-      return {
-        distanciaKm: Math.round(route.distance / 100) / 10,
-        tiempoMinutos: Math.round(route.duration / 60),
-        ruta: route.geometry
-      };
-    }
-  } catch (error) {
-    console.error('Error OSRM:', error);
+  for (var i = 0; i < keys.length; i++) {
+    try {
+      var row = await env.DB.prepare(
+        "SELECT valor FROM ConfigKV WHERE clave = ?"
+      ).bind(keys[i]).first();
+      if (row && row.valor !== null && row.valor !== '') {
+        var val = row.valor;
+        if (val === 'true' || val === 'false') {
+          config[keys[i].replace('domicilio_', '')] = val === 'true';
+        } else if (!isNaN(Number(val))) {
+          config[keys[i].replace('domicilio_', '')] = Number(val);
+        } else {
+          config[keys[i].replace('domicilio_', '')] = val;
+        }
+      }
+    } catch (e) {}
   }
 
-  // Fallback a Haversine si OSRM falla
+  return config;
+}
+
+// Calcular cargo por domicilio
+function calcularCargoDomicilio(distanciaKm, config) {
+  if (!config.habilitado || !config.taller_lat || !config.taller_lng) {
+    return { distancia_km: 0, cargo: 0, km_cobrables: 0, mensaje: 'Domicilio no configurado' };
+  }
+
+  if (distanciaKm <= 0) {
+    return { distancia_km: 0, cargo: 0, km_cobrables: 0, mensaje: 'Sin distancia' };
+  }
+
+  var kmCobrables = Math.max(0, distanciaKm - config.radio_gratis_km);
+
+  if (kmCobrables <= 0) {
+    return {
+      distancia_km: Math.round(distanciaKm * 10) / 10,
+      cargo: 0,
+      km_cobrables: 0,
+      mensaje: 'Dentro del radio gratis (' + config.radio_gratis_km + ' km)'
+    };
+  }
+
+  var cargo = Math.round(kmCobrables * config.tarifa_por_km);
+
+  // Aplicar cargo minimo
+  if (cargo < config.cargo_minimo) {
+    cargo = config.cargo_minimo;
+  }
+
   return {
-    distanciaKm: Math.round(haversine(lat1, lon1, lat2, lon2) * 10) / 10,
-    tiempoMinutos: Math.round(haversine(lat1, lon1, lat2, lon2) * 1.5), // ~40km/h promedio
-    ruta: null
+    distancia_km: Math.round(distanciaKm * 10) / 10,
+    cargo: cargo,
+    km_cobrables: Math.round(kmCobrables * 10) / 10,
+    radio_gratis: config.radio_gratis_km,
+    tarifa_por_km: config.tarifa_por_km,
+    mensaje: kmCobrables.toFixed(1) + ' km x $' + config.tarifa_por_km + '/km'
   };
 }
 
-// Calcular distancia a cada técnico desde una ubicación
-// @param {Array} tecnicos - [{ id, nombre, latitud, longitud }]
-// @param {number} lat - Latitud destino
-// @param {number} lon - Longitud destino
-// @returns {Array} - Tecnicos ordenados por distancia
-export async function ordenarTecnicosPorDistancia(tecnicos, lat, lon) {
-  const resultados = [];
+// Funcion principal: calcular distancia + cargo
+async function calcularDomicilio(env, destinoLat, destinoLng) {
+  var config = await getConfigDomicilio(env);
 
-  for (const tecnico of tecnicos) {
-    if (tecnico.latitud && tecnico.longitud) {
-      const distancia = haversine(lat, lon, tecnico.latitud, tecnico.longitud);
-      resultados.push({
-        ...tecnico,
-        distanciaKm: Math.round(distancia * 10) / 10,
-        distanciaTexto: distancia < 1
-          ? `${Math.round(distancia * 1000)}m`
-          : `${Math.round(distancia * 10) / 10}km`
-      });
-    } else {
-      resultados.push({
-        ...tecnico,
-        distanciaKm: null,
-        distanciaTexto: 'Sin ubicación'
-      });
-    }
+  if (!config.habilitado) {
+    return {
+      calculado: false,
+      distancia_km: 0,
+      cargo: 0,
+      modo_cobro: 'no_cobrar',
+      mensaje: 'Domicilio no habilitado'
+    };
   }
 
-  return resultados.sort((a, b) => {
-    if (a.distanciaKm === null) return 1;
-    if (b.distanciaKm === null) return -1;
-    return a.distanciaKm - b.distanciaKm;
-  });
+  if (!config.taller_lat || !config.taller_lng) {
+    return {
+      calculado: false,
+      distancia_km: 0,
+      cargo: 0,
+      modo_cobro: config.modo_cobro,
+      mensaje: 'Coordenadas del taller no configuradas'
+    };
+  }
+
+  // Validar que coordenadas del taller sean validas (lat: -90 a 90, lng: -180 a 180)
+  if (Math.abs(config.taller_lat) > 90 || Math.abs(config.taller_lng) > 180) {
+    return {
+      calculado: false,
+      distancia_km: 0,
+      cargo: 0,
+      modo_cobro: config.modo_cobro,
+      mensaje: 'Coordenadas del taller invalidas. Reconfigura la ubicacion.'
+    };
+  }
+
+  // Validar que coordenadas del destino (tecnico) sean validas
+  if (!destinoLat || !destinoLng || Math.abs(destinoLat) > 90 || Math.abs(destinoLng) > 180) {
+    return {
+      calculado: false,
+      distancia_km: 0,
+      cargo: 0,
+      modo_cobro: config.modo_cobro,
+      mensaje: 'Coordenadas GPS del tecnico invalidas.'
+    };
+  }
+
+  // Intentar OSRM primero (distancia real por carretera)
+  var distanciaKm = await obtenerDistanciaOSRM(
+    config.taller_lat, config.taller_lng,
+    destinoLat, destinoLng
+  );
+
+  // Fallback a Haversine si OSRM falla
+  if (distanciaKm === null || distanciaKm === 0) {
+    distanciaKm = distanciaHaversine(
+      config.taller_lat, config.taller_lng,
+      destinoLat, destinoLng
+    );
+    distanciaKm = distanciaKm * 1.3; // factor correccion carretera
+    distanciaKm = Math.round(distanciaKm * 10) / 10;
+  }
+
+  var cargo = calcularCargoDomicilio(distanciaKm, config);
+
+  return {
+    calculado: true,
+    distancia_km: cargo.distancia_km,
+    cargo: cargo.cargo,
+    km_cobrables: cargo.km_cobrables,
+    modo_cobro: config.modo_cobro,
+    mensaje: cargo.mensaje,
+    radio_gratis: config.radio_gratis_km,
+    tarifa_por_km: config.tarifa_por_km
+  };
 }
 
-// Formatear distancia para mostrar
-export function formatearDistancia(km) {
-  if (km === null || km === undefined) return 'N/A';
-  if (km < 1) return `${Math.round(km * 1000)}m`;
-  return `${km.toFixed(1)}km`;
-}
-
-// Formatear duración para mostrar
-export function formatearDuracion(minutos) {
-  if (minutos === null || minutos === undefined) return 'N/A';
-  if (minutos < 60) return `${Math.round(minutos)}min`;
-  const horas = Math.floor(minutos / 60);
-  const mins = Math.round(minutos % 60);
-  return `${horas}h ${mins}min`;
-}
+export { calcularDomicilio, getConfigDomicilio, calcularCargoDomicilio, obtenerDistanciaOSRM };

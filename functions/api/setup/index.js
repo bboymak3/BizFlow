@@ -374,6 +374,38 @@ export async function onRequestGet(context) {
         creado_en TEXT DEFAULT (datetime('now')),
         FOREIGN KEY (usuario_id) REFERENCES Usuarios(id) ON DELETE SET NULL
       )`,
+      // Globalprov2 additional tables
+      `CREATE TABLE IF NOT EXISTS ConfigKV (
+        clave TEXT PRIMARY KEY,
+        valor TEXT,
+        actualizado_en TEXT DEFAULT (datetime('now'))
+      )`,
+      `CREATE TABLE IF NOT EXISTS AdminUsers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        usuario TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        nombre TEXT,
+        activo INTEGER DEFAULT 1,
+        creado_en TEXT
+      )`,
+      `CREATE TABLE IF NOT EXISTS SesionesAdmin (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        usuario TEXT NOT NULL,
+        token TEXT UNIQUE NOT NULL,
+        expira TEXT NOT NULL,
+        fecha_creacion TEXT DEFAULT (datetime('now'))
+      )`,
+      `CREATE TABLE IF NOT EXISTS SeguimientoTrabajo (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        orden_id INTEGER NOT NULL,
+        tecnico_id INTEGER,
+        estado_anterior TEXT DEFAULT '',
+        estado_nuevo TEXT NOT NULL,
+        latitud REAL,
+        longitud REAL,
+        observaciones TEXT,
+        fecha_registro TEXT DEFAULT (datetime('now'))
+      )`,
     ];
 
     for (const sql of tables) {
@@ -482,6 +514,37 @@ export async function onRequestGet(context) {
       }
     }
     results.push({ action: 'vehicle_models_seeded', count: modelos.length, status: 'ok' });
+
+    // ============================================================
+    // SEED GLOBALPROV2 ADMIN USER (admin / globalpro2025)
+    // ============================================================
+    try {
+      const gpAdmin = await env.DB.prepare('SELECT id FROM AdminUsers WHERE usuario = ?').bind('admin').first();
+      if (!gpAdmin) {
+        await env.DB.prepare(
+          "INSERT INTO AdminUsers (usuario, password_hash, nombre) VALUES (?, ?, ?)"
+        ).bind('admin', 'globalpro2025', 'Administrador').run();
+        results.push({ action: 'gp_admin_created', status: 'ok' });
+      } else {
+        results.push({ action: 'gp_admin_exists', status: 'ok' });
+      }
+    } catch (e) {
+      results.push({ action: 'gp_admin', status: 'error', error: e.message });
+    }
+
+    // Seed ConfigKV defaults
+    try {
+      await env.DB.prepare("INSERT OR IGNORE INTO ConfigKV (clave, valor) VALUES ('negocio_nombre', 'BizFlow')").run();
+      await env.DB.prepare("INSERT OR IGNORE INTO ConfigKV (clave, valor) VALUES ('ultimo_numero_orden', '0')").run();
+      results.push({ action: 'configkv_seeded', status: 'ok' });
+    } catch (e) {}
+
+    // ============================================================
+    // ADD GLOBALPROV2 COLUMNS (dynamic migration)
+    // ============================================================
+    try {
+      await env.DB.prepare('ALTER TABLE Configuracion ADD COLUMN ultimo_numero_orden INTEGER DEFAULT 0').run();
+    } catch (e) {} // column already exists
 
     return successRes({
       message: 'BizFlow database initialized successfully!',
