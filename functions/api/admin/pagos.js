@@ -54,7 +54,7 @@ async function handleGet(request, DB) {
   }
 
   if (metodo) {
-    whereClause += ' AND p.metodo = ?';
+    whereClause += ' AND p.metodo_pago = ?';
     params.push(metodo);
   }
 
@@ -121,7 +121,7 @@ async function handlePost(request, DB) {
   const now = hoyISO();
 
   const result = await DB.prepare(`
-    INSERT INTO Pagos (orden_id, monto, metodo, referencia, fecha_pago, notas)
+    INSERT INTO Pagos (orden_id, monto, metodo_pago, referencia, fecha_pago, observaciones)
     VALUES (?, ?, ?, ?, ?, ?)
   `).bind(
     orden_id,

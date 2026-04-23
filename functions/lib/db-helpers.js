@@ -227,8 +227,9 @@ export async function asegurarColumnasFaltantes(env) {
     const colsOT = [
       'numero_orden INTEGER', 'token TEXT', 'patente_placa TEXT',
       'fecha_ingreso TEXT', 'hora_ingreso TEXT', 'recepcionista TEXT',
-      'marca TEXT', 'modelo TEXT', 'cilindrada TEXT', 'combustible TEXT',
-      'direccion TEXT', 'trabajo_frenos INTEGER DEFAULT 0', 'detalle_frenos TEXT',
+      'marca TEXT', 'modelo TEXT', 'anio INTEGER', 'cilindrada TEXT', 'combustible TEXT',
+      'kilometraje TEXT', 'direccion TEXT',
+      'trabajo_frenos INTEGER DEFAULT 0', 'detalle_frenos TEXT',
       'trabajo_luces INTEGER DEFAULT 0', 'detalle_luces TEXT',
       'trabajo_tren_delantero INTEGER DEFAULT 0', 'detalle_tren_delantero TEXT',
       'trabajo_correas INTEGER DEFAULT 0', 'detalle_correas TEXT',
@@ -250,7 +251,14 @@ export async function asegurarColumnasFaltantes(env) {
       'cargo_domicilio REAL DEFAULT 0',
       "domicilio_modo_cobro TEXT DEFAULT 'no_cobrar'",
       'diagnostico_checks TEXT', 'diagnostico_observaciones TEXT',
-      'servicios_seleccionados TEXT', 'fecha_completado TEXT'
+      'servicios_seleccionados TEXT', 'fecha_completado TEXT',
+      'aprobado_por TEXT', 'token_firma_tecnico TEXT',
+      'negocio_id INTEGER', 'cliente_email TEXT',
+      'monto_base REAL DEFAULT 0', 'mano_obra REAL DEFAULT 0',
+      'descuento REAL DEFAULT 0', 'monto_final REAL DEFAULT 0',
+      'urgencia TEXT', 'color TEXT',
+      'cerrada_por TEXT', 'fecha_cierre TEXT',
+      'patente TEXT'
     ];
     for (const colDef of colsOT) {
       try { await env.DB.prepare(`ALTER TABLE OrdenesTrabajo ADD COLUMN ${colDef}`).run(); } catch (e) {}
@@ -266,6 +274,9 @@ export async function asegurarColumnasFaltantes(env) {
     try { await env.DB.prepare(`ALTER TABLE CostosAdicionales ADD COLUMN categoria TEXT NOT NULL DEFAULT 'Mano de Obra'`).run(); } catch (e) {}
     try { await env.DB.prepare(`ALTER TABLE CostosAdicionales ADD COLUMN fecha_registro DATETIME DEFAULT CURRENT_TIMESTAMP`).run(); } catch (e) {}
     try { await env.DB.prepare(`ALTER TABLE CostosAdicionales ADD COLUMN registrado_por TEXT`).run(); } catch (e) {}
+    try { await env.DB.prepare(`ALTER TABLE CostosAdicionales ADD COLUMN cantidad REAL DEFAULT 1`).run(); } catch (e) {}
+    try { await env.DB.prepare(`ALTER TABLE CostosAdicionales ADD COLUMN precio_unitario REAL DEFAULT 0`).run(); } catch (e) {}
+    try { await env.DB.prepare(`ALTER TABLE CostosAdicionales ADD COLUMN total REAL DEFAULT 0`).run(); } catch (e) {}
 
     // Columns in ServiciosCatalogo
     try { await env.DB.prepare(`ALTER TABLE ServiciosCatalogo ADD COLUMN precio_sugerido REAL NOT NULL DEFAULT 0`).run(); } catch (e) {}
@@ -289,6 +300,10 @@ export async function asegurarColumnasFaltantes(env) {
     try { await env.DB.prepare(`ALTER TABLE Vehiculos ADD COLUMN patente_placa TEXT`).run(); } catch (e) {}
     try { await env.DB.prepare(`ALTER TABLE Vehiculos ADD COLUMN cilindrada TEXT`).run(); } catch (e) {}
     try { await env.DB.prepare(`ALTER TABLE Vehiculos ADD COLUMN combustible TEXT`).run(); } catch (e) {}
+    try { await env.DB.prepare(`ALTER TABLE Vehiculos ADD COLUMN kilometraje TEXT`).run(); } catch (e) {}
+    try { await env.DB.prepare(`ALTER TABLE Vehiculos ADD COLUMN color TEXT`).run(); } catch (e) {}
+    try { await env.DB.prepare(`ALTER TABLE Vehiculos ADD COLUMN vin TEXT`).run(); } catch (e) {}
+    try { await env.DB.prepare(`ALTER TABLE Vehiculos ADD COLUMN negocio_id INTEGER`).run(); } catch (e) {}
 
     // ConfigKV default rows
     try { await env.DB.prepare(`INSERT OR IGNORE INTO ConfigKV (clave, valor) VALUES ('negocio_nombre', 'BizFlow')`).run(); } catch (e) {}
