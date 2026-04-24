@@ -194,6 +194,8 @@ const Router = {
         'liquidar-tecnicos': 'page-liquidar-tecnicos',
         'servicios': 'page-servicios',
         'modelos-vehiculo': 'page-modelos-vehiculo',
+        'express': 'page-express',
+        'calendario': 'page-calendario',
         'costos-adicionales': 'page-costos-adicionales',
         'gastos': 'page-gastos',
         'reportes': 'page-reportes',
@@ -215,6 +217,8 @@ const Router = {
         'liquidar-tecnicos': 'Liquidar Técnicos',
         'servicios': 'Catálogo de Servicios',
         'modelos-vehiculo': 'Modelos de Vehículos',
+        'express': 'Órdenes Express',
+        'calendario': 'Calendario',
         'costos-adicionales': 'Costos Adicionales',
         'gastos': 'Gastos del Negocio',
         'reportes': 'Reporte General',
@@ -276,6 +280,8 @@ const Router = {
             case 'configuracion': App.config.load(); break;
             case 'inventario': App.inventario.load(); break;
             case 'contabilidad': App.contabilidad.load(); break;
+            case 'express': App.express.init(); break;
+            case 'calendario': App.calendario.init(); break;
             case 'costos-adicionales': App.costosAdicionales.load(); break;
             case 'notificaciones': App.notificaciones.load(); break;
         }
@@ -857,6 +863,25 @@ const App = {
                 this.buscar();
             } catch (err) { Utils.toast(err.message, 'error'); }
         },
+
+        async verOrden(id) {
+            await App.ordenes.ver(id);
+        },
+
+        async editarOrden(id) {
+            await App.ordenes.editar(id);
+        },
+
+        async generarPDF(orden) {
+            generarPDFOrden(orden);
+        },
+
+        abrirCostos(id) {
+            // Se necesita numeroOrden y patente - obtener de _data
+            const o = this._data.find(x => x.id === id);
+            if (!o) { Utils.toast('Orden no encontrada', 'warning'); return; }
+            App.costosAdicionales.abrir(id, o.numero_orden, o.patente_placa || o.patente, o.cliente_nombre || '');
+        },
     },
 
     // ========================================================
@@ -1156,6 +1181,36 @@ const App = {
             try { await API.delete(`/tecnicos/${id}`); Utils.toast('Técnico eliminado', 'success'); this.load(); }
             catch (err) { Utils.toast(err.message, 'error'); }
         },
+
+        async abrirComisiones() {
+            Utils.showModal('modalComisionTecnicos');
+            try {
+                const data = await API.get('/tecnicos');
+                const tecnicos = data.data || data.tecnicos || data || [];
+                const lista = document.getElementById('lista-comisiones-tecnicos');
+                if (!lista) return;
+                if (!tecnicos.length) { lista.innerHTML = '<p style="color:#94a3b8;">No hay técnicos registrados</p>'; return; }
+                lista.innerHTML = '<table class="bf-table"><thead><tr><th>Técnico</th><th>Teléfono</th><th>Comisión %</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>' +
+                    tecnicos.map(t => `<tr>
+                        <td class="fw-600">${Utils.escapeHTML(t.nombre)}</td>
+                        <td>${Utils.escapeHTML(t.telefono || '--')}</td>
+                        <td><input type="number" class="bf-input" style="width:100px;text-align:center;" id="comision-tec-${t.id}" value="${t.comision_porcentaje || 15}" min="0" max="100" step="5"></td>
+                        <td><span class="badge-st" style="background:${t.activo !== false ? '#dcfce7;color:#16a34a;' : '#fee2e2;color:#dc2626;'}">${t.activo !== false ? 'Activo' : 'Inactivo'}</span></td>
+                        <td><button class="btn-bf" style="font-size:0.78rem;" onclick="App.tecnicos.guardarComision(${t.id})"><i class="fa-solid fa-save"></i></button></td>
+                    </tr>`).join('') +
+                    '</tbody></table>';
+            } catch (err) { Utils.toast('Error cargando comisiones', 'error'); }
+        },
+
+        async guardarComision(id, porcentaje) {
+            const input = document.getElementById(`comision-tec-${id}`);
+            const comision = input ? parseFloat(input.value) : (porcentaje || null);
+            if (isNaN(comision) || comision < 0 || comision > 100) { Utils.toast('La comisión debe ser entre 0% y 100%', 'warning'); return; }
+            try {
+                await API.put(`/tecnicos/${id}`, { comision_porcentaje: comision });
+                Utils.toast(`Comisión actualizada a ${comision}%`, 'success');
+            } catch (err) { Utils.toast(err.message, 'error'); }
+        },
     },
 
     // ========================================================
@@ -1335,6 +1390,83 @@ const App = {
             if (!await Utils.confirm('¿Eliminar este servicio?')) return;
             try { await API.delete(`/servicios-catalogo/${id}`); Utils.toast('Servicio eliminado', 'success'); this.load(); }
             catch (err) { Utils.toast(err.message, 'error'); }
+        },
+
+        async abrirCatalogo() {
+            Utils.showModal('modalServiciosCatalogo');
+            await this.cargarCatalogo();
+        },
+
+        async cargarCatalogo() {
+            try {
+                const q = Utils.val('buscador-servicios-cat') || '';
+                let endpoint = '/servicios-catalogo?activos=0';
+                if (q) endpoint += `&q=${encodeURIComponent(q)}`;
+                const data = await API.get(endpoint);
+                const servicios = data.servicios || data.data || data || [];
+                this.renderizarCatalogo(servicios);
+            } catch (err) { Utils.toast('Error cargando catálogo', 'error'); }
+        },
+
+        renderizarCatalogo(servicios) {
+            const lista = document.getElementById('lista-servicios-catalogo');
+            if (!lista) return;
+            if (!servicios || servicios.length === 0) {
+                lista.innerHTML = '<div class="bf-empty"><i class="fa-solid fa-wrench"></i>No hay servicios</div>';
+                return;
+            }
+            lista.innerHTML = '<table class="bf-table"><thead><tr><th>Servicio</th><th>Precio</th><th>Categoría</th><th>Tipo</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>' +
+                servicios.map(s => {
+                    const tipoBadge = s.tipo_comision === 'mano_obra'
+                        ? '<span class="badge-st" style="background:#fef3c7;color:#d97706;">MO</span>'
+                        : '<span class="badge-st" style="background:#e2e8f0;color:#475569;">Rep</span>';
+                    const estadoBadge = s.activo !== false
+                        ? '<span class="badge-st" style="background:#dcfce7;color:#16a34a;">Activo</span>'
+                        : '<span class="badge-st" style="background:#fee2e2;color:#dc2626;">Inactivo</span>';
+                    return `<tr class="${s.activo !== false ? '' : 'opacity-50'}">
+                        <td class="fw-600">${Utils.escapeHTML(s.nombre)}</td>
+                        <td><input type="number" class="bf-input" style="width:100px;" value="${s.precio_sugerido || 0}" min="0" onchange="App.servicios.actualizarPrecio(${s.id}, this.value)" ${s.activo === false ? 'disabled' : ''}></td>
+                        <td>${Utils.escapeHTML(s.categoria || '')}</td>
+                        <td>${tipoBadge}</td>
+                        <td>${estadoBadge}</td>
+                        <td><div class="d-flex gap-1">
+                            <button class="btn-bf-icon" onclick="App.servicios.cambiarEstado(${s.id}, ${!s.activo})" title="${s.activo !== false ? 'Desactivar' : 'Reactivar'}"><i class="fa-solid fa-${s.activo !== false ? 'toggle-on' : 'toggle-off'}"></i></button>
+                        </div></td>
+                    </tr>`;
+                }).join('') +
+                '</tbody></table>';
+        },
+
+        async guardarNuevo() {
+            const nombre = Utils.val('nuevo-serv-nombre');
+            const precio = parseFloat(Utils.val('nuevo-serv-precio')) || 0;
+            const categoria = Utils.val('nuevo-serv-categoria') || 'mecanica';
+            const tipoComision = Utils.val('nuevo-serv-tipo-comision') || 'mano_obra';
+            if (!nombre) { Utils.toast('El nombre es requerido', 'warning'); return; }
+            try {
+                await API.post('/servicios-catalogo', { nombre, precio_sugerido: precio, categoria, tipo_comision: tipoComision });
+                Utils.toast('Servicio creado', 'success');
+                Utils.setVal('nuevo-serv-nombre', '');
+                Utils.setVal('nuevo-serv-precio', '');
+                await this.cargarCatalogo();
+            } catch (err) { Utils.toast(err.message, 'error'); }
+        },
+
+        async actualizarPrecio(id, precio) {
+            try {
+                await API.put(`/servicios-catalogo/${id}`, { precio_sugerido: parseFloat(precio) || 0 });
+                Utils.toast('Precio actualizado', 'success');
+            } catch (err) { Utils.toast(err.message, 'error'); }
+        },
+
+        async cambiarEstado(id, activo) {
+            const label = activo ? 'reactivar' : 'desactivar';
+            if (!await Utils.confirm(`¿${label} este servicio?`)) return;
+            try {
+                await API.put(`/servicios-catalogo/${id}`, { activo });
+                Utils.toast(`Servicio ${activo ? 'reactivado' : 'desactivado'}`, 'success');
+                await this.cargarCatalogo();
+            } catch (err) { Utils.toast(err.message, 'error'); }
         },
     },
 
@@ -2055,7 +2187,1051 @@ const App = {
             }
         },
     },
+
+    // ========================================================
+    // EXPRESS - Órdenes Express Dashboard
+    // ========================================================
+    express: {
+        _data: [],
+
+        async init() {
+            await this.cargar();
+        },
+
+        async cargar() {
+            try {
+                const estado = Utils.val('express-filtro-estado') || '';
+                const tecnicoId = Utils.val('express-filtro-tecnico') || '';
+                const periodo = Utils.val('express-filtro-periodo') || '';
+                const valor = Utils.val('express-filtro-valor') || '';
+
+                let endpoint = '/ordenes-express?';
+                if (estado) endpoint += `estado=${encodeURIComponent(estado)}&`;
+                if (tecnicoId) endpoint += `tecnico_id=${encodeURIComponent(tecnicoId)}&`;
+                if (periodo) endpoint += `periodo=${encodeURIComponent(periodo)}&`;
+                if (valor) endpoint += `valor=${encodeURIComponent(valor)}&`;
+
+                const data = await API.get(endpoint);
+                if (data.success || data.ordenes) {
+                    this._data = data.ordenes || [];
+                    this.renderizarKPIs(data.metricas);
+                    this.renderizarProgreso(data.metricas);
+                    this.renderizarFinanciero(data.metricas);
+                    this.renderizar(data.ordenes || []);
+                    this.actualizarSelectTecnicos(data.tecnicos || []);
+                } else {
+                    const container = document.getElementById('express-lista');
+                    if (container) container.innerHTML = '<div class="bf-empty"><i class="fa-solid fa-exclamation-triangle"></i>Error cargando órdenes express</div>';
+                }
+            } catch (err) {
+                console.error('Error al cargar órdenes express:', err);
+                const container = document.getElementById('express-lista');
+                if (container) container.innerHTML = '<div class="bf-empty"><i class="fa-solid fa-exclamation-triangle"></i>Error de conexión</div>';
+            }
+        },
+
+        renderizarKPIs(m) {
+            if (!m) return;
+            Utils.setText('express-kpi-total', m.total_express || 0);
+            Utils.setText('express-kpi-pendientes', (m.pendientes || 0) + (m.en_sitio || 0) + (m.en_progreso || 0) + (m.pendiente_piezas || 0));
+            Utils.setText('express-kpi-cerradas', (m.cerradas || 0) + (m.completadas || 0));
+            Utils.setText('express-kpi-sin-asignar', m.sin_asignar || 0);
+        },
+
+        renderizarProgreso(m) {
+            if (!m) return;
+            const total = m.total_express || 0;
+            const barra = document.getElementById('express-barra-progreso');
+            const texto = document.getElementById('express-progreso-texto');
+            if (!barra || !texto) return;
+
+            if (total === 0) {
+                barra.style.width = '0%';
+                barra.textContent = '0%';
+                texto.textContent = 'Sin datos';
+                Utils.setText('express-barra-pend', '0');
+                Utils.setText('express-barra-prog', '0');
+                Utils.setText('express-barra-comp', '0');
+                Utils.setText('express-barra-nocomp', '0');
+                return;
+            }
+
+            const pendientes = (m.pendientes || 0) + (m.pendiente_piezas || 0);
+            const enProgreso = (m.en_sitio || 0) + (m.en_progreso || 0);
+            const completadas = (m.cerradas || 0) + (m.completadas || 0);
+            const noCompletadas = m.no_completadas || 0;
+            const pct = Math.round((completadas / total) * 100);
+
+            barra.style.width = pct + '%';
+            barra.textContent = pct + '%';
+            texto.textContent = pct + '% completado';
+            Utils.setText('express-barra-pend', pendientes);
+            Utils.setText('express-barra-prog', enProgreso);
+            Utils.setText('express-barra-comp', completadas);
+            Utils.setText('express-barra-nocomp', noCompletadas);
+        },
+
+        renderizarFinanciero(m) {
+            if (!m) return;
+            Utils.setText('express-fin-generado', Utils.fmt(m.total_generado || 0));
+            Utils.setText('express-fin-abonos', Utils.fmt(m.total_abonos || 0));
+            Utils.setText('express-fin-pendiente', Utils.fmt(m.total_pendiente || 0));
+        },
+
+        renderizar(ordenes) {
+            const container = document.getElementById('express-lista');
+            const countEl = document.getElementById('express-count');
+            if (countEl) countEl.textContent = ordenes.length;
+            if (!container) return;
+
+            if (!ordenes || ordenes.length === 0) {
+                container.innerHTML = '<div class="bf-empty"><i class="fa-solid fa-bolt" style="color:#f59e0b;"></i>No hay órdenes express con los filtros seleccionados</div>';
+                return;
+            }
+
+            container.innerHTML = ordenes.map(o => {
+                const num = String(o.numero_orden).padStart(6, '0');
+                const estado = o.estado_trabajo || 'N/A';
+                const tieneTecnico = !!o.tecnico_nombre;
+                const tieneDomicilio = Number(o.cargo_domicilio || 0) > 0;
+                return `<div class="d-flex justify-content-between align-items-start p-3 mb-2" style="background:#f8fafc;border-radius:0.5rem;border-left:4px solid #f59e0b;cursor:pointer;" onclick="App.ordenes.ver(${o.id})">
+                    <div>
+                        <div class="fw-700" style="color:#d97706;"><i class="fa-solid fa-bolt me-1"></i>EXP${num}</div>
+                        ${tieneDomicilio ? '<span class="badge-st" style="background:#dc2626;font-size:0.65rem;"><i class="fa-solid fa-truck me-1"></i>' + Utils.fmt(o.cargo_domicilio) + '</span>' : ''}
+                        ${!tieneTecnico ? '<span class="badge-st" style="background:#dc2626;font-size:0.65rem;"><i class="fa-solid fa-user-slash me-1"></i>Sin asignar</span>' : ''}
+                    </div>
+                    <span class="badge-st ${Utils.badgeClass(estado)}">${Utils.escapeHTML(estado)}</span>
+                    <div class="row mt-1" style="font-size:0.82rem;">
+                        <div class="col-md-3"><i class="fa-solid fa-car me-1" style="color:#94a3b8;"></i><strong>${Utils.escapeHTML(o.patente_placa || '')}</strong> ${Utils.escapeHTML(o.marca || '')} ${Utils.escapeHTML(o.modelo || '')}</div>
+                        <div class="col-md-3"><i class="fa-solid fa-user me-1" style="color:#94a3b8;"></i>${Utils.escapeHTML(o.cliente_nombre || 'N/A')}</div>
+                        <div class="col-md-3">${tieneTecnico ? '<i class="fa-solid fa-user-gear me-1" style="color:#94a3b8;"></i>' + Utils.escapeHTML(o.tecnico_nombre) : '<span style="color:#dc2626;">Sin técnico</span>'}</div>
+                        <div class="col-md-3 text-end"><strong style="color:var(--bf-primary);">${Utils.fmt(o.monto_total || 0)}</strong></div>
+                    </div>
+                </div>`;
+            }).join('');
+        },
+
+        actualizarSelectTecnicos(tecnicos) {
+            const sel = document.getElementById('express-filtro-tecnico');
+            if (!sel) return;
+            const current = sel.value;
+            sel.innerHTML = '<option value="">Todos los técnicos</option>' +
+                (tecnicos || []).map(t => `<option value="${t.id}" ${String(t.id) === current ? 'selected' : ''}>${Utils.escapeHTML(t.nombre)}</option>`).join('');
+        },
+    },
+
+    // ========================================================
+    // CALENDARIO - FullCalendar con gestión de agenda
+    // ========================================================
+    calendario: {
+        _calendar: null,
+        _tecnicos: [],
+
+        async init() {
+            await this.cargarTecnicos();
+            this.iniciarCalendario();
+        },
+
+        async cargarTecnicos() {
+            try {
+                const data = await API.get('/tecnicos');
+                this._tecnicos = (data.data || data.tecnicos || data || []).filter(t => t.activo !== false);
+                const sel = document.getElementById('cal-filtro-tecnico');
+                const selModal = document.getElementById('cal-tecnico');
+                if (sel) {
+                    sel.innerHTML = '<option value="">Todos</option>' +
+                        this._tecnicos.map(t => `<option value="${t.id}">${Utils.escapeHTML(t.nombre)}</option>`).join('');
+                }
+                if (selModal) {
+                    selModal.innerHTML = '<option value="">Seleccionar técnico...</option>' +
+                        this._tecnicos.map(t => `<option value="${t.id}">${Utils.escapeHTML(t.nombre)}</option>`).join('');
+                }
+            } catch (err) { console.error(err); }
+        },
+
+        iniciarCalendario() {
+            const el = document.getElementById('calendario-container');
+            if (!el || typeof FullCalendar === 'undefined') return;
+
+            this._calendar = new FullCalendar.Calendar(el, {
+                initialView: 'timeGridWeek',
+                locale: 'es',
+                headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay' },
+                editable: true,
+                droppable: true,
+                selectable: true,
+                slotMinTime: '07:00:00',
+                slotMaxTime: '21:00:00',
+                height: 'auto',
+                events: async (info, successCallback, failureCallback) => {
+                    try {
+                        const eventos = await this.cargarEventos(info.startStr, info.endStr);
+                        successCallback(eventos);
+                    } catch (e) {
+                        failureCallback(e);
+                    }
+                },
+                eventClick: (info) => this.editarEvento(info.event),
+                eventDrop: (info) => this.actualizarFechas(info.event),
+                eventResize: (info) => this.actualizarFechas(info.event),
+                dateClick: (info) => this.abrirModalNuevoEvento(info.dateStr),
+            });
+            this._calendar.render();
+        },
+
+        async cargarEventos(startStr, endStr) {
+            try {
+                const tecnicoId = Utils.val('cal-filtro-tecnico') || '';
+                const tipo = Utils.val('cal-filtro-tipo') || '';
+
+                let endpoint = `/calendario?inicio=${startStr.split('T')[0]}&fin=${endStr.split('T')[0]}&ordenes=1`;
+                if (tecnicoId) endpoint += `&tecnico_id=${tecnicoId}`;
+                if (tipo) endpoint += `&tipo=${tipo}`;
+
+                const data = await API.get(endpoint);
+                if (!data.success && !data.eventos) return [];
+
+                const eventos = [];
+
+                // Eventos de agenda
+                (data.eventos || []).forEach(ev => {
+                    eventos.push({
+                        id: 'agenda-' + ev.id,
+                        title: (ev.titulo || '') + (ev.tecnico_nombre ? ' - ' + ev.tecnico_nombre : ''),
+                        start: ev.fecha_inicio,
+                        end: ev.fecha_fin,
+                        color: ev.color || '#0d9488',
+                        extendedProps: { tipo: 'agenda', agendaId: ev.id, tecnicoId: ev.tecnico_id, tecnicoNombre: ev.tecnico_nombre, ordenId: ev.orden_id, tipoServicio: ev.tipo_servicio, observaciones: ev.observaciones, estado: ev.estado, numeroOrden: ev.numero_orden },
+                    });
+                });
+
+                // Órdenes programadas sin evento de agenda
+                const agendaOrdenIds = new Set((data.eventos || []).filter(e => e.orden_id).map(e => e.orden_id));
+                (data.ordenes_programadas || []).forEach(o => {
+                    if (agendaOrdenIds.has(o.id)) return;
+                    const fecha = o.fecha_programada;
+                    const hora = o.hora_programada || '09:00';
+                    const esExpress = o.es_express === 1;
+                    const inicio = fecha + 'T' + hora;
+                    const finDate = new Date(inicio);
+                    finDate.setHours(finDate.getHours() + 2);
+                    eventos.push({
+                        id: 'orden-' + o.id,
+                        title: (esExpress ? '⚡ ' : '🔧 ') + 'OT#' + String(o.numero_orden).padStart(6, '0') + ' ' + (o.patente_placa || '') + (o.tecnico_nombre ? ' - ' + o.tecnico_nombre : ''),
+                        start: inicio,
+                        end: finDate.toISOString(),
+                        color: esExpress ? '#dc2626' : '#0d9488',
+                        extendedProps: { tipo: 'orden', ordenId: o.id, tecnicoId: o.tecnico_asignado_id, tecnicoNombre: o.tecnico_nombre, esExpress },
+                    });
+                });
+
+                return eventos;
+            } catch (e) {
+                console.error('Error cargando eventos:', e);
+                return [];
+            }
+        },
+
+        async guardarEvento() {
+            const eventoId = Utils.val('cal-evento-id');
+            const titulo = Utils.val('cal-titulo');
+            const tecnicoId = Utils.val('cal-tecnico');
+            const tipoServicio = Utils.val('cal-tipo-servicio');
+            const fechaInicio = Utils.val('cal-fecha-inicio');
+            const fechaFin = Utils.val('cal-fecha-fin');
+            const observaciones = Utils.val('cal-observaciones');
+            const ordenId = Utils.val('cal-orden-id');
+
+            if (!titulo) { Utils.toast('Ingresa un título', 'warning'); return; }
+            if (!tecnicoId) { Utils.toast('Selecciona un técnico', 'warning'); return; }
+            if (!fechaInicio || !fechaFin) { Utils.toast('Selecciona fechas', 'warning'); return; }
+
+            const btn = document.getElementById('cal-btn-guardar');
+            if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Guardando...'; }
+
+            try {
+                const isEdit = !!eventoId;
+                const body = {
+                    titulo, tecnico_id: parseInt(tecnicoId), tipo_servicio: tipoServicio,
+                    fecha_inicio: fechaInicio, fecha_fin: fechaFin, observaciones,
+                    orden_id: ordenId ? parseInt(ordenId) : null,
+                };
+                if (isEdit) body.id = parseInt(eventoId);
+
+                const data = isEdit ? await API.put('/calendario', body) : await API.post('/calendario', body);
+                if (data.success) {
+                    Utils.toast(isEdit ? 'Evento actualizado' : 'Evento creado', 'success');
+                    Utils.hideModal('modalCalendarioEvento');
+                    if (this._calendar) this._calendar.refetchEvents();
+                } else {
+                    Utils.toast(data.error || 'Error al guardar', 'error');
+                }
+            } catch (err) {
+                Utils.toast(err.message, 'error');
+            } finally {
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-save me-1"></i>Guardar'; }
+            }
+        },
+
+        async eliminarEvento() {
+            const eventoId = Utils.val('cal-evento-id');
+            if (!eventoId) return;
+            if (!await Utils.confirm('¿Eliminar este evento?')) return;
+
+            try {
+                const data = await API.delete(`/calendario?id=${eventoId}`);
+                if (data.success) {
+                    Utils.toast('Evento eliminado', 'success');
+                    Utils.hideModal('modalCalendarioEvento');
+                    if (this._calendar) this._calendar.refetchEvents();
+                } else {
+                    Utils.toast(data.error || 'Error al eliminar', 'error');
+                }
+            } catch (err) { Utils.toast(err.message, 'error'); }
+        },
+
+        async actualizarFechas(event) {
+            const props = event.extendedProps;
+            const inicio = event.start ? event.start.toISOString().substring(0, 19) : '';
+            const fin = event.end ? event.end.toISOString().substring(0, 19) : '';
+            try {
+                if (props.tipo === 'orden') {
+                    await API.put('/calendario', { tipo: 'orden', orden_id: props.ordenId, fecha_inicio: inicio, fecha_fin: fin });
+                    Utils.toast('Fecha de OT actualizada', 'success');
+                } else {
+                    await API.put('/calendario', { id: props.agendaId, fecha_inicio: inicio, fecha_fin: fin });
+                    Utils.toast('Evento movido correctamente', 'success');
+                }
+            } catch (err) {
+                Utils.toast(err.message, 'error');
+                event.revert();
+            }
+        },
+
+        editarEvento(event) {
+            const props = event.extendedProps;
+            if (props.tipo === 'orden') {
+                if (props.ordenId) App.ordenes.ver(props.ordenId);
+                return;
+            }
+            // Evento de agenda - abrir modal edición
+            Utils.setVal('cal-evento-id', props.agendaId || '');
+            Utils.setVal('cal-titulo', (event.title || '').replace(/ - .+$/, ''));
+            Utils.setVal('cal-tecnico', props.tecnicoId || '');
+            Utils.setVal('cal-tipo-servicio', props.tipoServicio || 'taller');
+            Utils.setVal('cal-observaciones', props.observaciones || '');
+            Utils.setVal('cal-orden-id', props.ordenId || '');
+            Utils.setVal('cal-fecha-inicio', event.start ? event.start.toISOString().substring(0, 16) : '');
+            Utils.setVal('cal-fecha-fin', event.end ? event.end.toISOString().substring(0, 16) : '');
+            const btnEliminar = document.getElementById('cal-btn-eliminar');
+            const btnVerOT = document.getElementById('cal-btn-ver-ot');
+            if (btnEliminar) btnEliminar.style.display = 'inline-block';
+            if (btnVerOT) btnVerOT.style.display = props.ordenId ? 'inline-block' : 'none';
+            const modalTitle = document.getElementById('modal-cal-titulo');
+            if (modalTitle) modalTitle.textContent = 'Editar Evento';
+            Utils.showModal('modalCalendarioEvento');
+        },
+
+        abrirModalNuevoEvento(dateStr) {
+            Utils.setVal('cal-evento-id', '');
+            Utils.setVal('cal-titulo', '');
+            Utils.setVal('cal-tecnico', '');
+            Utils.setVal('cal-tipo-servicio', 'taller');
+            Utils.setVal('cal-observaciones', '');
+            Utils.setVal('cal-orden-id', '');
+
+            if (dateStr) {
+                let inicio, fin;
+                if (dateStr.includes('T')) {
+                    inicio = dateStr.substring(0, 16);
+                    const d = new Date(dateStr);
+                    d.setHours(d.getHours() + 1);
+                    fin = d.toISOString().substring(0, 16);
+                } else {
+                    inicio = dateStr + 'T09:00';
+                    fin = dateStr + 'T11:00';
+                }
+                Utils.setVal('cal-fecha-inicio', inicio);
+                Utils.setVal('cal-fecha-fin', fin);
+            } else {
+                Utils.setVal('cal-fecha-inicio', Utils.today() + 'T09:00');
+                Utils.setVal('cal-fecha-fin', Utils.today() + 'T11:00');
+            }
+
+            const btnEliminar = document.getElementById('cal-btn-eliminar');
+            const btnVerOT = document.getElementById('cal-btn-ver-ot');
+            if (btnEliminar) btnEliminar.style.display = 'none';
+            if (btnVerOT) btnVerOT.style.display = 'none';
+            const modalTitle = document.getElementById('modal-cal-titulo');
+            if (modalTitle) modalTitle.textContent = 'Nuevo Evento';
+            Utils.showModal('modalCalendarioEvento');
+        },
+
+        verOrdenDesdeCalendario() {
+            const ordenId = Utils.val('cal-orden-id');
+            if (!ordenId) { Utils.toast('Sin OT asociada', 'warning'); return; }
+            Utils.hideModal('modalCalendarioEvento');
+            App.ordenes.ver(parseInt(ordenId));
+        },
+    },
+
+    // ========================================================
+    // COSTOS ADICIONALES - Módulo de gestión de costos
+    // ========================================================
+    costosAdicionales: {
+        _ordenIdActual: null,
+
+        async load() {
+            // La página de costos adicionales redirige al uso por orden
+            Utils.toast('Use la gestión de costos desde una orden específica', 'info');
+        },
+
+        ordenIdActual: null,
+
+        async abrir(ordenId, numeroOrden, patente, cliente) {
+            this.ordenIdActual = ordenId;
+            Utils.setText('costos-orden-numero', String(numeroOrden || ordenId).padStart(6, '0'));
+            Utils.setText('costos-patente', patente || '');
+            Utils.setText('costos-cliente', cliente || '');
+            Utils.setVal('nuevo-costo-concepto', '');
+            Utils.setVal('nuevo-costo-monto', '');
+            await this.cargar(ordenId);
+            Utils.showModal('modalCostosAdicionales');
+        },
+
+        async cargar(ordenId) {
+            try {
+                const data = await API.get(`/costos-adicionales?orden_id=${ordenId}`);
+                const costos = data.costos || data.data || [];
+                const total = data.total || 0;
+                const desglose = data.desglose || {};
+                this.renderizar(costos, total, desglose);
+
+                // Actualizar totales por categoría
+                const totalMO = desglose.mano_de_obra || 0;
+                const totalRM = desglose.repuestos_materiales || 0;
+                Utils.setText('costos-total-mano-obra', Utils.fmt(totalMO));
+                Utils.setText('costos-total-repuestos', Utils.fmt(totalRM));
+                const desgloseEl = document.getElementById('costos-desglose-container');
+                if (desgloseEl) desgloseEl.style.display = (totalMO > 0 || totalRM > 0) ? 'block' : 'none';
+
+                // Obtener monto original de la orden
+                try {
+                    const ordenData = await API.getPublic(`/ver-orden?id=${ordenId}`);
+                    if (ordenData.orden) {
+                        const montoFinal = Number(ordenData.orden.monto_total || 0) + total;
+                        Utils.setText('costos-total-final', Utils.fmt(montoFinal));
+                    }
+                } catch (e) {}
+            } catch (err) {
+                console.error('Error cargando costos:', err);
+            }
+        },
+
+        renderizar(costos, total, desglose) {
+            const lista = document.getElementById('costos-lista');
+            if (!lista) return;
+
+            if (!costos || costos.length === 0) {
+                lista.innerHTML = '<div class="bf-empty"><i class="fa-solid fa-receipt"></i>Sin costos adicionales registrados</div>';
+                Utils.setText('costos-total-valor', '$0');
+                return;
+            }
+
+            const totalMO = desglose ? (desglose.mano_de_obra || 0) : 0;
+            const totalRM = desglose ? (desglose.repuestos_materiales || 0) : 0;
+
+            lista.innerHTML = costos.map(c => {
+                const esMO = c.categoria === 'Mano de Obra';
+                const icon = esMO ? '🔧' : '🔩';
+                const catLabel = esMO ? 'MO' : 'Rep';
+                const catStyle = esMO ? 'background:#fef3c7;color:#d97706;' : 'background:#e2e8f0;color:#475569;';
+                const fecha = c.fecha_registro ? Utils.fmtDate(c.fecha_registro) : '';
+                return `<div class="d-flex justify-content-between align-items-center p-2 mb-1" style="background:#f8fafc;border-radius:0.5rem;">
+                    <div>
+                        <strong>${icon} ${Utils.escapeHTML(c.concepto)}</strong>
+                        <br><small style="color:#94a3b8;">${fecha} · <span style="${catStyle}padding:0.1rem 0.3rem;border-radius:0.25rem;font-size:0.7rem;font-weight:600;">${catLabel}</span></small>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="fw-600">${Utils.fmt(c.monto)}</span>
+                        <button class="btn-bf-icon danger" onclick="App.costosAdicionales.eliminar(${c.id})"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                </div>`;
+            }).join('');
+
+            Utils.setText('costos-total-valor', Utils.fmt(total));
+        },
+
+        async agregar() {
+            if (!this.ordenIdActual) return;
+            const concepto = Utils.val('nuevo-costo-concepto');
+            const monto = parseFloat(Utils.val('nuevo-costo-monto'));
+            const categoria = Utils.val('nuevo-costo-tipo') || 'Mano de Obra';
+
+            if (!concepto) { Utils.toast('Ingrese el concepto', 'warning'); return; }
+            if (!monto || monto <= 0) { Utils.toast('Ingrese un monto válido', 'warning'); return; }
+
+            try {
+                const data = await API.post('/costos-adicionales', {
+                    orden_id: this.ordenIdActual, concepto, monto, categoria,
+                });
+                if (data.success) {
+                    Utils.toast(`Costo agregado: ${concepto}`, 'success');
+                    Utils.setVal('nuevo-costo-concepto', '');
+                    Utils.setVal('nuevo-costo-monto', '');
+                    await this.cargar(this.ordenIdActual);
+                } else {
+                    Utils.toast(data.error || 'Error al agregar', 'error');
+                }
+            } catch (err) { Utils.toast(err.message, 'error'); }
+        },
+
+        async eliminar(costoId) {
+            if (!await Utils.confirm('¿Eliminar este costo?')) return;
+            try {
+                const data = await API.delete(`/costos-adicionales?id=${costoId}&orden_id=${this.ordenIdActual}`);
+                if (data.success) {
+                    Utils.toast('Costo eliminado', 'success');
+                    await this.cargar(this.ordenIdActual);
+                } else {
+                    Utils.toast(data.error || 'Error al eliminar', 'error');
+                }
+            } catch (err) { Utils.toast(err.message, 'error'); }
+        },
+
+        calcularTotales(costos) {
+            if (!costos || !Array.isArray(costos)) return { totalMO: 0, totalRep: 0, total: 0 };
+            let totalMO = 0, totalRep = 0;
+            costos.forEach(c => {
+                const monto = Number(c.monto || 0);
+                if (c.categoria === 'Mano de Obra') totalMO += monto;
+                else totalRep += monto;
+            });
+            return { totalMO, totalRep, total: totalMO + totalRep };
+        },
+    },
+
+    // ========================================================
+    // ÓRDENES - Ver, Editar, PDF, Eliminar
+    // ========================================================
+    ordenes: {
+        async ver(id) {
+            try {
+                const data = await API.getPublic(`/ver-orden?id=${id}`);
+                if (data.orden) {
+                    const o = data.orden;
+                    const num = String(o.numero_orden).padStart(6, '0');
+                    const estado = o.estado || 'Enviada';
+                    const servicios = o.servicios_seleccionados || [];
+
+                    // Construir HTML para modalVerOrden
+                    let serviciosHtml = '';
+                    if (servicios.length > 0) {
+                        let sub = 0;
+                        serviciosHtml = '<div class="table-responsive"><table class="bf-table"><thead><tr><th>Servicio</th><th>Categoría</th><th>Tipo</th><th>Precio</th></tr></thead><tbody>';
+                        servicios.forEach(s => {
+                            const precio = Number(s.precio_final || s.precio_sugerido || 0);
+                            sub += precio;
+                            const tipoBadge = s.tipo_comision === 'mano_obra'
+                                ? '<span class="badge-st" style="background:#fef3c7;color:#d97706;">MO</span>'
+                                : '<span class="badge-st" style="background:#e2e8f0;color:#475569;">Rep</span>';
+                            serviciosHtml += `<tr><td>${Utils.escapeHTML(s.nombre)}</td><td>${Utils.escapeHTML(s.categoria || '')}</td><td>${tipoBadge}</td><td class="fw-600">${Utils.fmt(precio)}</td></tr>`;
+                        });
+                        serviciosHtml += `<tr style="background:#f0fdf4;"><td colspan="3" class="fw-700">Subtotal Servicios</td><td class="fw-700" style="color:#16a34a;">${Utils.fmt(sub)}</td></tr>`;
+                        serviciosHtml += '</tbody></table></div>';
+                    } else if (o.diagnostico_observaciones) {
+                        serviciosHtml = `<p>${Utils.escapeHTML(o.diagnostico_observaciones)}</p>`;
+                    } else {
+                        serviciosHtml = '<p style="color:#94a3b8;">Sin trabajos</p>';
+                    }
+
+                    const modalBody = document.getElementById('modal-ver-orden-body');
+                    if (modalBody) {
+                        modalBody.innerHTML = `
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-6"><div class="bf-card"><div class="bf-card-body">
+                                    <div class="bf-label">Cliente</div>
+                                    <div class="fw-700">${Utils.escapeHTML(o.cliente_nombre || 'N/A')}</div>
+                                    <div style="font-size:0.82rem;color:#64748b;">RUT: ${Utils.escapeHTML(o.cliente_rut || 'N/A')}</div>
+                                    <div style="font-size:0.82rem;color:#64748b;">Tel: ${Utils.escapeHTML(o.cliente_telefono || 'N/A')}</div>
+                                    <div style="font-size:0.82rem;color:#64748b;">Dir: ${Utils.escapeHTML(o.direccion || 'N/A')}</div>
+                                </div></div></div>
+                                <div class="col-md-6"><div class="bf-card"><div class="bf-card-body">
+                                    <div class="bf-label">Vehículo</div>
+                                    <div class="fw-700" style="font-size:1.2rem;color:#dc2626;">${Utils.escapeHTML(o.patente_placa || 'N/A')}</div>
+                                    <div style="font-size:0.82rem;color:#64748b;">${Utils.escapeHTML(o.marca || '')} ${Utils.escapeHTML(o.modelo || '')} (${o.anio || 'N/A'})</div>
+                                    <div style="font-size:0.82rem;color:#64748b;">${Utils.escapeHTML(o.cilindrada || '')} | ${Utils.escapeHTML(o.combustible || '')} | ${o.kilometraje || ''} km</div>
+                                </div></div></div>
+                            </div>
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-4"><div class="bf-card"><div class="bf-card-body text-center">
+                                    <div class="bf-label">Estado</div>
+                                    <span class="badge-st ${Utils.badgeClass(estado)}" style="font-size:0.9rem;">${Utils.escapeHTML(estado)}</span>
+                                    <div style="font-size:0.78rem;color:#64748b;margin-top:0.5rem;">${Utils.escapeHTML(o.tecnico_nombre || 'Sin técnico')}</div>
+                                </div></div></div>
+                                <div class="col-md-4"><div class="bf-card"><div class="bf-card-body text-center">
+                                    <div class="bf-label">Fecha</div>
+                                    <div class="fw-600">${Utils.fmtDate(o.fecha_ingreso || o.created_at)}</div>
+                                    <div style="font-size:0.82rem;color:#64748b;">${o.hora_ingreso || ''}</div>
+                                </div></div></div>
+                                <div class="col-md-4"><div class="bf-card"><div class="bf-card-body text-center">
+                                    <div class="bf-label">Recepcionista</div>
+                                    <div class="fw-600">${Utils.escapeHTML(o.recepcionista || 'N/A')}</div>
+                                </div></div></div>
+                            </div>
+                            <div class="bf-card mb-3"><div class="bf-card-header"><span class="bf-card-title"><i class="fa-solid fa-wrench me-2" style="color:var(--bf-primary);"></i>Servicios / Diagnóstico</span></div>
+                            <div class="bf-card-body">${serviciosHtml}</div></div>
+                            <div class="row g-3">
+                                <div class="col-md-3"><div class="kpi-card"><div class="kpi-label">Total</div><div class="kpi-value">${Utils.fmt(o.monto_total || 0)}</div></div></div>
+                                <div class="col-md-3"><div class="kpi-card"><div class="kpi-label">Abono</div><div class="kpi-value">${Utils.fmt(o.monto_abono || 0)}</div></div></div>
+                                <div class="col-md-3"><div class="kpi-card"><div class="kpi-label">Restante</div><div class="kpi-value" style="color:#dc2626;">${Utils.fmt((o.monto_total || 0) - (o.monto_abono || 0))}</div></div></div>
+                                <div class="col-md-3"><div class="d-flex gap-1 flex-column">
+                                    <button class="btn-bf flex-grow-1" onclick="App.ordenes.generarPDF({${JSON.stringify(o).replace(/"/g, '&quot;')}})"><i class="fa-solid fa-file-pdf me-1"></i>PDF</button>
+                                    <button class="btn-bf-icon danger" onclick="App.ordenes.eliminar(${o.id})"><i class="fa-solid fa-trash"></i></button>
+                                </div></div>
+                            </div>
+                            ${o.firma_imagen ? `<div class="mt-3 text-center"><div class="bf-label">Firma del Cliente</div><img src="${o.firma_imagen}" alt="Firma" style="max-width:200px;border:1px solid #e2e8f0;border-radius:0.5rem;margin-top:0.5rem;"></div>` : ''}
+                        `;
+                    }
+
+                    Utils.showModal('modalVerOrden');
+                }
+            } catch (err) {
+                Utils.toast('Error al cargar la orden', 'error');
+                console.error(err);
+            }
+        },
+
+        async editar(id) {
+            try {
+                const data = await API.getPublic(`/ver-orden?id=${id}`);
+                if (!data.orden) { Utils.toast('Orden no encontrada', 'error'); return; }
+                const o = data.orden;
+
+                Utils.setVal('edit-orden-id', o.id);
+                Utils.setVal('edit-cliente', o.cliente_nombre || '');
+                Utils.setVal('edit-rut', o.cliente_rut || '');
+                Utils.setVal('edit-telefono', o.cliente_telefono || '');
+                Utils.setVal('edit-direccion', o.direccion || '');
+                Utils.setVal('edit-estado', o.estado || 'Enviada');
+                Utils.setVal('edit-patente', o.patente_placa || '');
+                Utils.setVal('edit-marca', o.marca || '');
+                Utils.setVal('edit-modelo', o.modelo || '');
+                Utils.setVal('edit-anio', o.anio || '');
+                Utils.setVal('edit-cilindrada', o.cilindrada || '');
+                Utils.setVal('edit-combustible', o.combustible || '');
+                Utils.setVal('edit-kilometraje', o.kilometraje || '');
+                Utils.setVal('edit-fecha-ingreso', o.fecha_ingreso || '');
+                Utils.setVal('edit-hora-ingreso', o.hora_ingreso || '');
+                Utils.setVal('edit-recepcionista', o.recepcionista || '');
+                Utils.setVal('edit-diagnostico-obs', o.diagnostico_observaciones || '');
+                Utils.setVal('edit-monto-total', o.monto_total || 0);
+                Utils.setVal('edit-monto-abono', o.monto_abono || 0);
+                Utils.setVal('edit-metodo-pago', o.metodo_pago || '');
+
+                Utils.showModal('modalEditarOrden');
+            } catch (err) {
+                Utils.toast('Error al cargar la orden', 'error');
+            }
+        },
+
+        async guardarEdicion() {
+            const id = Utils.val('edit-orden-id');
+            if (!id) return;
+            const body = {
+                orden_id: parseInt(id),
+                cliente_nombre: Utils.val('edit-cliente'),
+                cliente_rut: Utils.val('edit-rut'),
+                cliente_telefono: Utils.val('edit-telefono'),
+                direccion: Utils.val('edit-direccion'),
+                estado: Utils.val('edit-estado'),
+                patente: Utils.val('edit-patente'),
+                marca: Utils.val('edit-marca'),
+                modelo: Utils.val('edit-modelo'),
+                anio: Utils.val('edit-anio') || null,
+                cilindrada: Utils.val('edit-cilindrada'),
+                combustible: Utils.val('edit-combustible'),
+                kilometraje: Utils.val('edit-kilometraje'),
+                fecha_ingreso: Utils.val('edit-fecha-ingreso'),
+                hora_ingreso: Utils.val('edit-hora-ingreso'),
+                recepcionista: Utils.val('edit-recepcionista'),
+                diagnostico_observaciones: Utils.val('edit-diagnostico-obs'),
+                monto_total: parseFloat(Utils.val('edit-monto-total')) || 0,
+                monto_abono: parseFloat(Utils.val('edit-monto-abono')) || 0,
+                metodo_pago: Utils.val('edit-metodo-pago'),
+            };
+
+            try {
+                const data = await API.postPublic('/editar-orden', body);
+                if (data.success) {
+                    Utils.toast('Orden actualizada', 'success');
+                    Utils.hideModal('modalEditarOrden');
+                } else {
+                    Utils.toast(data.error || 'Error al actualizar', 'error');
+                }
+            } catch (err) { Utils.toast(err.message, 'error'); }
+        },
+
+        async eliminar(id) {
+            if (!await Utils.confirm('¿Eliminar permanentemente esta orden?')) return;
+            if (!await Utils.confirm('¡ATENCIÓN! Esta acción NO se puede deshacer. ¿Confirma?')) return;
+
+            try {
+                const data = await API.post('/eliminar-orden', { orden_id: id });
+                if (data.success) {
+                    Utils.toast('Orden eliminada', 'success');
+                    Utils.hideModal('modalVerOrden');
+                    Utils.hideModal('modalEditarOrden');
+                } else {
+                    Utils.toast(data.error || 'Error al eliminar', 'error');
+                }
+            } catch (err) { Utils.toast(err.message, 'error'); }
+        },
+
+        generarPDF(orden) {
+            generarPDFOrden(orden);
+        },
+    },
+
+    // ========================================================
+    // LIQUIDAR TÉCNICOS - Extensiones (Flujo, Cartera, Tabs)
+    // ========================================================
+    liquidar: {
+        async cargarFlujoCaja(tipo, fecha) {
+            try {
+                const data = await API.get(`/resumen-pagos?tipo=${tipo}&valor=${fecha}`);
+                this.renderizarFlujo(data);
+            } catch (err) {
+                Utils.toast('Error cargando flujo de caja', 'error');
+            }
+        },
+
+        renderizarFlujo(data) {
+            const container = document.getElementById('flujo-contenido');
+            if (!container) return;
+
+            const balancePositivo = (data.balance_neto || 0) >= 0;
+            let historialHtml = '';
+            if (data.historial_diario && data.historial_diario.length > 0) {
+                historialHtml = '<div class="table-responsive"><table class="bf-table"><thead><tr><th>Fecha</th><th>OTs</th><th>Ingresos</th><th>Abonos</th></tr></thead><tbody>' +
+                    data.historial_diario.map(h => `<tr><td>${Utils.escapeHTML(h.fecha)}</td><td>${h.ordenes}</td><td class="fw-600">${Utils.fmt(h.ingresos)}</td><td class="fw-600">${Utils.fmt(h.abonos_recibidos)}</td></tr>`).join('') +
+                    '</tbody></table></div>';
+            } else {
+                historialHtml = '<p style="color:#94a3b8;">Sin datos para el periodo seleccionado</p>';
+            }
+
+            container.innerHTML = `
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4"><div class="kpi-card" style="border-left:4px solid #16a34a;"><div><div class="kpi-label">Entrante</div><div class="fw-800" style="color:#16a34a;">${Utils.fmt(data.entradas?.total_abonos || 0)}</div></div></div></div>
+                    <div class="col-md-4"><div class="kpi-card" style="border-left:4px solid #dc2626;"><div><div class="kpi-label">Saliente</div><div class="fw-800" style="color:#dc2626;">${Utils.fmt((data.salidas?.comisiones_tecnicos || 0) + (data.salidas?.gastos_operativos || 0))}</div></div></div></div>
+                    <div class="col-md-4"><div class="kpi-card" style="border-left:4px solid ${balancePositivo ? '#16a34a' : '#dc2626'};"><div><div class="kpi-label">Balance Neto</div><div class="fw-800" style="color:${balancePositivo ? '#16a34a' : '#dc2626'};">${Utils.fmt(data.balance_neto || 0)}</div></div></div></div>
+                </div>
+                ${historialHtml}
+            `;
+        },
+
+        async cargarCartera(filtro) {
+            try {
+                let endpoint = '/todas-ordenes?limite=500';
+                if (filtro === 'pendientes') endpoint += '&estado=Aprobada';
+                const data = await API.get(endpoint);
+                const ordenes = data.ordenes || data.data?.ordenes || [];
+                this.renderizarCartera(ordenes, filtro);
+            } catch (err) {
+                Utils.toast('Error cargando cartera', 'error');
+            }
+        },
+
+        renderizarCartera(ordenes, filtro) {
+            const container = document.getElementById('cartera-contenido');
+            if (!container) return;
+
+            // Agrupar por cliente
+            const clientesMap = {};
+            ordenes.forEach(o => {
+                const nombre = o.cliente_nombre || 'Sin nombre';
+                if (!clientesMap[nombre]) {
+                    clientesMap[nombre] = { nombre, telefono: o.cliente_telefono || '', rut: o.cliente_rut || '', totalOTs: 0, totalGenerado: 0, totalAbonos: 0, totalRestante: 0 };
+                }
+                const cl = clientesMap[nombre];
+                cl.totalOTs++;
+                cl.totalGenerado += Number(o.monto_total || 0);
+                cl.totalAbonos += Number(o.monto_abono || 0);
+                cl.totalRestante += Number(o.monto_restante || 0);
+            });
+
+            let clientes = Object.values(clientesMap);
+            if (filtro === 'pendientes') {
+                clientes = clientes.filter(c => c.totalRestante > 0).sort((a, b) => b.totalRestante - a.totalRestante);
+            } else {
+                clientes.sort((a, b) => b.totalGenerado - a.totalGenerado);
+            }
+
+            const totalPendiente = clientes.reduce((s, c) => s + c.totalRestante, 0);
+            const totalGenerado = clientes.reduce((s, c) => s + c.totalGenerado, 0);
+
+            container.innerHTML = `
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4"><div class="kpi-card"><div class="kpi-label">Clientes</div><div class="kpi-value">${clientes.length}</div></div></div>
+                    <div class="col-md-4"><div class="kpi-card"><div class="kpi-label">Total Facturado</div><div class="kpi-value">${Utils.fmt(totalGenerado)}</div></div></div>
+                    <div class="col-md-4"><div class="kpi-card"><div class="kpi-label">Saldo Pendiente</div><div class="kpi-value" style="color:#dc2626;">${Utils.fmt(totalPendiente)}</div></div></div>
+                </div>
+                <div class="table-responsive"><table class="bf-table"><thead><tr><th>Cliente</th><th>Teléfono</th><th>OTs</th><th>Generado</th><th>Abonos</th><th>Saldo</th></tr></thead><tbody>
+                ${clientes.map(c => `<tr>
+                    <td class="fw-600">${Utils.escapeHTML(c.nombre)}</td>
+                    <td>${Utils.escapeHTML(c.telefono || '--')}</td>
+                    <td>${c.totalOTs}</td>
+                    <td>${Utils.fmt(c.totalGenerado)}</td>
+                    <td>${Utils.fmt(c.totalAbonos)}</td>
+                    <td class="fw-600" style="color:${c.totalRestante > 0 ? '#dc2626' : '#16a34a'};">${Utils.fmt(c.totalRestante)}</td>
+                </tr>`).join('')}
+                </tbody></table></div>
+            `;
+        },
+    },
 };
+
+// ============================================================
+// PDF GENERATION - Generar PDF de Orden de Trabajo
+// ============================================================
+function generarPDFOrden(orden) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('p', 'mm', 'a4');
+
+    const numeroFormateado = String(orden.numero_orden).padStart(6, '0');
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const leftMargin = 10;
+    let yPos = 15;
+
+    // Logo pequeño en esquina
+    try {
+        const logoImg = new Image();
+        logoImg.crossOrigin = 'anonymous';
+        logoImg.src = 'corto.jpg';
+        // No-op await, sync rendering
+    } catch (e) {}
+
+    // Número de orden en esquina superior derecha
+    doc.setFontSize(8);
+    doc.setTextColor(128, 128, 128);
+    doc.text(`OT #${numeroFormateado}`, pageWidth - 15, 10, { align: 'right' });
+
+    // Título
+    doc.setFontSize(16);
+    doc.setTextColor(13, 148, 136);
+    doc.text('ORDEN DE TRABAJO', pageWidth / 2, yPos, { align: 'center' });
+    yPos += 8;
+
+    doc.setFontSize(10);
+    doc.text('BIZFLOW ADMIN', pageWidth / 2, yPos, { align: 'center' });
+    yPos += 10;
+
+    // Información del Cliente
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'bold');
+    doc.text('1. DATOS DEL CLIENTE', leftMargin, yPos);
+    yPos += 6;
+    doc.setFont(undefined, 'normal');
+    doc.setFontSize(7);
+    doc.text(`Cliente: ${orden.cliente_nombre || 'N/A'}`, leftMargin, yPos); yPos += 4;
+    doc.text(`R.U.T.: ${orden.cliente_rut || 'N/A'}`, leftMargin, yPos); yPos += 4;
+    doc.text(`Teléfono: ${orden.cliente_telefono || 'N/A'}`, leftMargin, yPos); yPos += 4;
+    doc.text(`Dirección: ${orden.direccion || 'N/A'}`, leftMargin, yPos); yPos += 4;
+    doc.text(`Fecha Ingreso: ${orden.fecha_ingreso || 'N/A'} ${orden.hora_ingreso || ''}`, leftMargin, yPos); yPos += 4;
+    doc.text(`Recepcionista: ${orden.recepcionista || 'N/A'}`, leftMargin, yPos); yPos += 10;
+
+    // Datos del Vehículo
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'bold');
+    doc.text('2. DATOS DEL VEHÍCULO', leftMargin, yPos);
+    yPos += 6;
+    doc.setFont(undefined, 'normal');
+    doc.setFontSize(7);
+    doc.text(`Patente: ${orden.patente_placa || 'N/A'}`, leftMargin, yPos); yPos += 4;
+    doc.text(`Marca/Modelo: ${orden.marca || 'N/A'} ${orden.modelo || ''} (${orden.anio || 'N/A'})`, leftMargin, yPos); yPos += 4;
+    doc.text(`Cilindrada: ${orden.cilindrada || 'N/A'}`, leftMargin, yPos); yPos += 4;
+    doc.text(`Combustible: ${orden.combustible || 'N/A'}`, leftMargin, yPos); yPos += 4;
+    doc.text(`Kilometraje: ${orden.kilometraje || 'N/A'}`, leftMargin, yPos); yPos += 10;
+
+    // Trabajos / Servicios
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'bold');
+    doc.text('3. DIAGNÓSTICO Y TRABAJOS', leftMargin, yPos);
+    yPos += 6;
+    doc.setFont(undefined, 'normal');
+    doc.setFontSize(7);
+
+    let serviciosPDF = orden.servicios_seleccionados || [];
+    if (serviciosPDF.length > 0) {
+        let subtotalPDF = 0;
+        serviciosPDF.forEach(s => {
+            const precio = Number(s.precio_final || s.precio_sugerido || 0);
+            subtotalPDF += precio;
+            const tipo = s.tipo_comision === 'mano_obra' ? '[MO]' : '[Rep]';
+            if (yPos > 265) { doc.addPage(); yPos = 20; }
+            doc.text(`  [x] ${s.nombre}`, leftMargin, yPos);
+            doc.text(`${tipo} $${precio.toLocaleString('es-CL', { maximumFractionDigits: 0 })}`, leftMargin + 120, yPos);
+            yPos += 4;
+        });
+        if (yPos > 260) { doc.addPage(); yPos = 20; }
+        doc.setFont(undefined, 'bold');
+        doc.text('  Subtotal Servicios:', leftMargin, yPos);
+        doc.text(`$${subtotalPDF.toLocaleString('es-CL', { maximumFractionDigits: 0 })}`, leftMargin + 120, yPos);
+        yPos += 6;
+    } else {
+        doc.text('  Sin trabajos seleccionados', leftMargin, yPos); yPos += 6;
+    }
+
+    // Observaciones
+    const obsPDF = orden.diagnostico_observaciones || '';
+    if (obsPDF) {
+        yPos += 3;
+        doc.setFontSize(8);
+        doc.setFont(undefined, 'bold');
+        doc.text('  OBSERVACIONES:', leftMargin, yPos); yPos += 5;
+        doc.setFont(undefined, 'normal');
+        doc.setFontSize(7);
+        const obsLines = doc.splitTextToSize(obsPDF, pageWidth - leftMargin * 2 - 10);
+        obsLines.forEach(line => {
+            if (yPos > 260) { doc.addPage(); yPos = 20; }
+            doc.text('  ' + line, leftMargin, yPos);
+            yPos += 4;
+        });
+    }
+    yPos += 8;
+
+    // Checklist
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'bold');
+    doc.text('4. CHECKLIST DEL VEHÍCULO', leftMargin, yPos);
+    yPos += 6;
+    doc.setFont(undefined, 'normal');
+    doc.setFontSize(7);
+    doc.text(`Nivel de Combustible: ${orden.nivel_combustible || 'No registrado'}`, leftMargin, yPos); yPos += 4;
+    doc.text('Estado de Carrocería: Sin observaciones', leftMargin, yPos); yPos += 10;
+
+    // Costos adicionales
+    const costosExtras = Number(orden.total_costos_adicionales || 0);
+    const cargoDomicilio = Number(orden.cargo_domicilio || 0);
+
+    if (costosExtras > 0) {
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'bold');
+        doc.text('5. GASTOS ADICIONALES', leftMargin, yPos);
+        yPos += 6;
+        doc.setFont(undefined, 'normal');
+        doc.setFontSize(7);
+
+        if (orden.costos_adicionales && orden.costos_adicionales.length > 0) {
+            orden.costos_adicionales.forEach(c => {
+                if (yPos > 260) { doc.addPage(); yPos = 20; }
+                doc.text(`  - ${c.concepto || 'Gasto'} (${c.categoria || 'N/A'}): $${Number(c.monto || 0).toLocaleString('es-CL', { maximumFractionDigits: 0 })}`, leftMargin, yPos);
+                yPos += 5;
+            });
+        } else {
+            doc.text(`  Total costos extras: $${costosExtras.toLocaleString('es-CL', { maximumFractionDigits: 0 })}`, leftMargin, yPos);
+            yPos += 5;
+        }
+        yPos += 5;
+    }
+
+    // Domicilio
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'bold');
+    doc.text('6. DOMICILIO', leftMargin, yPos);
+    yPos += 6;
+    doc.setFont(undefined, 'normal');
+    doc.setFontSize(7);
+    if (cargoDomicilio > 0) {
+        doc.text(`  Cargo por domicilio: $${cargoDomicilio.toLocaleString('es-CL', { maximumFractionDigits: 0 })}`, leftMargin, yPos);
+    } else {
+        doc.text(`  Domicilio: No aplicable`, leftMargin, yPos);
+    }
+    yPos += 10;
+
+    // Valores
+    const montoFinalPDF = Number(orden.monto_final || orden.monto_total || 0);
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'bold');
+    doc.text('7. VALORES', leftMargin, yPos);
+    yPos += 6;
+    doc.setFont(undefined, 'normal');
+    doc.setFontSize(7);
+    doc.text(`Total: $${montoFinalPDF.toLocaleString('es-CL', { maximumFractionDigits: 0 })}`, leftMargin, yPos); yPos += 4;
+    doc.text(`Abono Recibido: $${Number(orden.monto_abono || 0).toLocaleString('es-CL', { maximumFractionDigits: 0 })}`, leftMargin, yPos); yPos += 4;
+    doc.text(`Restante: $${(montoFinalPDF - Number(orden.monto_abono || 0)).toLocaleString('es-CL', { maximumFractionDigits: 0 })}`, leftMargin, yPos); yPos += 4;
+    if (orden.metodo_pago) {
+        doc.text(`Método de Pago: ${orden.metodo_pago}`, leftMargin, yPos); yPos += 4;
+    }
+    yPos += 8;
+
+    // Estado y Firma
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'bold');
+    doc.text('8. ESTADO Y FIRMA', leftMargin, yPos);
+    yPos += 6;
+    doc.setFont(undefined, 'normal');
+    doc.setFontSize(7);
+    doc.text(`Estado: ${orden.estado || 'N/A'}`, leftMargin, yPos); yPos += 4;
+
+    if (orden.firma_imagen) {
+        try {
+            doc.text('Firma del Cliente:', leftMargin, yPos); yPos += 4;
+            doc.addImage(orden.firma_imagen, 'PNG', leftMargin, yPos, 40, 25);
+            yPos += 28;
+        } catch (e) { console.error('Error agregando firma:', e); }
+    }
+
+    // Validez
+    yPos += 6;
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'bold');
+    doc.text('9. VALIDEZ Y RESPONSABILIDAD', leftMargin, yPos);
+    yPos += 6;
+    doc.setFont(undefined, 'normal');
+    doc.setFontSize(6);
+    doc.text('• El cliente autoriza la intervención del vehículo', leftMargin, yPos); yPos += 4;
+    doc.text('• Se autorizan pruebas de carretera necesarias', leftMargin, yPos); yPos += 4;
+    doc.text('• La empresa no se hace responsable por objetos no declarados', leftMargin, yPos); yPos += 4;
+
+    // Footer
+    doc.setFontSize(6);
+    doc.setTextColor(128, 128, 128);
+    doc.text(`Generado: ${new Date().toLocaleString('es-CL')}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
+
+    doc.save(`OT-${numeroFormateado}-${orden.patente_placa || 'SINPAT'}.pdf`);
+    Utils.toast('PDF generado exitosamente', 'success');
+}
+
+// ============================================================
+// TAB SWITCHING - Liquidar Técnicos (3 tabs)
+// ============================================================
+function initLiquidarTabs() {
+    document.querySelectorAll('.bf-tab[data-tab]').forEach(tab => {
+        tab.addEventListener('click', (e) => {
+            const target = tab.dataset.tab;
+            // Desactivar todos los tabs y paneles
+            document.querySelectorAll('.bf-tab[data-tab]').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.bf-tab-pane').forEach(p => p.classList.remove('active'));
+            // Activar el tab y panel seleccionado
+            tab.classList.add('active');
+            const pane = document.getElementById(`tab-pane-${target}`);
+            if (pane) pane.classList.add('active');
+
+            // Cargar contenido según tab activo
+            if (target === 'flujo') {
+                const tipo = document.getElementById('flujo-periodo')?.value || 'mes';
+                const valor = document.getElementById('flujo-valor')?.value || '';
+                if (valor) App.liquidar.cargarFlujoCaja(tipo, valor);
+            } else if (target === 'cartera') {
+                const filtro = document.getElementById('clientes-filtro')?.value || 'todos';
+                App.liquidar.cargarCartera(filtro);
+            }
+        });
+    });
+}
 
 // ============================================================
 // INITIALIZATION
@@ -2075,6 +3251,7 @@ document.addEventListener('DOMContentLoaded', () => {
     Utils.setText('tb-avatar', ini);
     Utils.setText('tb-name', currentUser.nombre);
     initSidebar();
+    initLiquidarTabs();
     Router.init();
 
     // Form submission for nueva orden

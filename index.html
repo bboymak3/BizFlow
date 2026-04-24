@@ -17,6 +17,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <!-- jsPDF AutoTable -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.1/jspdf.plugin.autotable.min.js"></script>
+    <!-- FullCalendar -->
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 
@@ -288,6 +290,48 @@
         .bf-accordion .bf-accordion-header:hover { background:#f1f5f9; }
         .bf-accordion .bf-accordion-body { display:none; padding:1rem 0; }
         .bf-accordion .bf-accordion-body.open { display:block; }
+
+        /* ===== TABS (BizFlow) ===== */
+        .bf-tabs { display:flex; gap:0; border-bottom:2px solid #e2e8f0; margin-bottom:1.25rem; }
+        .bf-tab {
+            padding:0.65rem 1.15rem; font-size:0.82rem; font-weight:600; color:#64748b;
+            cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px;
+            transition:all 0.15s; background:none; border-top:none; border-left:none; border-right:none;
+        }
+        .bf-tab:hover { color:var(--bf-primary); }
+        .bf-tab.active { color:var(--bf-primary); border-bottom-color:var(--bf-primary); }
+        .bf-tab i { margin-right:0.35rem; }
+
+        /* ===== PROGRESS BAR ===== */
+        .bf-progress { width:100%; height:10px; background:#e2e8f0; border-radius:5px; overflow:hidden; }
+        .bf-progress-bar { height:100%; border-radius:5px; transition:width 0.5s ease; }
+        .bf-progress-bar.bg-orange { background:linear-gradient(90deg,#f59e0b,#ef4444); }
+
+        /* ===== CALENDAR ===== */
+        #calendar-container { background:#fff; border-radius:var(--bf-radius); box-shadow:var(--bf-shadow); border:1px solid #f1f5f9; padding:1rem; }
+        #calendar-container .fc { font-family:'Inter',system-ui,sans-serif; }
+        #calendar-container .fc-toolbar-title { font-size:1.1rem !important; font-weight:700 !important; }
+        #calendar-container .fc-button-primary { background:var(--bf-primary) !important; border-color:var(--bf-primary) !important; }
+        #calendar-container .fc-button-primary:hover { background:var(--bf-primary-dark) !important; }
+        #calendar-container .fc-button-primary:not(:disabled).fc-button-active { background:var(--bf-primary-dark) !important; border-color:var(--bf-primary-dark) !important; }
+        #calendar-container .fc-daygrid-day.fc-day-today { background:rgba(13,148,136,0.05) !important; }
+        .cal-filter-bar { display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap; }
+        .cal-filter-bar > div { min-width:160px; }
+        .cal-legend { display:flex; gap:1rem; flex-wrap:wrap; margin-top:0.75rem; padding-top:0.75rem; border-top:1px solid #f1f5f9; }
+        .cal-legend-item { display:flex; align-items:center; gap:0.4rem; font-size:0.75rem; color:#475569; font-weight:500; }
+        .cal-legend-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+        .cal-trash-zone {
+            margin-top:1rem; padding:1.5rem; border:2px dashed #e2e8f0; border-radius:var(--bf-radius);
+            text-align:center; color:#94a3b8; transition:all 0.2s; background:#f8fafc;
+        }
+        .cal-trash-zone.drag-over { border-color:#ef4444; color:#ef4444; background:#fef2f2; }
+        .cal-trash-zone i { font-size:1.5rem; margin-bottom:0.35rem; display:block; }
+        .cal-trash-zone span { font-size:0.82rem; }
+
+        /* ===== EXPRESS DASHBOARD ===== */
+        .express-gradient { background:linear-gradient(135deg,#f59e0b,#ef4444); }
+        .express-gradient-text { color:#f59e0b; }
+        .financial-card { text-align:center; padding:1rem; border-left:4px solid; }
     </style>
 </head>
 <body>
@@ -321,6 +365,8 @@
             <a class="bf-sidebar-item" data-route="asignar-ordenes"><i class="fa-solid fa-user-check"></i>Asignar Órdenes</a>
             <a class="bf-sidebar-item" data-route="tecnicos"><i class="fa-solid fa-users-gear"></i>Gestión Técnicos</a>
             <a class="bf-sidebar-item" data-route="liquidar-tecnicos"><i class="fa-solid fa-calculator"></i>Liquidar Técnicos</a>
+            <a class="bf-sidebar-item" data-route="express"><i class="fa-solid fa-bolt"></i>Express Dashboard</a>
+            <a class="bf-sidebar-item" data-route="calendario"><i class="fa-solid fa-calendar-days"></i>Calendario</a>
 
             <div class="bf-sidebar-label">Catálogos</div>
             <a class="bf-sidebar-item" data-route="servicios"><i class="fa-solid fa-wrench"></i>Catálogo de Servicios</a>
@@ -730,35 +776,100 @@
         <!-- PAGE: LIQUIDAR TÉCNICOS                        -->
         <!-- ============================================== -->
         <div id="page-liquidar-tecnicos" class="bf-page">
-            <h5 class="fw-bold mb-3">Liquidar Técnicos</h5>
-            <div class="bf-card mb-3">
-                <div class="bf-card-header"><span class="bf-card-title"><i class="fa-solid fa-filter me-2" style="color:var(--bf-primary);"></i>Filtros de Liquidación</span></div>
-                <div class="bf-card-body">
-                    <div class="row g-3">
-                        <div class="col-md-4">
-                            <label class="bf-label">Técnico</label>
-                            <select class="bf-input bf-select" id="liq-tecnico"></select>
-                        </div>
-                        <div class="col-md-3">
-                            <label class="bf-label">Tipo</label>
-                            <select class="bf-input bf-select" id="liq-tipo">
-                                <option value="mes">Mensual</option>
-                                <option value="semana">Semanal</option>
-                                <option value="rango">Rango de Fechas</option>
-                            </select>
-                        </div>
-                        <div class="col-md-3">
-                            <label class="bf-label">Valor</label>
-                            <input type="text" class="bf-input" id="liq-valor" placeholder="2025-01">
-                        </div>
-                        <div class="col-md-2 d-flex align-items-end">
-                            <button class="btn-bf w-100" onclick="App.liquidarTecnicos.calcular()"><i class="fa-solid fa-calculator"></i>Calcular</button>
+            <h5 class="fw-bold mb-3"><i class="fa-solid fa-calculator me-2" style="color:var(--bf-primary);"></i>Panel de Gestión</h5>
+
+            <!-- Tabs de navegación -->
+            <div class="bf-tabs" id="liq-tabs">
+                <button class="bf-tab active" onclick="App.liquidarTecnicos.switchTab('liquidar',this)"><i class="fa-solid fa-calculator"></i>Liquidar</button>
+                <button class="bf-tab" onclick="App.liquidarTecnicos.switchTab('flujo',this)"><i class="fa-solid fa-money-bill-wave"></i>Flujo de Caja</button>
+                <button class="bf-tab" onclick="App.liquidarTecnicos.switchTab('cartera',this)"><i class="fa-solid fa-users"></i>Cartera Clientes</button>
+            </div>
+
+            <!-- TAB: Liquidar Técnicos -->
+            <div class="bf-tab-pane" id="liq-tab-liquidar">
+                <div class="bf-card mb-3">
+                    <div class="bf-card-header"><span class="bf-card-title"><i class="fa-solid fa-filter me-2" style="color:var(--bf-primary);"></i>Filtros de Liquidación</span></div>
+                    <div class="bf-card-body">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="bf-label">Técnico</label>
+                                <select class="bf-input bf-select" id="liq-tecnico"></select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="bf-label">Tipo</label>
+                                <select class="bf-input bf-select" id="liq-tipo">
+                                    <option value="mes">Mensual</option>
+                                    <option value="semana">Semanal</option>
+                                    <option value="rango">Rango de Fechas</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="bf-label">Valor</label>
+                                <input type="text" class="bf-input" id="liq-valor" placeholder="2025-01">
+                            </div>
+                            <div class="col-md-2 d-flex align-items-end">
+                                <button class="btn-bf w-100" onclick="App.liquidarTecnicos.calcular()"><i class="fa-solid fa-calculator"></i>Calcular</button>
+                            </div>
                         </div>
                     </div>
                 </div>
+                <div id="liq-resultados"></div>
+                <div id="liq-resumen"></div>
             </div>
-            <div id="liq-resultados"></div>
-            <div id="liq-resumen"></div>
+
+            <!-- TAB: Flujo de Caja -->
+            <div class="bf-tab-pane" id="liq-tab-flujo" style="display:none;">
+                <div class="bf-card mb-3">
+                    <div class="bf-card-header"><span class="bf-card-title"><i class="fa-solid fa-money-bill-wave me-2" style="color:var(--bf-primary);"></i>Filtros Flujo de Caja</span></div>
+                    <div class="bf-card-body">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="bf-label">Periodo</label>
+                                <select class="bf-input bf-select" id="flujo-periodo" onchange="App.liquidarTecnicos.actualizarFiltroFlujo()">
+                                    <option value="dia">Día</option>
+                                    <option value="mes" selected>Mes</option>
+                                    <option value="anio">Año</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="bf-label" id="flujo-valor-label">Mes</label>
+                                <input type="month" class="bf-input" id="flujo-valor">
+                            </div>
+                            <div class="col-md-4 d-flex align-items-end">
+                                <button class="btn-bf w-100" onclick="App.liquidarTecnicos.cargarFlujo()"><i class="fa-solid fa-money-bill-wave"></i>Ver Flujo de Caja</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="flujo-contenido">
+                    <div class="bf-card"><div class="bf-card-body"><div class="bf-empty"><i class="fa-solid fa-money-bill-wave"></i>Seleccione un periodo para ver el flujo de caja</div></div></div>
+                </div>
+            </div>
+
+            <!-- TAB: Cartera Clientes -->
+            <div class="bf-tab-pane" id="liq-tab-cartera" style="display:none;">
+                <div class="bf-card mb-3">
+                    <div class="bf-card-header"><span class="bf-card-title"><i class="fa-solid fa-users me-2" style="color:var(--bf-primary);"></i>Filtrar Cartera de Clientes</span></div>
+                    <div class="bf-card-body">
+                        <div class="row g-3">
+                            <div class="col-md-5">
+                                <label class="bf-label">Estado de pago</label>
+                                <select class="bf-input bf-select" id="clientes-filtro" onchange="App.liquidarTecnicos.cargarCartera()">
+                                    <option value="pendientes">Con saldo pendiente</option>
+                                    <option value="todos">Todos los clientes</option>
+                                    <option value="pagados">Pagados al día</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4 d-flex align-items-end">
+                                <button class="btn-bf w-100" onclick="App.liquidarTecnicos.cargarCartera()"><i class="fa-solid fa-users"></i>Actualizar Cartera</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="clientes-contenido">
+                    <div class="bf-card"><div class="bf-card-body"><div class="bf-empty"><i class="fa-solid fa-users"></i>Seleccione un filtro para ver la cartera de clientes</div></div></div>
+                </div>
+            </div>
         </div>
 
         <!-- ============================================== -->
@@ -858,12 +969,30 @@
         <!-- PAGE: REPORTE GENERAL                           -->
         <!-- ============================================== -->
         <div id="page-reportes" class="bf-page">
-            <h5 class="fw-bold mb-3">Reporte General</h5>
+            <h5 class="fw-bold mb-3"><i class="fa-solid fa-chart-bar me-2" style="color:var(--bf-primary);"></i>Reporte General</h5>
             <div class="bf-card mb-3">
+                <div class="bf-card-header">
+                    <span class="bf-card-title"><i class="fa-solid fa-filter me-2" style="color:var(--bf-primary);"></i>Selector de Periodo</span>
+                    <button class="btn-bf btn-bf-sm" style="background:#16a34a;" onclick="App.reportes.exportSheets()" id="btn-reporte-sheets"><i class="fa-solid fa-file-export"></i>Exportar a Sheets</button>
+                </div>
                 <div class="bf-card-body">
-                    <div class="row g-2 align-items-end">
-                        <div class="col-md-4"><label class="bf-label">Período (YYYY-MM)</label><input type="month" class="bf-input" id="reporte-valor"></div>
-                        <div class="col-md-2"><button class="btn-bf w-100" onclick="App.reportes.generar()"><i class="fa-solid fa-chart-bar"></i>Generar</button></div>
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-3">
+                            <label class="bf-label">Tipo de Periodo</label>
+                            <select class="bf-input bf-select" id="reporte-tipo" onchange="App.reportes.actualizarInput()">
+                                <option value="dia">Día</option>
+                                <option value="semana">Semana</option>
+                                <option value="mes" selected>Mes</option>
+                                <option value="anio">Año</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="bf-label" id="reporte-valor-label">Mes</label>
+                            <input type="month" class="bf-input" id="reporte-valor">
+                        </div>
+                        <div class="col-md-3">
+                            <button class="btn-bf w-100" onclick="App.reportes.generar()"><i class="fa-solid fa-chart-bar"></i>Generar Reporte</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1016,6 +1145,203 @@
                             <tbody id="tbl-notificaciones"><tr><td colspan="5" class="bf-empty"><i class="fa-solid fa-bell-slash"></i>Sin notificaciones</td></tr></tbody>
                         </table>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- PAGE: EXPRESS DASHBOARD                        -->
+        <!-- ============================================== -->
+        <div id="page-express" class="bf-page">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                <h5 class="fw-bold mb-0"><i class="fa-solid fa-bolt me-2 express-gradient-text"></i>Express Dashboard</h5>
+                <button class="btn-bf" style="background:linear-gradient(135deg,#f59e0b,#ef4444);" onclick="App.nuevaOrden.openExpress()"><i class="fa-solid fa-bolt"></i>Nueva OT Express</button>
+            </div>
+
+            <!-- KPI Cards Express -->
+            <div class="row g-3 mb-4" id="express-kpis">
+                <div class="col-6 col-md-3">
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background:rgba(245,158,11,0.1);color:#f59e0b;"><i class="fa-solid fa-bolt"></i></div>
+                        <div><div class="kpi-label">Total Express</div><div class="kpi-value" id="express-kpi-total" style="color:#f59e0b;">0</div></div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background:#fef3c7;color:#d97706;"><i class="fa-solid fa-clock"></i></div>
+                        <div><div class="kpi-label">Pendientes</div><div class="kpi-value" id="express-kpi-pendientes" style="color:#d97706;">0</div></div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background:#dcfce7;color:#16a34a;"><i class="fa-solid fa-circle-check"></i></div>
+                        <div><div class="kpi-label">Cerradas</div><div class="kpi-value" id="express-kpi-cerradas" style="color:#16a34a;">0</div></div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background:#fee2e2;color:#dc2626;"><i class="fa-solid fa-user-xmark"></i></div>
+                        <div><div class="kpi-label">Sin Asignar</div><div class="kpi-value" id="express-kpi-sin-asignar" style="color:#dc2626;">0</div></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Barra de progreso visual -->
+            <div class="bf-card mb-4">
+                <div class="bf-card-body py-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="fw-bold" style="font-size:0.85rem;"><i class="fa-solid fa-chart-bar me-1" style="color:var(--bf-primary);"></i>Progreso Express</span>
+                        <span style="font-size:0.8rem;color:#64748b;" id="express-progreso-texto">0% completado</span>
+                    </div>
+                    <div class="bf-progress">
+                        <div class="bf-progress-bar bg-orange" id="express-barra-progreso" style="width:0%;">0%</div>
+                    </div>
+                    <div class="d-flex justify-content-between mt-2" style="font-size:0.75rem;color:#475569;">
+                        <span><span style="color:#ffc107;">&#9679;</span> Pendientes: <strong id="express-barra-pend">0</strong></span>
+                        <span><span style="color:#3b82f6;">&#9679;</span> En Progreso: <strong id="express-barra-prog">0</strong></span>
+                        <span><span style="color:#16a34a;">&#9679;</span> Completadas: <strong id="express-barra-comp">0</strong></span>
+                        <span><span style="color:#dc2626;">&#9679;</span> No Completadas: <strong id="express-barra-nocomp">0</strong></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filtros Express -->
+            <div class="bf-card mb-4">
+                <div class="bf-card-header express-gradient" style="border:none;">
+                    <span class="bf-card-title" style="color:#fff;"><i class="fa-solid fa-filter me-2"></i>Filtros Express</span>
+                    <button class="btn-bf btn-bf-sm" style="background:#fff;color:#333;" onclick="App.express.load()"><i class="fa-solid fa-arrows-rotate"></i>Actualizar</button>
+                </div>
+                <div class="bf-card-body">
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-3">
+                            <label class="bf-label">Estado</label>
+                            <select class="bf-input bf-select" id="express-filtro-estado" onchange="App.express.load()">
+                                <option value="">Todos</option>
+                                <option value="Pendiente Visita">Pendiente Visita</option>
+                                <option value="En Sitio">En Sitio</option>
+                                <option value="En Progreso">En Progreso</option>
+                                <option value="Completada">Completada</option>
+                                <option value="Pendiente Piezas">Pendiente Piezas</option>
+                                <option value="Cerrada">Cerrada</option>
+                                <option value="No Completada">No Completada</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="bf-label">Técnico</label>
+                            <select class="bf-input bf-select" id="express-filtro-tecnico" onchange="App.express.load()">
+                                <option value="">Todos los técnicos</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="bf-label">Periodo</label>
+                            <select class="bf-input bf-select" id="express-filtro-periodo" onchange="App.express.actualizarFiltroPeriodo()">
+                                <option value="">Sin filtro</option>
+                                <option value="dia">Día</option>
+                                <option value="mes" selected>Mes</option>
+                                <option value="anio">Año</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="bf-label" id="express-filtro-valor-label">Mes</label>
+                            <input type="month" class="bf-input" id="express-filtro-valor">
+                        </div>
+                        <div class="col-md-1 d-flex align-items-end">
+                            <button class="btn-bf w-100" onclick="App.express.load()" title="Buscar"><i class="fa-solid fa-search"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Métricas financieras Express -->
+            <div class="row g-3 mb-4" id="express-financiero">
+                <div class="col-md-4">
+                    <div class="bf-card financial-card" style="border-left:4px solid #16a34a;">
+                        <div style="font-size:0.78rem;color:#64748b;text-transform:uppercase;font-weight:700;">Generado</div>
+                        <div class="kpi-value" style="color:#16a34a;" id="express-fin-generado">$0</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="bf-card financial-card" style="border-left:4px solid #d97706;">
+                        <div style="font-size:0.78rem;color:#64748b;text-transform:uppercase;font-weight:700;">Abonos</div>
+                        <div class="kpi-value" style="color:#d97706;" id="express-fin-abonos">$0</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="bf-card financial-card" style="border-left:4px solid #dc2626;">
+                        <div style="font-size:0.78rem;color:#64748b;text-transform:uppercase;font-weight:700;">Pendiente Cobro</div>
+                        <div class="kpi-value" style="color:#dc2626;" id="express-fin-pendiente">$0</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Lista de Órdenes Express -->
+            <div class="bf-card">
+                <div class="bf-card-header express-gradient" style="border:none;">
+                    <span class="bf-card-title" style="color:#fff;"><i class="fa-solid fa-bolt me-2"></i>Órdenes Express</span>
+                    <span class="badge bg-light text-dark" id="express-count">0</span>
+                </div>
+                <div class="bf-card-body p-0" id="express-lista" style="max-height:600px;overflow-y:auto;">
+                    <div class="bf-empty">
+                        <i class="fa-solid fa-bolt" style="color:#f59e0b;"></i>
+                        Cargando órdenes express...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- PAGE: CALENDARIO                               -->
+        <!-- ============================================== -->
+        <div id="page-calendario" class="bf-page">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                <h5 class="fw-bold mb-0"><i class="fa-solid fa-calendar-days me-2" style="color:var(--bf-primary);"></i>Calendario</h5>
+                <button class="btn-bf" onclick="App.calendario.nuevoEvento()"><i class="fa-solid fa-plus"></i>Nuevo Evento</button>
+            </div>
+
+            <!-- Filtros -->
+            <div class="bf-card mb-3">
+                <div class="bf-card-body py-2">
+                    <div class="cal-filter-bar">
+                        <div>
+                            <label class="bf-label" style="font-size:0.72rem;">Técnico</label>
+                            <select class="bf-input bf-select" id="cal-filtro-tecnico" onchange="App.calendario.recargar()">
+                                <option value="">Todos los técnicos</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="bf-label" style="font-size:0.72rem;">Tipo Servicio</label>
+                            <select class="bf-input bf-select" id="cal-filtro-tipo" onchange="App.calendario.recargar()">
+                                <option value="">Todos</option>
+                                <option value="taller">Taller</option>
+                                <option value="domicilio">Domicilio</option>
+                                <option value="inspeccion">Inspección</option>
+                                <option value="urgencia">Urgencia</option>
+                                <option value="otro">Otro</option>
+                            </select>
+                        </div>
+                    </div>
+                    <!-- Leyenda -->
+                    <div class="cal-legend">
+                        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--bf-primary);"></div>Taller</div>
+                        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#f59e0b;"></div>Domicilio</div>
+                        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#16a34a;"></div>Inspección</div>
+                        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#dc2626;"></div>Urgencia</div>
+                        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#64748b;"></div>Otro</div>
+                        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:transparent;border:2px dashed var(--bf-primary);"></div>OT Programada</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Contenedor del Calendario -->
+            <div id="calendar-container">
+                <div id='fullcalendar'></div>
+            </div>
+
+            <!-- Zona Papelera para eliminar eventos arrastrando -->
+            <div id="cal-trash-zone" class="cal-trash-zone">
+                <div class="cal-trash-inner">
+                    <i class="fa-solid fa-trash-can"></i>
+                    <span>Arrastra aquí para eliminar</span>
                 </div>
             </div>
         </div>
@@ -1197,6 +1523,493 @@
     <div class="modal-header"><h5 class="modal-title">Foto</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
     <div class="modal-body text-center"><img id="photo-preview-img" src="" alt="Foto" style="max-width:100%;max-height:70vh;object-fit:contain;"></div>
 </div></div></div>
+
+<!-- ============================================== -->
+<!-- MODAL: Ver Orden (Detalle Completo)             -->
+<!-- ============================================== -->
+<div class="modal fade" id="modalVerOrden" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header" style="background-color: var(--bf-primary); color: white;">
+                <h5 class="modal-title">
+                    <i class="fas fa-file-alt me-2"></i>ORDEN DE TRABAJO #<span id="modal-numero-orden"></span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="modal-contenido">
+                <!-- Secciones generadas dinámicamente:
+                    - Datos del Cliente (nombre, RUT, teléfono, dirección)
+                    - Datos del Vehículo (patente, marca, modelo, año, cilindrada, combustible, km)
+                    - Servicios con precios (tabla bf-table)
+                    - Checklist de carrocería
+                    - Desglose de costos (mano de obra, repuestos, total)
+                    - Info de domicilio (si aplica)
+                    - Firma del cliente
+                    - Fotos del técnico
+                -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-bf" onclick="verPDFEnLinea()">
+                    <i class="fas fa-eye me-2"></i>Ver PDF en Línea
+                </button>
+                <button type="button" class="btn-bf" style="background:var(--bf-primary-dark);" onclick="generarPDFDesdeModal()">
+                    <i class="fas fa-download me-2"></i>Descargar PDF
+                </button>
+                <button type="button" class="btn-bf-outline" onclick="compartirLink()">
+                    <i class="fas fa-share-alt me-2"></i>Compartir Link
+                </button>
+                <button type="button" class="btn-bf-outline" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================== -->
+<!-- MODAL: Comisión Técnicos                        -->
+<!-- ============================================== -->
+<div class="modal fade" id="modalComisionTecnicos" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header" style="background-color: #f59e0b; color: #111;">
+                <h5 class="modal-title"><i class="fas fa-percentage me-2"></i>Comisión por Técnico</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p style="color:#64748b;font-size:0.84rem;">Configure el porcentaje de comisión individual para cada técnico. Este porcentaje se usa en la liquidación.</p>
+                <div id="lista-comisiones-tecnicos">
+                    <div class="text-center py-4" style="color:#94a3b8;"><i class="fas fa-spinner fa-spin me-2"></i>Cargando técnicos...</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-bf-outline" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================== -->
+<!-- MODAL: Catálogo de Servicios                    -->
+<!-- ============================================== -->
+<div class="modal fade" id="modalServiciosCatalogo" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header" style="background-color: var(--bf-primary); color: white;">
+                <h5 class="modal-title"><i class="fas fa-cogs me-2"></i>Catálogo de Servicios</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row mb-3">
+                    <div class="col-md-5">
+                        <div class="input-group">
+                            <input type="text" class="bf-input" id="buscador-servicios-cat" placeholder="Buscar servicio..." oninput="filtrarServiciosCat(this.value)">
+                            <button class="btn-bf" onclick="mostrarFormularioNuevoServicio()"><i class="fas fa-plus me-1"></i>Nuevo</button>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <select class="bf-input bf-select" id="filtro-categoria-servicios" onchange="cargarServiciosCatalogo()">
+                            <option value="">Todas</option>
+                            <option value="Mantenimiento">Mantenimiento</option>
+                            <option value="Diagnóstico">Diagnóstico</option>
+                            <option value="Reparación">Reparación</option>
+                            <option value="Otros">Otros</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <span class="badge bg-secondary" id="total-servicios-badge">0 servicios</span>
+                    </div>
+                </div>
+                <!-- Formulario nuevo servicio -->
+                <div id="form-nuevo-servicio" style="display:none" class="mb-3">
+                    <div class="bf-card" style="border:1.5px solid var(--bf-primary);">
+                        <div class="bf-card-body">
+                            <h6 class="fw-bold" style="color:var(--bf-primary);"><i class="fas fa-plus-circle me-1"></i>Nuevo Servicio</h6>
+                            <div class="row g-2">
+                                <div class="col-md-4">
+                                    <input type="text" class="bf-input" id="nuevo-serv-nombre" placeholder="Nombre del servicio">
+                                </div>
+                                <div class="col-md-2">
+                                    <input type="number" class="bf-input" id="nuevo-serv-precio" placeholder="Precio $">
+                                </div>
+                                <div class="col-md-3">
+                                    <select class="bf-input bf-select" id="nuevo-serv-categoria">
+                                        <option value="Mantenimiento">Mantenimiento</option>
+                                        <option value="Diagnóstico">Diagnóstico</option>
+                                        <option value="Reparación">Reparación</option>
+                                        <option value="Otros">Otros</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <select class="bf-input bf-select" id="nuevo-serv-tipo-comision">
+                                        <option value="mano_obra">Mano de Obra</option>
+                                        <option value="repuestos">Repuestos</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-1">
+                                    <button class="btn-bf w-100" style="background:#16a34a;" onclick="guardarNuevoServicio()"><i class="fas fa-save"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Lista de servicios -->
+                <div id="lista-servicios-catalogo" style="max-height:400px;overflow-y:auto;">
+                    <div class="text-center py-4" style="color:#94a3b8;"><i class="fas fa-spinner fa-spin me-2"></i>Cargando servicios...</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-bf-outline" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================== -->
+<!-- MODAL: Costos Adicionales por Orden             -->
+<!-- ============================================== -->
+<div class="modal fade modal-costos" id="modalCostosAdicionales" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header" style="background-color: var(--bf-primary); color: white;">
+                <h5 class="modal-title">
+                    <i class="fas fa-coins me-2"></i>Costos Adicionales <span style="opacity:0.75;">- OT #<span id="costos-orden-numero"></span></span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Info compacta de la orden -->
+                <div class="d-flex align-items-center gap-3 p-2 rounded mb-3" style="background:#f8fafc;border:1px solid #e2e8f0;font-size:0.84rem;">
+                    <div><i class="fas fa-car me-1" style="color:var(--bf-primary);"></i><strong>Patente:</strong> <span id="costos-patente">-</span></div>
+                    <div style="width:1px;height:18px;background:#e2e8f0;"></div>
+                    <div><i class="fas fa-user me-1" style="color:var(--bf-primary);"></i><strong>Cliente:</strong> <span id="costos-cliente">-</span></div>
+                </div>
+
+                <!-- Formulario compacto -->
+                <div class="bf-card mb-3" style="border:1.5px solid var(--bf-primary-light);">
+                    <div class="bf-card-body">
+                        <div class="fw-bold mb-2" style="font-size:0.84rem;color:var(--bf-primary);"><i class="fas fa-plus-circle me-1"></i> Agregar Nuevo Costo</div>
+                        <div class="row g-2 align-items-end">
+                            <div class="col-sm-3">
+                                <label class="bf-label">Tipo</label>
+                                <select class="bf-input bf-select" id="nuevo-costo-tipo" onchange="actualizarHintTipoCosto()">
+                                    <option value="Mano de Obra">🔧 Mano de Obra</option>
+                                    <option value="Repuestos/Materiales">🔩 Repuestos</option>
+                                </select>
+                                <small style="font-size:0.65rem;color:#64748b;" id="nuevo-costo-tipo-hint">Comisión 40%</small>
+                            </div>
+                            <div class="col-sm-4">
+                                <label class="bf-label">Concepto</label>
+                                <input type="text" class="bf-input" id="nuevo-costo-concepto" placeholder="Descripción del costo...">
+                            </div>
+                            <div class="col-sm-3">
+                                <label class="bf-label">Monto</label>
+                                <input type="number" class="bf-input" id="nuevo-costo-monto" placeholder="$0">
+                            </div>
+                            <div class="col-sm-2">
+                                <button class="btn-bf w-100" onclick="agregarCostoAdicional()">
+                                    <i class="fas fa-plus"></i> Add
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Lista de costos existentes -->
+                <div id="costos-lista"></div>
+
+                <!-- Desglose + Totales -->
+                <div id="costos-desglose-container" style="display:none;">
+                    <div class="bf-card">
+                        <div class="bf-card-body">
+                            <div class="d-flex gap-3 mb-2" style="font-size:0.82rem;" id="gp-desglose-cats">
+                                <div><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--bf-primary);margin-right:4px;"></span> MO: <strong id="costos-total-mano-obra">$0</strong></div>
+                                <div><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f59e0b;margin-right:4px;"></span> Rep: <strong id="costos-total-repuestos">$0</strong></div>
+                            </div>
+                            <hr style="margin:0.5rem 0;">
+                            <div class="d-flex justify-content-between align-items-center" style="font-size:0.9rem;">
+                                <span class="fw-bold" style="color:#64748b;">Total Extras</span>
+                                <span class="fw-bold" id="costos-total-valor">$0</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center" style="font-size:1.1rem;">
+                                <span class="fw-bold" style="color:var(--bf-primary);">Total OT</span>
+                                <span class="fw-bold" style="color:var(--bf-primary);" id="costos-total-final">$0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-bf-outline" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i> Cerrar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================== -->
+<!-- MODAL: Editar Orden (Completo)                  -->
+<!-- ============================================== -->
+<div class="modal fade" id="modalEditarOrden" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header" style="background: linear-gradient(135deg, var(--bf-primary), var(--bf-primary-dark)); color: white;">
+                <h5 class="modal-title"><i class="fas fa-edit me-2"></i>EDITAR ORDEN #<span id="edit-orden-numero"></span></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="form-editar-orden">
+                    <input type="hidden" id="edit-orden-id">
+                    <input type="hidden" id="edit-cliente-id">
+                    <input type="hidden" id="edit-vehiculo-id">
+                    <input type="hidden" id="edit-diagnostico-checks">
+
+                    <!-- DATOS DEL CLIENTE -->
+                    <div class="bf-card shadow-sm mb-3">
+                        <div class="bf-card-header" style="background:#f59e0b;color:white;">
+                            <span class="bf-card-title" style="color:#fff;"><i class="fas fa-user me-2"></i>DATOS DEL CLIENTE</span>
+                        </div>
+                        <div class="bf-card-body">
+                            <div class="row g-3">
+                                <div class="col-md-5"><label class="bf-label">Nombre *</label><input type="text" class="bf-input" id="edit-cliente" required></div>
+                                <div class="col-md-3"><label class="bf-label">RUT</label><input type="text" class="bf-input" id="edit-rut"></div>
+                                <div class="col-md-4"><label class="bf-label">Teléfono *</label><input type="text" class="bf-input" id="edit-telefono" required></div>
+                                <div class="col-md-8"><label class="bf-label">Dirección</label><input type="text" class="bf-input" id="edit-direccion"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- DATOS DEL VEHÍCULO -->
+                    <div class="bf-card shadow-sm mb-3">
+                        <div class="bf-card-header" style="background:var(--bf-primary);color:white;">
+                            <span class="bf-card-title" style="color:#fff;"><i class="fas fa-car me-2"></i>DATOS DEL VEHÍCULO</span>
+                        </div>
+                        <div class="bf-card-body">
+                            <div class="row g-3">
+                                <div class="col-md-3"><label class="bf-label">Patente *</label><input type="text" class="bf-input" id="edit-patente" style="text-transform:uppercase;" required></div>
+                                <div class="col-md-3"><label class="bf-label">Marca</label><input type="text" class="bf-input" id="edit-marca"></div>
+                                <div class="col-md-3"><label class="bf-label">Modelo</label><input type="text" class="bf-input" id="edit-modelo"></div>
+                                <div class="col-md-3"><label class="bf-label">Año</label><input type="number" class="bf-input" id="edit-anio"></div>
+                                <div class="col-md-3"><label class="bf-label">Cilindrada</label><input type="text" class="bf-input" id="edit-cilindrada"></div>
+                                <div class="col-md-3"><label class="bf-label">Combustible</label><input type="text" class="bf-input" id="edit-combustible"></div>
+                                <div class="col-md-3"><label class="bf-label">Kilometraje</label><input type="text" class="bf-input" id="edit-kilometraje"></div>
+                                <div class="col-md-3"><label class="bf-label">Nivel Combustible</label><select class="bf-input bf-select" id="edit-nivel-combustible"><option value="">-</option><option value="1/4">1/4</option><option value="1/2">1/2</option><option value="3/4">3/4</option><option value="Full">Full</option></select></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- FECHA Y RECEPCIÓN -->
+                    <div class="bf-card shadow-sm mb-3">
+                        <div class="bf-card-header" style="background:#343a40;color:white;">
+                            <span class="bf-card-title" style="color:#fff;"><i class="fas fa-calendar me-2"></i>FECHA Y RECEPCIÓN</span>
+                        </div>
+                        <div class="bf-card-body">
+                            <div class="row g-3">
+                                <div class="col-md-4"><label class="bf-label">Fecha Ingreso</label><input type="date" class="bf-input" id="edit-fecha-ingreso"></div>
+                                <div class="col-md-4"><label class="bf-label">Hora Ingreso</label><input type="time" class="bf-input" id="edit-hora-ingreso"></div>
+                                <div class="col-md-4"><label class="bf-label">Recepcionista</label><input type="text" class="bf-input" id="edit-recepcionista"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ASIGNACIÓN Y ESTADO -->
+                    <div class="bf-card shadow-sm mb-3">
+                        <div class="bf-card-header" style="background:#7c3aed;color:white;">
+                            <span class="bf-card-title" style="color:#fff;"><i class="fas fa-user-cog me-2"></i>ASIGNACIÓN Y ESTADO</span>
+                        </div>
+                        <div class="bf-card-body">
+                            <div class="row g-3">
+                                <div class="col-md-4"><label class="bf-label">Técnico Asignado</label><select class="bf-input bf-select" id="edit-tecnico-asignado"><option value="">Sin asignar</option></select></div>
+                                <div class="col-md-4"><label class="bf-label">Estado del Trabajo</label><select class="bf-input bf-select" id="edit-estado-trabajo"><option value="Pendiente">Pendiente</option><option value="Pendiente Visita">Pendiente Visita</option><option value="En Sitio">En Sitio</option><option value="En Progreso">En Progreso</option><option value="Completada">Completada</option><option value="Cerrada">Cerrada</option></select></div>
+                                <div class="col-md-4"><label class="bf-label">Estado de la Orden</label><select class="bf-input bf-select" id="edit-estado"><option value="Enviada">Enviada</option><option value="Aprobada">Aprobada</option><option value="En Proceso">En Proceso</option><option value="Completada">Completada</option><option value="Cancelada">Cancelada</option></select></div>
+                                <div class="col-md-6"><label class="bf-label">Fecha Programada</label><input type="date" class="bf-input" id="edit-fecha-programada"></div>
+                                <div class="col-md-6"><label class="bf-label">Hora Programada</label><input type="time" class="bf-input" id="edit-hora-programada"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TRABAJOS (Switches) -->
+                    <div class="bf-card shadow-sm mb-3">
+                        <div class="bf-card-header" style="background:#6c757d;color:white;">
+                            <span class="bf-card-title" style="color:#fff;"><i class="fas fa-wrench me-2"></i>TRABAJOS</span>
+                        </div>
+                        <div class="bf-card-body">
+                            <div class="row g-3">
+                                <div class="col-md-4"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="edit-trabajo-frenos"><label class="form-check-label fw-bold" for="edit-trabajo-frenos">Frenos</label></div></div>
+                                <div class="col-md-4"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="edit-trabajo-luces"><label class="form-check-label fw-bold" for="edit-trabajo-luces">Luces</label></div></div>
+                                <div class="col-md-4"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="edit-trabajo-tren-delantero"><label class="form-check-label fw-bold" for="edit-trabajo-tren-delantero">Tren Delantero</label></div></div>
+                                <div class="col-md-4"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="edit-trabajo-correas"><label class="form-check-label fw-bold" for="edit-trabajo-correas">Correas</label></div></div>
+                                <div class="col-md-4"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="edit-trabajo-componentes"><label class="form-check-label fw-bold" for="edit-trabajo-componentes">Componentes</label></div></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SERVICIOS SELECCIONADOS -->
+                    <div class="bf-card shadow-sm mb-3">
+                        <div class="bf-card-header" style="background:#0d6efd;color:white;">
+                            <span class="bf-card-title" style="color:#fff;"><i class="fas fa-list-check me-2"></i>SERVICIOS SELECCIONADOS</span>
+                        </div>
+                        <div class="bf-card-body">
+                            <div id="edit-servicios-display"></div>
+                            <input type="hidden" id="edit-servicios-json">
+                            <div class="mt-2" id="edit-servicios-manual" style="display:none;">
+                                <label class="bf-label" style="color:#dc2626;">Edición Manual (JSON)</label>
+                                <textarea class="bf-textarea" id="edit-servicios-json-manual" rows="5" style="font-family:monospace;font-size:0.8rem;" placeholder='[{"nombre":"...","precio_final":5000}]'></textarea>
+                                <small style="color:#64748b;font-size:0.75rem;">Editá el JSON para modificar servicios y precios.</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- COSTOS ADICIONALES -->
+                    <div class="bf-card shadow-sm mb-3">
+                        <div class="bf-card-header" style="background:#e83e8c;color:white;">
+                            <span class="bf-card-title" style="color:#fff;"><i class="fas fa-plus-circle me-2"></i>COSTOS ADICIONALES (Mano de Obra / Repuestos)</span>
+                        </div>
+                        <div class="bf-card-body">
+                            <div id="edit-costos-adicionales-list"></div>
+                            <div class="row g-2 mt-2 align-items-end">
+                                <div class="col-md-4"><label class="bf-label">Concepto</label><input type="text" class="bf-input" id="edit-costo-concepto" placeholder="Ej: Cambio de aceite"></div>
+                                <div class="col-md-3"><label class="bf-label">Monto</label><input type="number" class="bf-input" id="edit-costo-monto" min="0" placeholder="$0"></div>
+                                <div class="col-md-3"><label class="bf-label">Categoría</label><select class="bf-input bf-select" id="edit-costo-categoria"><option value="Mano de Obra">Mano de Obra</option><option value="Repuestos/Materiales">Repuestos/Materiales</option></select></div>
+                                <div class="col-md-2"><button type="button" class="btn-bf btn-bf-sm w-100" onclick="agregarCostoEditar()"><i class="fas fa-plus me-1"></i>Agregar</button></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- REQUERIMIENTOS -->
+                    <div class="bf-card shadow-sm mb-3">
+                        <div class="bf-card-header" style="background:#f59e0b;color:#111;">
+                            <span class="bf-card-title"><i class="fas fa-clipboard-list me-2"></i>REQUERIMIENTOS</span>
+                        </div>
+                        <div class="bf-card-body">
+                            <textarea class="bf-textarea" id="edit-diagnostico-obs" rows="3" placeholder="Requerimientos del cliente..."></textarea>
+                        </div>
+                    </div>
+
+                    <!-- PAGOS -->
+                    <div class="bf-card shadow-sm mb-3">
+                        <div class="bf-card-header" style="background:#16a34a;color:white;">
+                            <span class="bf-card-title" style="color:#fff;"><i class="fas fa-dollar-sign me-2"></i>PAGOS</span>
+                        </div>
+                        <div class="bf-card-body">
+                            <div class="row g-2 mb-3">
+                                <div class="col-12"><div id="edit-resumen-valores" class="p-2 rounded" style="background:#f8fafc;font-size:0.9rem;"></div></div>
+                            </div>
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <label class="bf-label">Monto Total
+                                        <div class="form-check form-switch d-inline-block ms-2 align-middle">
+                                            <input class="form-check-input" type="checkbox" id="edit-auto-total" checked onchange="toggleAutoTotalEditar()">
+                                            <label class="form-check-label form-check-inline" for="edit-auto-total" style="font-size:0.75rem;color:#64748b;">Auto</label>
+                                        </div>
+                                    </label>
+                                    <input type="number" class="bf-input" id="edit-monto-total" style="font-weight:bold;font-size:1.1rem;color:var(--bf-primary);" min="0" step="1" oninput="recalcularRestanteEditar()">
+                                    <small style="color:#64748b;" id="edit-total-hint">Auto = Servicios + Costos Adicionales</small>
+                                </div>
+                                <div class="col-md-4"><label class="bf-label">Abono</label><input type="number" class="bf-input" id="edit-monto-abono" value="0" min="0" oninput="recalcularRestanteEditar()"></div>
+                                <div class="col-md-4"><label class="bf-label">Restante</label><input type="text" class="bf-input" id="edit-monto-restante" readonly style="font-weight:bold;color:var(--bf-primary);"></div>
+                                <div class="col-md-6"><label class="bf-label">Método de Pago</label><select class="bf-input bf-select" id="edit-metodo-pago"><option value="">-</option><option value="Efectivo">Efectivo</option><option value="Transferencia">Transferencia</option><option value="Tarjeta">Tarjeta</option><option value="Cheque">Cheque</option></select></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CHECKLIST CARROCERÍA -->
+                    <div class="bf-card shadow-sm mb-3">
+                        <div class="bf-card-header" style="background:#495057;color:white;">
+                            <span class="bf-card-title" style="color:#fff;"><i class="fas fa-car-side me-2"></i>CHECKLIST CARROCERÍA</span>
+                        </div>
+                        <div class="bf-card-body">
+                            <div class="row g-3">
+                                <div class="col-md-3"><div class="form-check"><input class="form-check-input" type="checkbox" id="edit-check-paragolpe-der"><label class="form-check-label" for="edit-check-paragolpe-der">Parachoques Del. Der.</label></div></div>
+                                <div class="col-md-3"><div class="form-check"><input class="form-check-input" type="checkbox" id="edit-check-puerta-del-der"><label class="form-check-label" for="edit-check-puerta-del-der">Puerta Del. Der.</label></div></div>
+                                <div class="col-md-3"><div class="form-check"><input class="form-check-input" type="checkbox" id="edit-check-puerta-tra-der"><label class="form-check-label" for="edit-check-puerta-tra-der">Puerta Tra. Der.</label></div></div>
+                                <div class="col-md-3"><div class="form-check"><input class="form-check-input" type="checkbox" id="edit-check-paragolpe-tra-izq"><label class="form-check-label" for="edit-check-paragolpe-tra-izq">Parachoques Tra. Izq.</label></div></div>
+                                <div class="col-md-6"><label class="bf-label">Otros</label><input type="text" class="bf-input" id="edit-check-otros"></div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-bf-outline" data-bs-dismiss="modal"><i class="fas fa-times me-1"></i>Cancelar</button>
+                <button type="button" class="btn-bf" style="background:#16a34a;padding:0.6rem 1.5rem;font-size:0.9rem;" onclick="guardarEdicionOrden()"><i class="fas fa-save me-1"></i>Guardar Cambios</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================== -->
+<!-- MODAL: Calendario Evento (Crear/Editar)         -->
+<!-- ============================================== -->
+<div class="modal fade" id="modalCalendarioEvento" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border:none;border-radius:18px;overflow:hidden;box-shadow:0 20px 50px rgba(13,148,136,0.2);">
+            <div class="modal-header" style="background:linear-gradient(135deg,var(--bf-primary) 0%,var(--bf-primary-light) 100%);border:none;padding:16px 20px;">
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <i class="fas fa-calendar-plus" style="font-size:1.3rem;color:#fff;"></i>
+                    <span class="modal-title" style="color:#fff;font-weight:800;font-size:1rem;" id="modal-cal-titulo">Nuevo Evento</span>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="padding:20px;">
+                <input type="hidden" id="cal-evento-id">
+                <div class="mb-3">
+                    <label class="bf-label"><i class="fas fa-tag me-1" style="color:var(--bf-primary);"></i>Título</label>
+                    <input type="text" class="bf-input" id="cal-titulo" placeholder="Ej: Cambio de aceite - Juan Perez" required>
+                </div>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="bf-label"><i class="fas fa-user-cog me-1" style="color:var(--bf-primary);"></i>Técnico</label>
+                        <select class="bf-input bf-select" id="cal-tecnico" required>
+                            <option value="">Seleccionar...</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="bf-label"><i class="fas fa-wrench me-1" style="color:var(--bf-primary);"></i>Tipo Servicio</label>
+                        <select class="bf-input bf-select" id="cal-tipo-servicio">
+                            <option value="taller">Taller</option>
+                            <option value="domicilio">Domicilio</option>
+                            <option value="inspeccion">Inspección</option>
+                            <option value="urgencia">Urgencia</option>
+                            <option value="otro">Otro</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="bf-label"><i class="fas fa-play me-1" style="color:#16a34a;"></i>Inicio</label>
+                        <input type="datetime-local" class="bf-input" id="cal-fecha-inicio" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="bf-label"><i class="fas fa-stop me-1" style="color:#dc2626;"></i>Fin</label>
+                        <input type="datetime-local" class="bf-input" id="cal-fecha-fin" required>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="bf-label"><i class="fas fa-link me-1" style="color:var(--bf-primary);"></i>Orden Asociada (opcional)</label>
+                    <select class="bf-input bf-select" id="cal-orden-id">
+                        <option value="">Sin orden asociada</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="bf-label"><i class="fas fa-clipboard me-1" style="color:var(--bf-primary);"></i>Observaciones</label>
+                    <textarea class="bf-textarea" id="cal-observaciones" rows="2" placeholder="Notas adicionales..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer" style="border-top:1px solid #e9ecef;padding:12px 20px;">
+                <button type="button" class="btn-bf btn-bf-sm" id="cal-btn-eliminar" style="background:#dc2626;display:none;" onclick="eliminarEventoCalendario()">
+                    <i class="fas fa-trash me-1"></i>Eliminar
+                </button>
+                <button type="button" class="btn-bf btn-bf-sm" id="cal-btn-ver-ot" style="display:none;" onclick="verOrdenDesdeCalendario()">
+                    <i class="fas fa-eye me-1"></i>Ver OT
+                </button>
+                <button type="button" class="btn-bf-outline" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn-bf" id="cal-btn-guardar" onclick="guardarEventoCalendario()">
+                    <i class="fas fa-save me-1"></i>Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <!-- Bootstrap JS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
